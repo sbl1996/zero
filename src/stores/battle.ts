@@ -7,6 +7,7 @@ import { ITEMS } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
 import { getSkillDefinition } from '@/data/skills'
+import { MAX_EQUIP_LEVEL } from '@/composables/useEnhance'
 import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
@@ -49,12 +50,15 @@ function makeEquipmentId(templateId: string) {
   return `${templateId}-drop-${Date.now()}-${seq}`
 }
 
-function createEquipmentFromTemplate(template: (typeof BASE_EQUIPMENT_TEMPLATES)[number]): Equipment {
+function createEquipmentFromTemplate(
+  template: (typeof BASE_EQUIPMENT_TEMPLATES)[number],
+  initialLevel = 0,
+): Equipment {
   return {
     id: makeEquipmentId(template.id),
     name: template.name,
     slot: template.slot,
-    level: 0,
+    level: initialLevel,
     mainStat: { ...template.baseMain },
     subs: { ...template.baseSubs },
     exclusive: template.exclusive,
@@ -63,17 +67,32 @@ function createEquipmentFromTemplate(template: (typeof BASE_EQUIPMENT_TEMPLATES)
   }
 }
 
-function drawEquipmentFromTier(tier: EquipmentTier, rng: () => number): Equipment | null {
+interface DrawEquipmentOptions {
+  initialLevelRange?: [number, number]
+}
+
+function drawEquipmentFromTier(
+  tier: EquipmentTier,
+  rng: () => number,
+  options?: DrawEquipmentOptions,
+): Equipment | null {
   const grouped = EQUIPMENT_TEMPLATES_BY_TIER[tier]
   if (!grouped) return null
   const slots = Object.keys(grouped) as EquipSlot[]
   if (!slots.length) return null
   const slot = slots[Math.floor(rng() * slots.length)]
+  if (!slot) return null
   const templates = grouped[slot]
   if (!templates || !templates.length) return null
   const template = templates[Math.floor(rng() * templates.length)]
   if (!template) return null
-  return createEquipmentFromTemplate(template)
+  const [minRange, maxRange] = options?.initialLevelRange ?? [0, 0]
+  const minLevel = Math.max(0, Math.floor(minRange))
+  const maxLevel = Math.max(minLevel, Math.min(MAX_EQUIP_LEVEL, Math.floor(maxRange)))
+  const span = maxLevel - minLevel + 1
+  const roll = span > 0 ? Math.floor(rng() * span) : 0
+  const initialLevel = minLevel + roll
+  return createEquipmentFromTemplate(template, initialLevel)
 }
 
 function aggregateItemDrop(
@@ -226,7 +245,8 @@ export const useBattleStore = defineStore('battle', {
           inventory.addItem(choice.itemId, quantity)
           aggregateItemDrop(itemDrops, choice.itemId, quantity)
         } else if (choice.kind === 'equipment') {
-          const equipment = drawEquipmentFromTier(choice.tier, lootRng)
+          const levelRange: [number, number] = monster.isBoss ? [2, 5] : [0, 2]
+          const equipment = drawEquipmentFromTier(choice.tier, lootRng, { initialLevelRange: levelRange })
           if (!equipment) continue
           inventory.addEquipment(equipment)
           equipmentDrops.push({
@@ -322,16 +342,17 @@ export const useBattleStore = defineStore('battle', {
       const stats = player.finalStats
       const rng = makeRng(this.rngSeed)
       this.rngSeed = (this.rngSeed + 0x9e3779b9) >>> 0
-      const rewardOnHit = (dmg: number) => {
-        if (!this.monster || dmg <= 0) return
+      const rewardOnHit = (coreDamage: number) => {
+        if (!this.monster || coreDamage <= 0) return
         player.gainXp(1)
       }
 
       const result = skill.execute({ stats, monster: this.monster, rng })
       const dmg = Math.max(0, Math.round(result.damage ?? 0))
+      const coreDamage = Math.max(0, Math.round(result.coreDamage ?? 0))
       if (dmg > 0) {
         this.applyPlayerDamage(dmg, skill.flash)
-        rewardOnHit(dmg)
+        rewardOnHit(coreDamage)
       } else {
         this.triggerFlash(skill.flash)
       }
@@ -432,9 +453,13 @@ export const useBattleStore = defineStore('battle', {
       const rng = makeRng(this.rngSeed ^ 0x517cc1b7)
       this.rngSeed = (this.rngSeed + 0x7f4a7c15) >>> 0
       const penPct = Math.min(Math.max(0.1 + 0.012 * this.monster.lv, 0), 0.6)
-      const dmg = dmgAttack(this.monster.atk, stats.DEF, randRange(rng, 0, 1), { penPct })
-      player.receiveDamage(dmg)
-      this.pushFloat(`-${dmg}`, 'hitP')
+      const damageResult = dmgAttack(this.monster.atk, stats.DEF, randRange(rng, 0, 1), {
+        penPct,
+        contentLevel: this.monster.lv,
+        defenderTough: 1,
+      })
+      player.receiveDamage(damageResult.damage)
+      this.pushFloat(`-${damageResult.damage}`, 'hitP')
 
       if (player.res.hp <= 0) {
         this.applyDeathPenalty()

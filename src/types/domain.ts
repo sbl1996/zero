@@ -89,6 +89,7 @@ export interface Monster {
   portrait?: string
   page: number
   isBoss?: boolean
+  tough?: number
   unlocks?: string[]
 }
 
@@ -126,6 +127,7 @@ export interface SkillCost {
 
 export interface SkillResult {
   damage?: number
+  coreDamage?: number
   healSelf?: number
   gainSp?: number
   gainXp?: number

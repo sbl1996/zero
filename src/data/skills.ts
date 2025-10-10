@@ -10,30 +10,39 @@ export const SKILLS: SkillDefinition[] = [
     cost: { type: 'none' },
     flash: 'attack',
     execute: ({ stats, monster, rng }) => {
-      const dmg = dmgAttack(stats.ATK, monster.def, randRange(rng, 0, 1))
-      return { damage: dmg }
+      const result = dmgAttack(stats.ATK, monster.def, randRange(rng, 0, 1), {
+        contentLevel: monster.lv,
+        defenderTough: monster.tough ?? 1,
+      })
+      return { damage: result.damage, coreDamage: result.coreDamage }
     },
   },
   {
     id: 'charged_cleave',
     name: '蓄力劈砍',
-    description: '蓄力斩击敌人（倍率 115%-135%）。',
+    description: '蓄力斩击敌人（倍率 125%）。',
     cost: { type: 'sp', amount: 15 },
     flash: 'skill',
     execute: ({ stats, monster, rng }) => {
-      const dmg = dmgSkill(stats.ATK, monster.def, randRange(rng, 0, 1), randRange(rng, 0, 1))
-      return { damage: dmg }
+      const result = dmgSkill(stats.ATK, monster.def, randRange(rng, 0, 1), {
+        contentLevel: monster.lv,
+        defenderTough: monster.tough ?? 1,
+      })
+      return { damage: result.damage, coreDamage: result.coreDamage }
     },
   },
   {
     id: 'destiny_slash',
     name: '命运斩击',
-    description: '终极爆发斩击（倍率 200%-250%）。',
+    description: '终极爆发斩击（倍率 220%）。',
     cost: { type: 'xp', amount: 30 },
     flash: 'ult',
     execute: ({ stats, monster, rng }) => {
-      const dmg = dmgUlt(stats.ATK, monster.def, randRange(rng, 0, 1), randRange(rng, 0, 1))
-      return { damage: dmg }
+      const result = dmgUlt(stats.ATK, monster.def, randRange(rng, 0, 1), {
+        contentLevel: monster.lv,
+        defenderTough: monster.tough ?? 1,
+      })
+      return { damage: result.damage, coreDamage: result.coreDamage }
     },
   },
   {
@@ -43,8 +52,11 @@ export const SKILLS: SkillDefinition[] = [
     cost: { type: 'none' },
     flash: 'attack',
     execute: ({ stats, monster, rng }) => {
-      const dmg = dmgCustom(stats.ATK, monster.def, 0.5, randRange(rng, 0, 1))
-      return { damage: dmg, gainSp: 10 }
+      const result = dmgCustom(stats.ATK, monster.def, 0.5, randRange(rng, 0, 1), {
+        contentLevel: monster.lv,
+        defenderTough: monster.tough ?? 1,
+      })
+      return { damage: result.damage, coreDamage: result.coreDamage, gainSp: 10 }
     },
   },
 ]

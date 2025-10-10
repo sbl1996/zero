@@ -77,12 +77,15 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
+import { useProgressStore } from '@/stores/progress'
 import { ITEMS, consumableIds } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES, EQUIPMENT_PRICES } from '@/data/equipment'
+import { MONSTERS } from '@/data/monsters'
 import type { ItemDefinition, EquipmentTemplate, EquipSlot } from '@/types/domain'
 
 const playerStore = usePlayerStore()
 const inventoryStore = useInventoryStore()
+const progressStore = useProgressStore()
 
 const tabs = ['消耗品', '宝石', '装备', '武器', '防具', '饰品', '盾牌']
 const activeTab = ref('消耗品')
@@ -112,45 +115,68 @@ function getEquipmentSubType(slot: EquipSlot): 'weapon' | 'armor' | 'accessory' 
   }
 }
 
+const allowedEquipmentTemplates = computed(() =>
+  BASE_EQUIPMENT_TEMPLATES.filter((template) => {
+    const required = template.requiredLevel ?? 0
+    return required <= 10
+  }),
+)
+
+const bossMonsters = MONSTERS.filter((monster) => monster.isBoss)
+
+function hasClearedBossAtOrAbove(level: number) {
+  return bossMonsters.some((monster) => monster.lv >= level && progressStore.isMonsterCleared(monster.id))
+}
+
+const gemItems = computed(() => {
+  const itemsById = new Map(ITEMS.map((item) => [item.id, item]))
+  const result: ItemDefinition[] = []
+  const bless = itemsById.get('blessGem')
+  if (bless) result.push(bless)
+
+  if (hasClearedBossAtOrAbove(30)) {
+    const soul = itemsById.get('soulGem')
+    if (soul) result.push(soul)
+  }
+
+  if (hasClearedBossAtOrAbove(60)) {
+    const miracle = itemsById.get('miracleGem')
+    if (miracle) result.push(miracle)
+  }
+
+  return result
+})
+
+const mapEquipmentWithPrice = (template: EquipmentTemplate) => ({
+  ...template,
+  price: EQUIPMENT_PRICES[template.id as keyof typeof EQUIPMENT_PRICES],
+})
+
 const currentItems = computed(() => {
+  const equipmentTemplates = allowedEquipmentTemplates.value
   switch (activeTab.value) {
     case '消耗品':
-      return ITEMS.filter(item => consumableIds.has(item.id))
+      return ITEMS.filter((item) => consumableIds.has(item.id))
     case '宝石':
-      return ITEMS.filter(item => !consumableIds.has(item.id))
+      return gemItems.value
     case '装备':
-      return BASE_EQUIPMENT_TEMPLATES.map(template => ({
-        ...template,
-        price: EQUIPMENT_PRICES[template.id as keyof typeof EQUIPMENT_PRICES]
-      }))
+      return equipmentTemplates.map(mapEquipmentWithPrice)
     case '武器':
-      return BASE_EQUIPMENT_TEMPLATES
-        .filter(template => getEquipmentSubType(template.slot) === 'weapon')
-        .map(template => ({
-          ...template,
-          price: EQUIPMENT_PRICES[template.id as keyof typeof EQUIPMENT_PRICES]
-        }))
+      return equipmentTemplates
+        .filter((template) => getEquipmentSubType(template.slot) === 'weapon')
+        .map(mapEquipmentWithPrice)
     case '防具':
-      return BASE_EQUIPMENT_TEMPLATES
-        .filter(template => getEquipmentSubType(template.slot) === 'armor')
-        .map(template => ({
-          ...template,
-          price: EQUIPMENT_PRICES[template.id as keyof typeof EQUIPMENT_PRICES]
-        }))
+      return equipmentTemplates
+        .filter((template) => getEquipmentSubType(template.slot) === 'armor')
+        .map(mapEquipmentWithPrice)
     case '饰品':
-      return BASE_EQUIPMENT_TEMPLATES
-        .filter(template => getEquipmentSubType(template.slot) === 'accessory')
-        .map(template => ({
-          ...template,
-          price: EQUIPMENT_PRICES[template.id as keyof typeof EQUIPMENT_PRICES]
-        }))
+      return equipmentTemplates
+        .filter((template) => getEquipmentSubType(template.slot) === 'accessory')
+        .map(mapEquipmentWithPrice)
     case '盾牌':
-      return BASE_EQUIPMENT_TEMPLATES
-        .filter(template => getEquipmentSubType(template.slot) === 'shield')
-        .map(template => ({
-          ...template,
-          price: EQUIPMENT_PRICES[template.id as keyof typeof EQUIPMENT_PRICES]
-        }))
+      return equipmentTemplates
+        .filter((template) => getEquipmentSubType(template.slot) === 'shield')
+        .map(mapEquipmentWithPrice)
     default:
       return []
   }
@@ -270,10 +296,11 @@ const buyItem = (item: ItemDefinition | EquipmentTemplate, rawQuantity?: number)
         name: item.name,
         slot: item.slot,
         level: 0,
-        mainStat: item.baseMain,
+        mainStat: { ...item.baseMain },
         subs: { ...item.baseSubs },
         exclusive: item.exclusive,
         flatCapMultiplier: item.flatCapMultiplier,
+        requiredLevel: item.requiredLevel,
       }
       inventoryStore.addEquipment(equipment)
     }
