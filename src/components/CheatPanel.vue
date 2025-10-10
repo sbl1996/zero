@@ -1,0 +1,79 @@
+<script setup lang="ts">
+import { computed, ref } from 'vue'
+import { storeToRefs } from 'pinia'
+import { usePlayerStore } from '@/stores/player'
+import { useProgressStore } from '@/stores/progress'
+import { useUiStore } from '@/stores/ui'
+
+const playerStore = usePlayerStore()
+const progressStore = useProgressStore()
+const ui = useUiStore()
+const { showCheatPanel } = storeToRefs(ui)
+
+const goldAmount = ref(1000)
+
+const sanitizedGold = computed(() => {
+  const value = Math.floor(goldAmount.value)
+  return Number.isFinite(value) && value > 0 ? value : 0
+})
+
+const expNeeded = computed(() => playerStore.expRequired)
+
+function close() {
+  ui.toggleCheatPanel(false)
+}
+
+function restoreFull() {
+  playerStore.restoreFull()
+}
+
+function levelUp() {
+  playerStore.gainExp(expNeeded.value)
+}
+
+function grantGold() {
+  if (sanitizedGold.value <= 0) return
+  playerStore.gainGold(sanitizedGold.value)
+}
+
+function unlockAllMonsters() {
+  progressStore.clearAllMonsters()
+}
+</script>
+
+<template>
+  <Teleport to="body">
+    <div v-if="showCheatPanel" class="cheat-overlay" @click.self="close">
+      <div class="cheat-panel">
+        <header class="cheat-header">
+          <h2 class="section-title" style="margin-bottom: 0;">金手指</h2>
+          <button class="cheat-close" type="button" @click="close">×</button>
+        </header>
+
+        <p class="text-muted text-small" style="margin-top: 0;">调试用：快速调整玩家状态</p>
+
+        <div class="cheat-actions">
+          <button class="btn" type="button" @click="restoreFull">回复全满</button>
+          <button class="btn" type="button" @click="levelUp">立即升级</button>
+          <button class="btn" type="button" @click="unlockAllMonsters">解锁全部怪物</button>
+        </div>
+
+        <div class="cheat-gold">
+          <label for="cheat-gold-input">获得 GOLD</label>
+          <div class="cheat-gold-controls">
+            <input
+              id="cheat-gold-input"
+              v-model.number="goldAmount"
+              class="cheat-input"
+              type="number"
+              min="1"
+              step="100"
+            >
+            <button class="btn" type="button" :disabled="sanitizedGold <= 0" @click="grantGold">增加</button>
+          </div>
+          <div class="text-small text-muted">当前 GOLD：{{ playerStore.gold }}</div>
+        </div>
+      </div>
+    </div>
+  </Teleport>
+</template>
