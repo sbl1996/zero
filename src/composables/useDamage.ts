@@ -2,6 +2,7 @@ export interface DamageOptions {
   penFlat?: number
   penPct?: number
   contentLevel?: number
+  attackerLevel?: number
   defenderTough?: number
   floorRatio?: number
   defRefFactor?: number
@@ -33,6 +34,7 @@ function computeDamage(
     penFlat = 0,
     penPct = 0,
     contentLevel = 1,
+    attackerLevel,
     defenderTough = 1,
     floorRatio = 0.04,
     defRefFactor = 1.7,
@@ -40,11 +42,20 @@ function computeDamage(
   } = options
 
   const raw = atk * mult * rollMultiplier
-  const effectiveDef = Math.max(0, def - penFlat) * (1 - clampPenPct(penPct)) * Math.max(defenderTough, 0)
+  const sanitizedContentLevel = Number.isFinite(contentLevel) ? Math.max(contentLevel, 0) : 0
+  const normalizedAttackerLevel = Number.isFinite(attackerLevel ?? NaN) ? (attackerLevel as number) : null
+  const sanitizedAttackerLevel =
+    normalizedAttackerLevel !== null ? Math.max(1, Math.floor(normalizedAttackerLevel)) : null
+
+  let effectiveDef = Math.max(0, def - penFlat) * (1 - clampPenPct(penPct)) * Math.max(defenderTough, 0)
+  if (sanitizedAttackerLevel !== null) {
+    const gapFactor = Math.max(0.2, sanitizedContentLevel / sanitizedAttackerLevel)
+    effectiveDef *= gapFactor
+  }
 
   let mitigation = 1
   const retention = Math.min(Math.max(desiredRetention, 0.05), 0.95)
-  const defRef = Math.max(0, defRefFactor * Math.max(contentLevel, 0))
+  const defRef = Math.max(0, defRefFactor * sanitizedContentLevel)
   if (defRef > 0 && retention > 0 && retention < 1) {
     const armorConstant = (retention / (1 - retention)) * defRef
     const denominator = armorConstant + effectiveDef

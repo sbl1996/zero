@@ -9,10 +9,11 @@ export const SKILLS: SkillDefinition[] = [
     description: '基础单体斩击（倍率 100%）。',
     cost: { type: 'none' },
     flash: 'attack',
-    execute: ({ stats, monster, rng }) => {
+    execute: ({ stats, monster, rng, playerLevel }) => {
       const result = dmgAttack(stats.ATK, monster.def, randRange(rng, 0, 1), {
         contentLevel: monster.lv,
         defenderTough: monster.tough ?? 1,
+        attackerLevel: playerLevel,
       })
       return { damage: result.damage, coreDamage: result.coreDamage }
     },
@@ -23,10 +24,11 @@ export const SKILLS: SkillDefinition[] = [
     description: '蓄力斩击敌人（倍率 125%）。',
     cost: { type: 'sp', amount: 15 },
     flash: 'skill',
-    execute: ({ stats, monster, rng }) => {
+    execute: ({ stats, monster, rng, playerLevel }) => {
       const result = dmgSkill(stats.ATK, monster.def, randRange(rng, 0, 1), {
         contentLevel: monster.lv,
         defenderTough: monster.tough ?? 1,
+        attackerLevel: playerLevel,
       })
       return { damage: result.damage, coreDamage: result.coreDamage }
     },
@@ -37,10 +39,11 @@ export const SKILLS: SkillDefinition[] = [
     description: '终极爆发斩击（倍率 220%）。',
     cost: { type: 'xp', amount: 30 },
     flash: 'ult',
-    execute: ({ stats, monster, rng }) => {
+    execute: ({ stats, monster, rng, playerLevel }) => {
       const result = dmgUlt(stats.ATK, monster.def, randRange(rng, 0, 1), {
         contentLevel: monster.lv,
         defenderTough: monster.tough ?? 1,
+        attackerLevel: playerLevel,
       })
       return { damage: result.damage, coreDamage: result.coreDamage }
     },
@@ -51,10 +54,11 @@ export const SKILLS: SkillDefinition[] = [
     description: '半倍率斩击并恢复 SP +10（倍率 50%）。',
     cost: { type: 'none' },
     flash: 'attack',
-    execute: ({ stats, monster, rng }) => {
+    execute: ({ stats, monster, rng, playerLevel }) => {
       const result = dmgCustom(stats.ATK, monster.def, 0.5, randRange(rng, 0, 1), {
         contentLevel: monster.lv,
         defenderTough: monster.tough ?? 1,
+        attackerLevel: playerLevel,
       })
       return { damage: result.damage, coreDamage: result.coreDamage, gainSp: 10 }
     },

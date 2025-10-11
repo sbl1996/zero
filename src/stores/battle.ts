@@ -347,7 +347,7 @@ export const useBattleStore = defineStore('battle', {
         player.gainXp(1)
       }
 
-      const result = skill.execute({ stats, monster: this.monster, rng })
+      const result = skill.execute({ stats, monster: this.monster, rng, playerLevel: player.lv })
       const dmg = Math.max(0, Math.round(result.damage ?? 0))
       const coreDamage = Math.max(0, Math.round(result.coreDamage ?? 0))
       if (dmg > 0) {
@@ -457,6 +457,7 @@ export const useBattleStore = defineStore('battle', {
         penPct,
         contentLevel: this.monster.lv,
         defenderTough: 1,
+        attackerLevel: this.monster.lv,
       })
       player.receiveDamage(damageResult.damage)
       this.pushFloat(`-${damageResult.damage}`, 'hitP')

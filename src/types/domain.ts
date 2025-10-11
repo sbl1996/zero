@@ -138,6 +138,7 @@ export interface SkillContext {
   stats: Stats
   monster: Monster
   rng: () => number
+  playerLevel: number
 }
 
 export interface SkillDefinition {
