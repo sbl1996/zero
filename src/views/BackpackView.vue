@@ -4,6 +4,7 @@ import { useRouter } from 'vue-router'
 import { useInventoryStore } from '@/stores/inventory'
 import { usePlayerStore } from '@/stores/player'
 import { useEquipmentActions } from '@/composables/useEquipmentActions'
+import { resolveMainStatBreakdown } from '@/composables/useEnhance'
 import { ITEMS, consumableIds } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import type { EquipSlot, EquipSubStats, Equipment } from '@/types/domain'
@@ -149,10 +150,25 @@ const itemMeta = ITEMS.reduce<Record<string, { type: BackpackEntryType; name: st
 }, {})
 
 function formatMainStat(equipment: Equipment): string {
-  if (equipment.mainStat.ATK) return `攻击力 ${equipment.mainStat.ATK}`
-  if (equipment.mainStat.DEF) return `防御力 ${equipment.mainStat.DEF}`
-  if (equipment.mainStat.HP) return `生命值 ${equipment.mainStat.HP}`
-  return '主要属性 —'
+  const breakdowns = resolveMainStatBreakdown(equipment)
+  if (breakdowns.length === 0) return '主要属性 —'
+
+  const breakdown = breakdowns[0]!
+  const statLabel = breakdown.key === 'ATK' ? '攻击力' : breakdown.key === 'DEF' ? '防御力' : '生命值'
+  const increase = breakdown.total - breakdown.base
+
+  return `${statLabel} ${breakdown.total} (+${increase})`
+}
+
+function getMainStatTooltip(equipment: Equipment): string {
+  const breakdowns = resolveMainStatBreakdown(equipment)
+  if (breakdowns.length === 0) return ''
+
+  const breakdown = breakdowns[0]!
+  const increase = breakdown.total - breakdown.base
+  const percentIncrease = Math.round((increase / breakdown.base) * 100)
+
+  return `基础: ${breakdown.base}, 强化加成: +${increase} (+${percentIncrease}%)`
 }
 
 function formatSubs(subs: EquipSubStats): string[] {
@@ -169,10 +185,18 @@ function getEquipmentRequiredLevel(equipment: Equipment): number | undefined {
 
   // 如果找不到，说明可能是带时间戳和索引的装备ID，需要提取基础模板ID
   if (!template) {
-    // 装备ID格式：templateId-timestamp-index，我们需要移除最后两个部分
     const parts = equipment.id.split('-')
-    if (parts.length >= 3) {
-      const baseId = parts.slice(0, -2).join('-') // 移除时间戳和索引，保留完整的模板ID
+
+    // 处理BOSS掉落装备的ID格式：templateId-drop-timestamp-index
+    // 需要移除 "-drop-timestamp-index" 部分
+    const dropIndex = parts.indexOf('drop')
+    if (dropIndex !== -1 && parts.length >= dropIndex + 3) {
+      const baseId = parts.slice(0, dropIndex).join('-')
+      template = BASE_EQUIPMENT_TEMPLATES.find(t => t.id === baseId)
+    }
+    // 如果不是BOSS掉落格式，尝试原来的逻辑（templateId-timestamp-index）
+    else if (parts.length >= 3) {
+      const baseId = parts.slice(0, -2).join('-')
       template = BASE_EQUIPMENT_TEMPLATES.find(t => t.id === baseId)
     }
   }
@@ -251,19 +275,27 @@ const typeOrder: Record<BackpackEntryType, number> = {
   unknown: 3,
 }
 
+function compareBackpackEntries(a: BackpackEntry, b: BackpackEntry): number {
+  const typeDelta = typeOrder[a.type] - typeOrder[b.type]
+  if (typeDelta !== 0) return typeDelta
+
+  if (a.kind === 'equipment' && b.kind === 'equipment') {
+    const sourceDelta = a.source === b.source ? 0 : a.source === 'equipped' ? -1 : 1
+    if (sourceDelta !== 0) return sourceDelta
+
+    const requiredA = a.requiredLevel ?? -1
+    const requiredB = b.requiredLevel ?? -1
+    if (requiredA !== requiredB) return requiredB - requiredA
+
+    if (a.level !== b.level) return b.level - a.level
+  }
+
+  return a.name.localeCompare(b.name, 'zh-CN')
+}
+
 const allEntries = computed<BackpackEntry[]>(() => {
   const combinedEquipment = [...equippedEntries.value, ...equipmentEntries.value]
-  return [...stackEntries.value, ...combinedEquipment].sort((a, b) => {
-    const typeDelta = typeOrder[a.type] - typeOrder[b.type]
-    if (typeDelta !== 0) return typeDelta
-    if (a.type === 'equipment' && b.type === 'equipment') {
-      const sourceDelta = (a as BackpackEquipmentEntry).source === (b as BackpackEquipmentEntry).source ? 0 : (a as BackpackEquipmentEntry).source === 'equipped' ? -1 : 1
-      if (sourceDelta !== 0) return sourceDelta
-      const levelDelta = (b as BackpackEquipmentEntry).level - (a as BackpackEquipmentEntry).level
-      if (levelDelta !== 0) return levelDelta
-    }
-    return a.name.localeCompare(b.name, 'zh-CN')
-  })
+  return [...stackEntries.value, ...combinedEquipment].sort(compareBackpackEntries)
 })
 
 const filterOptions = [
@@ -294,7 +326,7 @@ function withActionLock(run: () => void) {
   lockTimer = window.setTimeout(() => {
     actionLocked.value = false
     lockTimer = null
-  }, 1000)
+  }, 500)
 }
 
 onBeforeUnmount(() => {
@@ -472,9 +504,11 @@ function entryTypeLabel(type: BackpackEntryType): string {
       </div>
 
       <div
-        v-if="feedbackMessage"
         class="feedback-banner"
-        :class="feedbackSuccess ? 'feedback-success' : 'feedback-error'"
+        :class="[
+          feedbackMessage ? (feedbackSuccess ? 'feedback-success' : 'feedback-error') : 'feedback-empty',
+          !feedbackMessage && 'feedback-placeholder'
+        ]"
       >
         {{ feedbackMessage }}
       </div>
@@ -515,7 +549,9 @@ function entryTypeLabel(type: BackpackEntryType): string {
                 需求等级：{{ entry.requiredLevel }}
               </div>
               <div class="text-small">等级：+{{ entry.level }}</div>
-              <div class="text-small" style="margin-top: 6px;">{{ entry.mainDetail }}</div>
+              <div class="text-small" style="margin-top: 6px;" :title="getMainStatTooltip(entry.equipment)">
+                {{ entry.mainDetail }}
+              </div>
               <ul class="inventory-card__list">
                 <li v-for="line in entry.subDetails" :key="line" class="text-small text-muted">{{ line }}</li>
               </ul>
@@ -726,19 +762,36 @@ function entryTypeLabel(type: BackpackEntryType): string {
   padding: 8px 12px;
   border-radius: 8px;
   font-size: 13px;
+  min-height: 37px; /* 固定高度防止跳动 */
+  display: flex;
+  align-items: center;
+  transition: all 0.3s ease;
 }
 
 .feedback-success {
   background: rgba(76, 175, 80, 0.2);
   border: 1px solid rgba(76, 175, 80, 0.35);
+  color: #e8f5e8;
 }
 
 .feedback-error {
   background: rgba(244, 67, 54, 0.2);
   border: 1px solid rgba(244, 67, 54, 0.35);
+  color: #ffcdd2;
+}
+
+.feedback-empty {
+  background: transparent;
+  border: 1px solid transparent;
+  color: transparent;
 }
 
 .text-warning {
   color: #ffc107;
+}
+
+.text-tiny {
+  font-size: 11px;
+  opacity: 0.8;
 }
 </style>

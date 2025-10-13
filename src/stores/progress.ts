@@ -1,25 +1,27 @@
 import { defineStore } from 'pinia'
-import { MONSTERS, PAGES } from '@/data/monsters'
+import { MONSTERS } from '@/data/monsters'
+import { maps, defaultMapId } from '@/data/maps'
 import type { UnlockState } from '@/types/domain'
 
 function defaultUnlocks(): UnlockState {
-  const unlockedPages: Record<number, boolean> = {}
-  PAGES.forEach((page, index) => {
-    unlockedPages[page] = index === 0
+  const unlockedMaps: Record<string, boolean> = {}
+  maps.forEach(map => {
+    unlockedMaps[map.id] = map.category === 'city' || map.id === 'fringe' // 默认解锁所有城市地图和第一个野外地图
   })
   return {
     clearedMonsters: {},
-    unlockedPages,
+    unlockedMaps,
   }
 }
 
 export const useProgressStore = defineStore('progress', {
   state: () => ({
     data: defaultUnlocks(),
+    currentMapId: defaultMapId,
   }),
   getters: {
     isMonsterCleared: (state) => (id: string) => !!state.data.clearedMonsters[id],
-    isPageUnlocked: (state) => (page: number) => !!state.data.unlockedPages[page],
+    isMapUnlocked: (state) => (mapId: string) => !!state.data.unlockedMaps[mapId],
   },
   actions: {
     hydrate(data: UnlockState) {
@@ -28,13 +30,17 @@ export const useProgressStore = defineStore('progress', {
     markMonsterCleared(id: string) {
       this.data.clearedMonsters[id] = true
     },
-    unlockPage(page: number) {
-      this.data.unlockedPages[page] = true
+    unlockMap(mapId: string) {
+      this.data.unlockedMaps[mapId] = true
     },
-    unlockAllMonsters() {
-      // Clear all monsters
-      PAGES.forEach(page => {
-        this.data.unlockedPages[page] = true
+    setCurrentMap(mapId: string) {
+      if (this.isMapUnlocked(mapId)) {
+        this.currentMapId = mapId
+      }
+    },
+    unlockAllMaps() {
+      maps.forEach(map => {
+        this.data.unlockedMaps[map.id] = true
       })
     },
     clearAllMonsters() {
@@ -42,10 +48,8 @@ export const useProgressStore = defineStore('progress', {
       MONSTERS.forEach(monster => {
         this.data.clearedMonsters[monster.id] = true
       })
-      // Also unlock all pages
-      PAGES.forEach(page => {
-        this.data.unlockedPages[page] = true
-      })
+      // Also unlock all maps
+      this.unlockAllMaps()
     },
   },
 })

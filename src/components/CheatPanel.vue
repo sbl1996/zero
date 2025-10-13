@@ -36,8 +36,22 @@ function grantGold() {
   playerStore.gainGold(sanitizedGold.value)
 }
 
+function respecAttributes() {
+  playerStore.respecAttributes()
+}
+
 function unlockAllMonsters() {
   progressStore.clearAllMonsters()
+}
+
+function deleteSave() {
+  if (typeof window === 'undefined') return
+  try {
+    window.localStorage.clear()
+  } catch (error) {
+    console.warn('[cheat] failed to clear localStorage', error)
+  }
+  window.location.reload()
 }
 </script>
 
@@ -55,7 +69,13 @@ function unlockAllMonsters() {
         <div class="cheat-actions">
           <button class="btn" type="button" @click="restoreFull">回复全满</button>
           <button class="btn" type="button" @click="levelUp">立即升级</button>
-          <button class="btn" type="button" @click="unlockAllMonsters">解锁全部怪物</button>
+          <button class="btn" type="button" @click="respecAttributes">洗点</button>
+          <button class="btn" type="button" @click="unlockAllMonsters">解锁全部地图</button>
+        </div>
+
+        <div class="cheat-danger">
+          <button class="btn btn-danger" type="button" @click="deleteSave">删除存档</button>
+          <p class="text-small text-muted" style="margin: 6px 0 0;">清空本地存档并刷新页面</p>
         </div>
 
         <div class="cheat-gold">

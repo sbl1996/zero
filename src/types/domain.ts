@@ -87,7 +87,6 @@ export interface Monster {
   rewardExp: number
   rewardGold: number
   portrait?: string
-  page: number
   isBoss?: boolean
   tough?: number
   unlocks?: string[]
@@ -158,7 +157,7 @@ export interface FloatText {
   x: number
   y: number
   value: string
-  kind: 'hitP' | 'hitE' | 'heal' | 'miss'
+  kind: 'hitP' | 'hitE' | 'heal' | 'miss' | 'loot'
 }
 
 export type FlashEffectKind = 'attack' | 'skill' | 'ult'
@@ -190,7 +189,7 @@ export interface BattleState {
 
 export interface UnlockState {
   clearedMonsters: Record<string, boolean>
-  unlockedPages: Record<number, boolean>
+  unlockedMaps: Record<string, boolean>
 }
 
 export interface LegacySaveDataV1 {
@@ -230,6 +229,7 @@ export interface GoldLootResult {
   kind: 'gold'
   name: string
   amount: number
+  hasBonus?: boolean
 }
 
 export type LootResult = ItemLootResult | EquipmentLootResult | GoldLootResult

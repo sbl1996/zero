@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { dmgAttack } from '@/composables/useDamage'
 import { makeRng, randRange } from '@/composables/useRng'
-import { PAGES } from '@/data/monsters'
+import { bossUnlockMap } from '@/data/monsters'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import { ITEMS } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
@@ -142,9 +142,15 @@ export const useBattleStore = defineStore('battle', {
   state: () => initialState(),
   getters: {
     inBattle(state) {
-      // When victory is achieved and a rematch is scheduled, we are technically still "in battle"
-      // This prevents UI elements from flashing between battles
-      return !!state.monster && (state.concluded === 'idle' || (state.concluded === 'victory' && state.rematchTimer !== null))
+      // In battle when there's an active monster and either:
+      // - Battle is idle (ongoing)
+      // - Victory achieved and rematch is scheduled (for normal monsters)
+      // - Victory achieved against a boss (showing victory screen)
+      return !!state.monster && (
+        state.concluded === 'idle' ||
+        (state.concluded === 'victory' && state.rematchTimer !== null) ||
+        (state.concluded === 'victory' && state.monster?.isBoss)
+      )
     },
   },
   actions: {
@@ -160,9 +166,10 @@ export const useBattleStore = defineStore('battle', {
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
-      this.lastOutcome = null
       this.rematchTimer = null
-      this.loot = []
+      // 保留lastOutcome和loot以便在结算页面显示
+      // this.lastOutcome = null
+      // this.loot = []
     },
     start(monster: Monster, seed?: number) {
       this.clearRematchTimer()
@@ -182,7 +189,7 @@ export const useBattleStore = defineStore('battle', {
         this.rematchTimer = null
       }
     },
-    pushFloat(value: string, kind: 'hitP' | 'hitE' | 'heal' | 'miss') {
+    pushFloat(value: string, kind: 'hitP' | 'hitE' | 'heal' | 'miss' | 'loot') {
       const id = floatId++
       let x = 0.5
       let y = 0.5
@@ -196,6 +203,9 @@ export const useBattleStore = defineStore('battle', {
       } else if (kind === 'heal') {
         x = randomInRange(0.22, 0.42)
         y = randomInRange(0.22, 0.5)
+      } else if (kind === 'loot') {
+        x = randomInRange(0.38, 0.62)
+        y = randomInRange(0.18, 0.32)
       }
 
       this.floatTexts.push({ id, x, y, value, kind })
@@ -234,6 +244,7 @@ export const useBattleStore = defineStore('battle', {
       const itemDrops = new Map<string, ItemLootResult>()
       const equipmentDrops: LootResult[] = []
       let extraGold = 0
+      let hasExtraGold = false
 
       for (let index = 0; index < dropCount; index += 1) {
         const choice = weightedPick(entries, lootRng)
@@ -259,13 +270,21 @@ export const useBattleStore = defineStore('battle', {
           const multiplier = Math.max(choice.multiplier, 0)
           if (multiplier > 1) {
             const bonus = Math.round(monster.rewardGold * (multiplier - 1))
-            if (bonus > 0) extraGold += bonus
+            if (bonus > 0) {
+              extraGold += bonus
+              hasExtraGold = true
+            }
           }
         }
       }
 
-      if (extraGold > 0) {
-        player.gainGold(extraGold)
+      let totalGold = monster.rewardGold
+      if (hasExtraGold) {
+        totalGold += extraGold
+      }
+
+      if (totalGold > monster.rewardGold) {
+        player.gainGold(totalGold)
       }
 
       const lootResults: LootResult[] = []
@@ -275,11 +294,12 @@ export const useBattleStore = defineStore('battle', {
       if (itemDrops.size > 0) {
         lootResults.push(...itemDrops.values())
       }
-      if (extraGold > 0) {
+      if (totalGold > monster.rewardGold) {
         lootResults.push({
           kind: 'gold',
-          name: '额外金币',
-          amount: extraGold,
+          name: 'GOLD',
+          amount: totalGold,
+          hasBonus: true,
         })
       }
 
@@ -301,7 +321,10 @@ export const useBattleStore = defineStore('battle', {
       this.monsterHp = 0
       if (result === 'victory') {
         if (currentMonster) {
-          this.scheduleRematch(currentMonster)
+          // 只有普通怪才会自动重赛，BOSS不会
+          if (!currentMonster.isBoss) {
+            this.scheduleRematch(currentMonster)
+          }
         }
       } else {
         this.clearRematchTimer()
@@ -381,24 +404,16 @@ export const useBattleStore = defineStore('battle', {
 
         const progress = useProgressStore()
         progress.markMonsterCleared(this.monster.id)
-        const pageIndex = PAGES.indexOf(this.monster.page)
-        const nextPage = PAGES[pageIndex + 1]
-        if (typeof nextPage === 'number') {
-          progress.unlockPage(nextPage)
+
+        // 只有击败BOSS才会解锁下一个地图
+        if (this.monster.isBoss) {
+          const nextMapId = bossUnlockMap[this.monster.id]
+          if (nextMapId) {
+            progress.unlockMap(nextMapId)
+          }
         }
 
         const loot = this.applyVictoryLoot(this.monster, player)
-        if (loot.length > 0) {
-          loot.forEach((entry) => {
-            if (entry.kind === 'item') {
-              this.pushFloat(`掉落：${entry.name} x${entry.quantity}`, 'heal')
-            } else if (entry.kind === 'equipment') {
-              this.pushFloat(`掉落：${entry.name}`, 'heal')
-            } else if (entry.kind === 'gold') {
-              this.pushFloat(`额外金币 +${entry.amount}`, 'heal')
-            }
-          })
-        }
 
         this.conclude('victory', loot)
         return

@@ -58,16 +58,13 @@ const availableConsumables = computed(() => {
   return ITEMS.filter(item => consumableIds.has(item.id)).map(item => {
     const quantity = inventory.quantity(item.id)
     const isConsumable = 'heal' in item || 'restoreSp' in item || 'restoreXp' in item
-    const canUse = quantity > 0 && isConsumable &&
-                   ((item as any).heal ? res.value.hp < res.value.hpMax : true) &&
-                   ((item as any).restoreSp ? res.value.sp < res.value.spMax : true) &&
-                   ((item as any).restoreXp ? res.value.xp < res.value.xpMax : true)
+    const canUse = quantity > 0 && isConsumable
 
     return {
       ...item,
       quantity,
       canUse,
-      disabled: quantity <= 0 || !canUse
+      disabled: battle.inBattle || quantity <= 0 || !canUse
     }
   })
 })
@@ -185,7 +182,7 @@ function getItemEffect(item: any) {
       </table>
     </div>
 
-    <div v-if="!battle.inBattle" class="panel" style="margin-top: 20px; background: rgba(255,255,255,0.04);">
+    <div class="panel" style="margin-top: 20px; background: rgba(255,255,255,0.04);">
       <h3 class="section-title" style="font-size: 16px;">快速道具栏</h3>
       <div class="quick-items-grid">
         <button
@@ -207,9 +204,6 @@ function getItemEffect(item: any) {
           </div>
           <div class="quick-item-quantity">×{{ item.quantity }}</div>
         </button>
-      </div>
-      <div class="quick-items-hint text-small text-muted" style="margin-top: 8px;">
-        点击道具快速使用
       </div>
     </div>
 

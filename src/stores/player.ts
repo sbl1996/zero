@@ -1,10 +1,12 @@
 import { defineStore } from 'pinia'
 import { resolveMainStatBreakdown } from '@/composables/useEnhance'
-import { baseHpMax, baseSpMax, baseXpMax, createDefaultPlayer, needExp } from '@/composables/useLeveling'
+import { DEFAULT_BASE_STATS, baseHpMax, baseSpMax, baseXpMax, createDefaultPlayer, needExp } from '@/composables/useLeveling'
 import { getStartingEquipment } from '@/data/equipment'
 import { ITEMS } from '@/data/items'
 import type { AttributeKey, Equipment, EquipSlot, Player, Stats } from '@/types/domain'
 import { clamp } from '@/utils/math'
+
+const ATTRIBUTE_KEYS: AttributeKey[] = ['ATK', 'DEF']
 
 function withStartingEquipment(player: Player): Player {
   const equips = { ...player.equips, ...getStartingEquipment() }
@@ -34,10 +36,24 @@ function sumEquipStats(equips: Partial<Record<EquipSlot, Equipment>>) {
 }
 
 function makeInitialPlayer() {
-  return withStartingEquipment({
+  const player = withStartingEquipment({
     ...createDefaultPlayer(),
     gold: 500,
   })
+  // 重新计算血量上限并设置满血
+  const equip = sumEquipStats(player.equips)
+  const hpMax = baseHpMax(player.lv) + equip.addHP
+  const spMax = baseSpMax(player.lv)
+  const xpMax = baseXpMax(player.lv)
+
+  player.res.hpMax = hpMax
+  player.res.hp = hpMax
+  player.res.spMax = spMax
+  player.res.sp = spMax
+  player.res.xpMax = xpMax
+  player.res.xp = xpMax
+
+  return player
 }
 
 type PlayerState = Player
@@ -89,6 +105,15 @@ export const usePlayerStore = defineStore('player', {
       this.res.sp = clamp(this.res.sp, 0, this.res.spMax)
       this.res.xp = clamp(this.res.xp, 0, this.res.xpMax)
     },
+    recalcWithHpRatio(hpRatio: number) {
+      const caps = this.finalCaps
+      this.res.hpMax = caps.hpMax
+      this.res.spMax = caps.spMax
+      this.res.xpMax = caps.xpMax
+      this.res.hp = Math.round(this.res.hpMax * hpRatio)
+      this.res.sp = clamp(this.res.sp, 0, this.res.spMax)
+      this.res.xp = clamp(this.res.xp, 0, this.res.xpMax)
+    },
     restoreFull() {
       this.recalcCaps()
       this.res.hp = this.res.hpMax
@@ -122,6 +147,23 @@ export const usePlayerStore = defineStore('player', {
       this.unspentPoints -= total
       this.recalcCaps()
       return true
+    },
+    respecAttributes() {
+      let refunded = 0
+
+      for (let index = 0; index < ATTRIBUTE_KEYS.length; index += 1) {
+        const key = ATTRIBUTE_KEYS[index]!
+        const base = DEFAULT_BASE_STATS[key]
+        const current = this.baseStats[key]
+        if (current > base) {
+          refunded += current - base
+        }
+        this.baseStats[key] = base
+      }
+
+      this.unspentPoints += refunded
+      this.recalcCaps()
+      return refunded
     },
     receiveDamage(amount: number) {
       this.res.hp = clamp(this.res.hp - amount, 0, this.res.hpMax)
@@ -163,14 +205,16 @@ export const usePlayerStore = defineStore('player', {
       return true
     },
     equip(slot: EquipSlot, equipment: Equipment) {
+      const hpRatio = this.res.hpMax > 0 ? this.res.hp / this.res.hpMax : 1
       this.equips[slot] = { ...equipment }
-      this.recalcCaps()
+      this.recalcWithHpRatio(hpRatio)
     },
     unequip(slot: EquipSlot) {
       const current = this.equips[slot]
       if (!current) return null
+      const hpRatio = this.res.hpMax > 0 ? this.res.hp / this.res.hpMax : 1
       this.equips[slot] = undefined
-      this.recalcCaps()
+      this.recalcWithHpRatio(hpRatio)
       return current
     },
     unlockSkill(skillId: string) {

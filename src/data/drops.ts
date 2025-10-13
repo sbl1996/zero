@@ -52,7 +52,6 @@ interface LevelBand {
     equipmentWeight: number
   }
   boss: {
-    potions: PotionWeights
     gemId: string | null
     gold: GoldWeight[]
   }
@@ -61,8 +60,7 @@ interface LevelBand {
 const BOSS_SLOT_WEIGHTS = {
   equipment: 55,
   gem: 25,
-  gold: 15,
-  potion: 5,
+  gold: 20,
 } as const
 
 const LEVEL_BANDS: LevelBand[] = [
@@ -76,7 +74,6 @@ const LEVEL_BANDS: LevelBand[] = [
       equipmentWeight: 10,
     },
     boss: {
-      potions: { hp: 30, sp: 10, xp: 5 },
       gemId: 'blessGem',
       gold: [
         { multiplier: 2, weight: 15 },
@@ -94,7 +91,6 @@ const LEVEL_BANDS: LevelBand[] = [
       equipmentWeight: 12,
     },
     boss: {
-      potions: { hp: 25, sp: 10, xp: 5 },
       gemId: 'blessGem',
       gold: [
         { multiplier: 2, weight: 15 },
@@ -112,7 +108,6 @@ const LEVEL_BANDS: LevelBand[] = [
       equipmentWeight: 12,
     },
     boss: {
-      potions: { hp: 25, sp: 10, xp: 5 },
       gemId: 'blessGem',
       gold: [
         { multiplier: 2, weight: 15 },
@@ -130,7 +125,6 @@ const LEVEL_BANDS: LevelBand[] = [
       equipmentWeight: 14,
     },
     boss: {
-      potions: { hp: 22, sp: 10, xp: 5 },
       gemId: 'soulGem',
       gold: [
         { multiplier: 2, weight: 15 },
@@ -148,7 +142,6 @@ const LEVEL_BANDS: LevelBand[] = [
       equipmentWeight: 16,
     },
     boss: {
-      potions: { hp: 20, sp: 10, xp: 5 },
       gemId: 'soulGem',
       gold: [
         { multiplier: 2, weight: 15 },
@@ -166,7 +159,6 @@ const LEVEL_BANDS: LevelBand[] = [
       equipmentWeight: 17,
     },
     boss: {
-      potions: { hp: 20, sp: 10, xp: 5 },
       gemId: 'soulGem',
       gold: [
         { multiplier: 2, weight: 15 },
@@ -184,17 +176,31 @@ const LEVEL_BANDS: LevelBand[] = [
       equipmentWeight: 18,
     },
     boss: {
-      potions: { hp: 18, sp: 10, xp: 5 },
       gemId: 'miracleGem',
       gold: [
-        { multiplier: 2, weight: 15 },
+        { multiplier: 2, weight: 10 },
+        { multiplier: 3, weight: 10 },
+      ],
+    },
+  },
+  {
+    min: 61,
+    max: 65,
+    currentTier: 'dragon',
+    nextTier: null,
+    normal: {
+      potions: { hp: 25, sp: 25, xp: 24 },
+      equipmentWeight: 18,
+    },
+    boss: {
+      gemId: 'miracleGem',
+      gold: [
+        { multiplier: 2, weight: 10 },
         { multiplier: 3, weight: 10 },
       ],
     },
   },
 ]
-
-const BOSS_UPGRADE_BOOST_LEVELS = new Set([10, 20, 30, 40, 50])
 
 function findLevelBand(level: number): LevelBand | null {
   for (const band of LEVEL_BANDS) {
@@ -261,7 +267,7 @@ export function getDropEntries(monster: Monster): DropEntry[] {
   }
 
   const entries: DropEntry[] = []
-  const upgradeChance = BOSS_UPGRADE_BOOST_LEVELS.has(monster.lv) ? 0.3 : 0.15
+  const upgradeChance = band.nextTier ? 0.3 : 0
 
   const equipmentWeight = Math.max(0, BOSS_SLOT_WEIGHTS.equipment)
   if (equipmentWeight > 0) {
@@ -288,7 +294,6 @@ export function getDropEntries(monster: Monster): DropEntry[] {
     })
   }
 
-  entries.push(...normalizePotionEntries(band.boss.potions, BOSS_SLOT_WEIGHTS.potion))
   entries.push(...normalizeGoldEntries(band.boss.gold, BOSS_SLOT_WEIGHTS.gold))
 
   return entries

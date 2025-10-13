@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { ITEMS, consumableIds } from '@/data/items'
@@ -7,6 +8,7 @@ import { resolveMainStatBreakdown } from '@/composables/useEnhance'
 
 const player = usePlayerStore()
 const inventory = useInventoryStore()
+const router = useRouter()
 
 const slots = [
   ['helmet', '头盔'],
@@ -63,6 +65,10 @@ function formatSubStats(subs: Record<string, number>) {
   if (subs.addHP) stats.push(`生命值 +${subs.addHP}`)
   return stats.length > 0 ? stats.join(', ') : '无'
 }
+
+function goEnhance(slotKey: typeof slots[number][0]) {
+  router.push({ name: 'enhance', params: { entryKey: `equipped-${slotKey}` } })
+}
 </script>
 
 <template>
@@ -85,7 +91,21 @@ function formatSubStats(subs: Record<string, number>) {
         <tbody>
           <tr v-for="slot in equipList" :key="slot.key">
             <td>{{ slot.label }}</td>
-            <td>{{ slot.item ? slot.item.name : '未装备' }}</td>
+            <td>
+              <template v-if="slot.item">
+                <div class="equip-name-cell">
+                  <span>{{ slot.item.name }}</span>
+                  <button
+                    class="btn btn-secondary enhance-button"
+                    type="button"
+                    @click="goEnhance(slot.key)"
+                  >
+                    强化
+                  </button>
+                </div>
+              </template>
+              <template v-else>未装备</template>
+            </td>
             <td>{{ slot.item ? `+${slot.item.level}` : '-' }}</td>
             <td>
               <template v-if="slot.item && slot.breakdown">
@@ -147,6 +167,17 @@ function formatSubStats(subs: Record<string, number>) {
 
 .equipment-table {
   min-width: 520px;
+}
+
+.equip-name-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.enhance-button {
+  padding: 6px 12px;
+  font-size: 12px;
 }
 
 .quick-slot-row {

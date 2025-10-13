@@ -1,5 +1,7 @@
 import type { Player, Stats } from '@/types/domain'
 
+export const DEFAULT_BASE_STATS: Stats = { ATK: 10, DEF: 10 }
+
 export const needExp = (lv: number) => Math.round(100 * Math.pow(1.18, lv + 1))
 
 export function baseHpMax(lv: number) {
@@ -19,7 +21,7 @@ export function expFromAttack(expReward: number) {
 }
 
 export function createDefaultPlayer(): Player {
-  const baseStats: Stats = { ATK: 10, DEF: 10 }
+  const baseStats: Stats = { ...DEFAULT_BASE_STATS }
   const lv = 1
   const hpMax = baseHpMax(lv)
   const spMax = baseSpMax(lv)

@@ -83,7 +83,7 @@ export function dmgSkill(ATK: number, DEF: number, roll: number, options?: Damag
 }
 
 export function dmgUlt(ATK: number, DEF: number, roll: number, options?: DamageOptions): DamageResult {
-  return computeDamage(ATK, DEF, 2.2, toRollMultiplier(roll), options)
+  return computeDamage(ATK, DEF, 2.5, toRollMultiplier(roll), options)
 }
 
 export function dmgCustom(

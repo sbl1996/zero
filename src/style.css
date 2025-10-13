@@ -133,6 +133,14 @@ button {
   opacity: 0.5;
 }
 
+.btn-danger {
+  background: linear-gradient(135deg, #ff6b6b, #ff4d4d);
+}
+
+.btn-danger:hover:not(:disabled) {
+  filter: brightness(1.1);
+}
+
 .badge {
   padding: 2px 8px;
   border-radius: 999px;
@@ -287,6 +295,14 @@ button {
   flex: 1;
 }
 
+.cheat-danger {
+  margin-top: 24px;
+}
+
+.cheat-danger .btn {
+  width: 100%;
+}
+
 .cheat-gold {
   margin-top: 24px;
 }
@@ -402,6 +418,7 @@ button {
   display: grid;
   grid-template-columns: 320px 1fr;
   gap: 24px;
+  align-items: start;
 }
 
 .battle-actions {
@@ -514,6 +531,14 @@ button {
   padding: 16px 24px;
   pointer-events: none;
   z-index: 0;
+}
+
+.battle-portraits--interactive {
+  pointer-events: auto;
+}
+
+.battle-portraits--interactive .battle-portrait.enemy {
+  pointer-events: auto;
 }
 
 .battle-portrait {
@@ -679,6 +704,10 @@ button {
 
 .float-text.heal {
   color: #34f58d;
+}
+
+.float-text.loot {
+  color: #ffd166;
 }
 
 .float-text.missP {

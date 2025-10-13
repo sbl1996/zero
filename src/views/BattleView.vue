@@ -5,6 +5,7 @@ import { useRouter } from 'vue-router'
 import { useBattleStore } from '@/stores/battle'
 import { usePlayerStore } from '@/stores/player'
 import { getSkillDefinition } from '@/data/skills'
+import { getMonsterMap } from '@/data/monsters'
 import type { FloatText, LootResult } from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import QuickItemBar from '@/components/QuickItemBar.vue'
@@ -18,7 +19,6 @@ const { res } = storeToRefs(playerStore)
 const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
 const lootList = computed(() => battle.loot)
-const lastDrops = computed(() => battle.lastOutcome?.drops ?? [])
 const hpRate = computed(() => (monster.value ? Math.max(0, battle.monsterHp) / monster.value.hpMax : 0))
 
 // Auto-cast state
@@ -163,9 +163,23 @@ function formatLootEntry(entry: LootResult) {
     return `${entry.name} x${entry.quantity}`
   }
   if (entry.kind === 'equipment') {
-    return entry.name
+    const level = entry.equipment.level
+    return level > 0 ? `${entry.name} +${level}` : entry.name
   }
   return `${entry.name} +${entry.amount}`
+}
+
+function getGoldBonus(lootList: LootResult[]): boolean {
+  return lootList.some(entry => entry.kind === 'gold' && entry.hasBonus)
+}
+
+function getTotalGold(lootList: LootResult[]): number | null {
+  const goldEntry = lootList.find(entry => entry.kind === 'gold')
+  return goldEntry ? goldEntry.amount : null
+}
+
+function getFilteredLootList(lootList: LootResult[]): LootResult[] {
+  return lootList.filter(entry => entry.kind !== 'gold')
 }
 
 watch(
@@ -285,8 +299,30 @@ function stopAllAutoCast() {
 
 function backToSelect() {
   stopAllAutoCast()
+
+  // 获取当前战斗的怪物所属的地图
+  let targetRoute = '/'
+  if (monster.value) {
+    const mapId = getMonsterMap(monster.value.id)
+    if (mapId) {
+      targetRoute = `/map/${mapId}`
+    }
+  }
+
   battle.exitBattle()
-  router.push('/')
+  router.push(targetRoute)
+}
+
+function handleBossPortraitClick() {
+  if (!monster.value || !monster.value.isBoss) return
+  if (battle.concluded !== 'victory') return
+
+  // Get the current monster before resetting
+  const currentMonster = monster.value
+
+  // Reset battle state without restoring resources
+  battle.clearRematchTimer()
+  battle.start(currentMonster)
 }
 
 onBeforeUnmount(() => {
@@ -349,6 +385,76 @@ onBeforeUnmount(() => {
 .battle-actions button {
   position: relative;
 }
+
+.boss-portrait {
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  z-index: 10;
+  position: relative;
+}
+
+.boss-portrait:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1) drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
+}
+
+.boss-portrait:active {
+  transform: scale(0.98);
+}
+
+.boss-portrait.victory-state {
+  animation: victory-pulse 2s infinite alternate;
+  filter: brightness(1.2) drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
+}
+
+@keyframes victory-pulse {
+  from {
+    filter: brightness(1.2) drop-shadow(0 0 12px rgba(255, 215, 0, 0.8));
+  }
+  to {
+    filter: brightness(1.4) drop-shadow(0 0 20px rgba(255, 215, 0, 1));
+  }
+}
+
+.loot-equipment {
+  color: #ff6b35 !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 8px rgba(255, 107, 53, 0.8) !important;
+  animation: equipment-glow 1.5s ease-in-out infinite alternate !important;
+}
+
+.loot-normal {
+  color: #ffd166;
+}
+
+.loot-gold-bonus {
+  color: #ff6b35 !important;
+  font-weight: 700 !important;
+  text-shadow: 0 0 10px rgba(255, 215, 0, 0.9) !important;
+  animation: gold-bonus-glow 1.2s ease-in-out infinite alternate !important;
+}
+
+@keyframes equipment-glow {
+  from {
+    text-shadow: 0 0 8px rgba(255, 107, 53, 0.8);
+    transform: scale(1);
+  }
+  to {
+    text-shadow: 0 0 16px rgba(255, 107, 53, 1);
+    transform: scale(1.05);
+  }
+}
+
+@keyframes gold-bonus-glow {
+  from {
+    text-shadow: 0 0 10px rgba(255, 215, 0, 0.9);
+    transform: scale(1);
+  }
+  to {
+    text-shadow: 0 0 20px rgba(255, 215, 0, 1);
+    transform: scale(1.08);
+  }
+}
 </style>
 
 <template>
@@ -356,21 +462,7 @@ onBeforeUnmount(() => {
     <p v-if="battle.concluded === 'victory'">
       战斗胜利！成功击败 {{ lastOutcome?.monsterName ?? '敌人' }}。
     </p>
-    <div
-      v-if="battle.concluded === 'victory' && lastDrops.length"
-      class="text-small"
-      style="margin: 12px auto 0; width: fit-content; text-align: left;"
-    >
-      <div style="font-weight: 600; margin-bottom: 4px;">掉落</div>
-      <div
-        v-for="(entry, index) in lastDrops"
-        :key="`summary-${lootEntryKey(entry, index)}`"
-        style="margin-bottom: 2px;"
-      >
-        {{ formatLootEntry(entry) }}
-      </div>
-    </div>
-    <p v-else-if="battle.concluded === 'defeat'">
+      <p v-else-if="battle.concluded === 'defeat'">
       战斗失败……未能击败 {{ lastOutcome?.monsterName ?? '敌人' }}。<br>
       <span style="color: #ff6b7a;">死亡惩罚：失去全部经验值和1/3金币，已满状态复活</span>
     </p>
@@ -396,9 +488,24 @@ onBeforeUnmount(() => {
       </header>
 
       <div class="float-area">
-        <div class="battle-portraits">
+        <div
+          class="battle-portraits"
+          :class="{
+            'battle-portraits--interactive': monster.isBoss && battle.concluded === 'victory'
+          }"
+        >
           <img class="battle-portrait player" :src="playerPortraitSrc" alt="主角立绘" />
-          <img class="battle-portrait enemy" :src="monsterPortraitSrc" :alt="monster.name" @error="onMonsterPortraitError" />
+          <img
+            class="battle-portrait enemy"
+            :class="{
+              'boss-portrait': monster.isBoss,
+              'victory-state': monster.isBoss && battle.concluded === 'victory'
+            }"
+            :src="monsterPortraitSrc"
+            :alt="monster.name"
+            @error="onMonsterPortraitError"
+            @click="handleBossPortraitClick"
+          />
         </div>
         <div
           v-for="flash in battle.flashEffects"
@@ -422,16 +529,23 @@ onBeforeUnmount(() => {
         <div
           v-if="battle.concluded === 'victory'"
           class="float-text"
-          style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; text-align: center;"
+          style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; text-align: center; pointer-events: none;"
         >
           <div>胜利</div>
           <div class="text-small" style="margin-top: 6px;">+ EXP {{ monster?.rewardExp ?? 0 }}</div>
-          <div class="text-small" style="margin-top: 6px;">+ GOLD {{ monster?.rewardGold ?? 0 }}</div>
-          <div v-if="lootList.length" class="text-small" style="margin-top: 8px;">
+          <div
+            class="text-small"
+            :class="getGoldBonus(lootList) ? 'loot-gold-bonus' : ''"
+            style="margin-top: 6px;"
+          >
+            + GOLD {{ getTotalGold(lootList) ?? monster?.rewardGold ?? 0 }}
+          </div>
+          <div v-if="getFilteredLootList(lootList).length" class="text-small" style="margin-top: 8px;">
             <div style="font-weight: 600;">掉落</div>
             <div
-              v-for="(entry, index) in lootList"
+              v-for="(entry, index) in getFilteredLootList(lootList)"
               :key="`loot-${lootEntryKey(entry, index)}`"
+              :class="entry.kind === 'equipment' ? 'loot-equipment' : 'loot-normal'"
               style="margin-top: 2px;"
             >
               {{ formatLootEntry(entry) }}
