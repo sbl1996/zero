@@ -106,7 +106,7 @@ const updateMonsterPortrait = (monster: any) => {
   }
 
   // First try gif, then fallback to webp
-  const portrait = monster.portrait ?? `${monster.id}.gif`
+  const portrait = `${monster.id}.gif`
   const src = portrait.startsWith('/') ? portrait : `/${portrait}`
 
   // Store both gif and webp attempts for proper fallback handling

@@ -86,7 +86,6 @@ export interface Monster {
   def: number
   rewardExp: number
   rewardGold: number
-  portrait?: string
   isBoss?: boolean
   tough?: number
   unlocks?: string[]
