@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui'
 const playerStore = usePlayerStore()
 const progressStore = useProgressStore()
 const ui = useUiStore()
-const { showCheatPanel } = storeToRefs(ui)
+const { showCheatPanel, enableHoldAutoCast } = storeToRefs(ui)
 
 const goldAmount = ref(1000)
 
@@ -53,6 +53,12 @@ function deleteSave() {
   }
   window.location.reload()
 }
+
+function handleAutoCastToggle(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  ui.toggleHoldAutoCast(target.checked)
+}
 </script>
 
 <template>
@@ -71,6 +77,19 @@ function deleteSave() {
           <button class="btn" type="button" @click="levelUp">立即升级</button>
           <button class="btn" type="button" @click="respecAttributes">洗点</button>
           <button class="btn" type="button" @click="unlockAllMonsters">解锁全部地图</button>
+        </div>
+
+        <div class="cheat-settings">
+          <label class="cheat-settings-toggle">
+            <input
+              class="cheat-settings-checkbox"
+              type="checkbox"
+              :checked="enableHoldAutoCast"
+              @change="handleAutoCastToggle"
+            >
+            长按技能自动施法
+          </label>
+          <p class="text-small text-muted" style="margin-top: 6px;">关闭后长按技能不会自动连发。</p>
         </div>
 
         <div class="cheat-danger">

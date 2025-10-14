@@ -295,6 +295,28 @@ button {
   flex: 1;
 }
 
+.cheat-settings {
+  margin-top: 24px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.cheat-settings-toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cheat-settings-checkbox {
+  width: 18px;
+  height: 18px;
+  accent-color: #f5d06f;
+}
+
 .cheat-danger {
   margin-top: 24px;
 }
@@ -421,96 +443,200 @@ button {
   align-items: start;
 }
 
+.battle-action-row {
+  display: flex;
+  gap: 24px;
+  margin-top: 12px;
+  justify-content: center;
+  align-items: stretch;
+}
+
 .battle-actions {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
+  align-items: stretch;
+}
+
+.battle-action-row .battle-actions,
+.battle-action-row .quick-item-bar {
+  flex: 1 1 0;
+  max-width: 320px;
 }
 
 .battle-actions button {
-  padding: 14px 12px;
-  border-radius: 18px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.4);
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 12px 8px;
+  border-radius: 0;
+  border: 1px solid rgba(86, 164, 255, 0.6);
+  background: radial-gradient(circle at 25% 30%, rgba(142, 214, 255, 0.2) 0%, rgba(59, 108, 205, 0.55) 45%, rgba(16, 28, 66, 0.9) 100%);
   color: #fff;
-  font-size: 16px;
+  font-size: 14px;
   cursor: pointer;
-  transition: transform 120ms ease, border-color 120ms ease;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, filter 120ms ease;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
   justify-content: center;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow: inset 0 0 0 1px rgba(166, 217, 255, 0.12);
+  position: relative;
 }
 
 .battle-actions button.empty {
-  opacity: 0.6;
+  opacity: 0.75;
+  border-color: rgba(134, 143, 173, 0.55);
+  background: radial-gradient(circle at 25% 30%, rgba(206, 213, 229, 0.15) 0%, rgba(73, 82, 110, 0.45) 55%, rgba(15, 18, 26, 0.85) 100%);
 }
 
 .battle-actions .skill-name {
   font-weight: 600;
   letter-spacing: 1px;
+  text-align: center;
+  font-size: 14px;
 }
 
 .battle-actions .skill-cost {
-  font-size: 12px;
+  font-size: 11px;
   color: rgba(255, 255, 255, 0.7);
   letter-spacing: 1px;
+  margin-top: auto;
+}
+
+.battle-actions button.has-image {
+  padding: 0;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+}
+
+.battle-actions button.has-image .skill-image-container {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  z-index: 0;
+}
+
+.battle-actions button.has-image .skill-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  pointer-events: none;
 }
 
 .battle-actions button:hover:not(:disabled) {
-  transform: translateY(-2px);
-  border-color: rgba(245, 208, 111, 0.6);
+  transform: translateY(-4px);
+  border-color: rgba(203, 239, 255, 0.9);
+  box-shadow: 0 14px 26px rgba(21, 35, 72, 0.5);
+  filter: brightness(1.08) saturate(1.1);
 }
 
 .battle-actions button:disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .quick-item-bar {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 16px;
+  margin: 0;
+  width: 100%;
 }
 
 .quick-item-slot {
-  flex: 1 1 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 12px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  background: rgba(0, 0, 0, 0.35);
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  padding: 12px 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(86, 164, 255, 0.6);
+  background: radial-gradient(circle at 25% 30%, rgba(252, 236, 179, 0.22) 0%, rgba(219, 174, 96, 0.55) 48%, rgba(55, 33, 14, 0.9) 100%);
   color: #fff;
   cursor: pointer;
-  transition: transform 120ms ease, border-color 120ms ease;
+  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, filter 120ms ease;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+  box-shadow: inset 0 0 0 1px rgba(255, 226, 169, 0.18);
+}
+
+.quick-item-slot.empty {
+  opacity: 0.75;
+  border-color: rgba(134, 143, 173, 0.55);
+  background: radial-gradient(circle at 25% 30%, rgba(206, 213, 229, 0.15) 0%, rgba(73, 82, 110, 0.45) 55%, rgba(15, 18, 26, 0.85) 100%);
+  box-shadow: inset 0 0 0 1px rgba(166, 217, 255, 0.12);
 }
 
 .quick-item-slot.disabled {
-  opacity: 0.4;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
 .quick-item-slot:not(.disabled):hover {
-  transform: translateY(-2px);
-  border-color: rgba(245, 208, 111, 0.6);
+  transform: translateY(-4px);
+  border-color: rgba(255, 215, 141, 0.8);
+  box-shadow: 0 14px 24px rgba(66, 37, 13, 0.55);
+  filter: brightness(1.08) saturate(1.05);
 }
 
-.quick-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
+.quick-item-slot::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    rgba(245, 208, 111, 0) 0deg,
+    rgba(245, 208, 111, 0) calc(360deg - var(--cooldown-angle, 0deg)),
+    rgba(245, 208, 111, 0.85) calc(360deg - var(--cooldown-angle, 0deg)),
+    rgba(245, 208, 111, 0.85) 360deg
+  );
+  opacity: 0;
+  transition: opacity 160ms ease, background 120ms linear;
+  z-index: 0;
+  mix-blend-mode: screen;
 }
 
-.quick-item-quantity {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
+.quick-item-slot.on-cooldown::before {
+  opacity: 1;
+}
+
+.quick-item-slot > * {
+  position: relative;
+  z-index: 1;
 }
 
 .quick-item-icon {
-  font-size: 20px;
+  font-size: 28px;
+}
+
+.quick-item-name {
+  font-weight: 600;
+  font-size: 13px;
+  letter-spacing: 0.6px;
+  text-align: center;
+}
+
+.quick-item-effect {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.82);
+  text-align: center;
+  line-height: 1.2;
+}
+
+.quick-item-stock {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.7);
+  margin-top: auto;
 }
 
 
@@ -1134,12 +1260,19 @@ button {
     width: auto;
   }
 
-  .quick-item-bar {
+  .battle-action-row {
     flex-direction: column;
+    gap: 16px;
   }
 
-  .quick-item-slot {
+  .battle-action-row .battle-actions,
+  .battle-action-row .quick-item-bar {
+    max-width: none;
     width: 100%;
+  }
+
+  .quick-item-bar {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 
   .cheat-toggle {
@@ -1186,6 +1319,10 @@ button {
   }
 
   .battle-actions {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-item-bar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

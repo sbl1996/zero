@@ -145,11 +145,11 @@ export interface SkillDefinition {
   description: string
   cost: SkillCost
   flash: FlashEffectKind
+  cooldown?: number
   tags?: string[]
+  icon?: string
   execute: (context: SkillContext) => SkillResult
 }
-
-export type BattleTurn = 'player' | 'enemy'
 
 export interface FloatText {
   id: number
@@ -176,7 +176,6 @@ export interface BattleOutcome {
 export interface BattleState {
   monster: Monster | null
   monsterHp: number
-  turn: BattleTurn
   rngSeed: number
   floatTexts: FloatText[]
   flashEffects: FlashEffect[]
@@ -184,6 +183,11 @@ export interface BattleState {
   lastOutcome: BattleOutcome | null
   rematchTimer: number | null
   loot: LootResult[]
+  loopHandle: ReturnType<typeof setInterval> | null
+  lastTickAt: number
+  monsterTimer: number
+  skillCooldowns: number[]
+  itemCooldowns: Record<string, number>
 }
 
 export interface UnlockState {

@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useBattleStore } from '@/stores/battle'
 import { usePlayerStore } from '@/stores/player'
+import { useUiStore } from '@/stores/ui'
 import { getSkillDefinition } from '@/data/skills'
 import { getMonsterMap } from '@/data/monsters'
 import type { FloatText, LootResult } from '@/types/domain'
@@ -13,13 +14,19 @@ import QuickItemBar from '@/components/QuickItemBar.vue'
 const router = useRouter()
 const battle = useBattleStore()
 const playerStore = usePlayerStore()
+const uiStore = useUiStore()
 
 const { res } = storeToRefs(playerStore)
+const { enableHoldAutoCast } = storeToRefs(uiStore)
 
 const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
 const lootList = computed(() => battle.loot)
 const hpRate = computed(() => (monster.value ? Math.max(0, battle.monsterHp) / monster.value.hpMax : 0))
+const monsterAttackCountdownLabel = computed(() => {
+  if (!battle.monster || battle.concluded !== 'idle') return '—'
+  return `${Math.max(0, battle.monsterTimer).toFixed(2)}s`
+})
 
 // Auto-cast state
 const autoCastTimers = ref<Map<number, ReturnType<typeof setInterval>>>(new Map())
@@ -30,12 +37,13 @@ const AUTO_CAST_INTERVAL = 200 // 200ms interval between casts
 
 const skillSlots = computed(() => {
   const inBattle = battle.inBattle
-  const isPlayerTurn = battle.turn === 'player'
+  const concluded = battle.concluded
   const { sp, xp } = res.value
   return playerStore.skills.loadout.map((skillId, index) => {
     const skill = getSkillDefinition(skillId)
     const cost = skill?.cost
     const label = skill?.name ?? '空槽'
+    const iconSrc = skill?.icon ?? null
     const costLabel = (() => {
       if (!skill) return '未装备'
       if (!cost || cost.type === 'none') return '无消耗'
@@ -43,17 +51,27 @@ const skillSlots = computed(() => {
       return `${cost.type.toUpperCase()} ${amount}`
     })()
 
+    const cooldown = skill ? (battle.skillCooldowns[index] ?? 0) : 0
+    const cooldownDuration = skill?.cooldown ?? 0
+    const cooldownPercent = cooldownDuration > 0 ? Math.min(Math.max(cooldown / cooldownDuration, 0), 1) : 0
+    const cooldownAngle = Math.round(cooldownPercent * 360 * 100) / 100
+    const cooldownDisplay = cooldown > 0 ? `${cooldown.toFixed(1)}s` : ''
+    const cooldownStyle = cooldownPercent > 0 ? {
+      '--cooldown-angle': `${cooldownAngle}deg`,
+      '--cooldown-progress': `${cooldownPercent}`,
+    } : undefined
+
     let disabled = false
     let reason = ''
-    if (!inBattle || battle.concluded !== 'idle') {
+    if (!inBattle || concluded !== 'idle') {
       disabled = true
       reason = '未在战斗'
-    } else if (!isPlayerTurn) {
-      disabled = true
-      reason = '等待对手'
     } else if (!skill) {
       disabled = true
       reason = '未装备技能'
+    } else if (cooldown > 0) {
+      disabled = true
+      reason = `冷却中 ${cooldown.toFixed(1)}s`
     } else if (cost?.type === 'sp' && (cost.amount ?? 0) > sp) {
       disabled = true
       reason = 'SP不足'
@@ -71,11 +89,19 @@ const skillSlots = computed(() => {
       id: skillId,
       label,
       costLabel,
+      cooldown,
+      cooldownLabel: cooldown > 0 ? `冷却：${cooldown.toFixed(1)}s` : '',
+      cooldownDisplay,
+      cooldownStyle,
+      cooldownPercent,
+      isOnCooldown: cooldown > 0,
       disabled,
       reason,
       isEmpty: !skill,
       isAutoCasting,
       isHolding,
+      hasImage: Boolean(iconSrc),
+      imageSrc: iconSrc,
     }
   })
 })
@@ -201,15 +227,11 @@ watch(
   },
 )
 
-// Stop auto-casting when turn changes to enemy
-watch(
-  () => battle.turn,
-  (turn) => {
-    if (turn !== 'player') {
-      stopAllAutoCast()
-    }
-  },
-)
+watch(enableHoldAutoCast, (enabled) => {
+  if (!enabled) {
+    stopAllAutoCast()
+  }
+})
 
 function useSkill(slotIndex: number) {
   // Don't use skill if this was a long press that's already being handled
@@ -227,6 +249,8 @@ function useSkill(slotIndex: number) {
 function startSkillHold(slotIndex: number, event?: MouseEvent | TouchEvent) {
   const slot = skillSlots.value[slotIndex]
   if (!slot || slot.disabled || slot.isEmpty) return
+
+  if (!enableHoldAutoCast.value) return
 
   // Record when the hold started
   autoCastHoldStart.value.set(slotIndex, Date.now())
@@ -248,21 +272,37 @@ function startSkillHold(slotIndex: number, event?: MouseEvent | TouchEvent) {
 }
 
 function startAutoCast(slotIndex: number) {
+  if (!enableHoldAutoCast.value) return
+
+  const attempt = (silent = true) => {
+    const slot = skillSlots.value[slotIndex]
+    if (!slot || slot.isEmpty) {
+      stopAutoCast(slotIndex)
+      return
+    }
+    if (battle.concluded !== 'idle') {
+      stopAutoCast(slotIndex)
+      return
+    }
+    if (slot.isOnCooldown) {
+      return
+    }
+    if (slot.disabled) {
+      stopAutoCast(slotIndex)
+      return
+    }
+    battle.playerUseSkill(slotIndex, { silent })
+  }
+
   // Don't start if there's already an auto-cast timer for this slot
   if (autoCastTimers.value.has(slotIndex)) return
 
-  // Cast the skill immediately
-  useSkill(slotIndex)
+  // Cast the skill immediately (silent to avoid浮动提示)
+  attempt(true)
 
   // Set up interval for repeated casting
   const timer = setInterval(() => {
-    const slot = skillSlots.value[slotIndex]
-    if (slot && !slot.disabled && !slot.isEmpty) {
-      useSkill(slotIndex)
-    } else {
-      // Stop auto-casting if skill becomes disabled
-      stopAutoCast(slotIndex)
-    }
+    attempt(true)
   }, AUTO_CAST_INTERVAL)
 
   autoCastTimers.value.set(slotIndex, timer)
@@ -384,6 +424,52 @@ onBeforeUnmount(() => {
 
 .battle-actions button {
   position: relative;
+  overflow: hidden;
+}
+
+.battle-actions button::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 0deg,
+    rgba(88, 184, 255, 0) 0deg,
+    rgba(88, 184, 255, 0) calc(360deg - var(--cooldown-angle, 0deg)),
+    rgba(88, 184, 255, 0.82) calc(360deg - var(--cooldown-angle, 0deg)),
+    rgba(88, 184, 255, 0.82) 360deg
+  );
+  opacity: 0;
+  transition: opacity 160ms ease, background 120ms linear;
+  z-index: 0;
+  mix-blend-mode: screen;
+}
+
+.battle-actions button.on-cooldown::before {
+  opacity: 1;
+}
+
+.battle-actions button.on-cooldown {
+  border-color: rgba(154, 224, 255, 0.95);
+  filter: saturate(1.15) brightness(1.05);
+}
+
+.battle-actions button > * {
+  position: relative;
+  z-index: 1;
+}
+
+.skill-cooldown {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  font-size: 18px;
+  font-weight: 600;
+  color: #f6fbff;
+  text-shadow: 0 0 12px rgba(16, 28, 66, 0.8), 0 0 2px rgba(255, 255, 255, 0.7);
+  letter-spacing: 1px;
+  pointer-events: none;
 }
 
 .boss-portrait {
@@ -557,37 +643,55 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <div class="battle-actions">
-        <button
-          v-for="slot in skillSlots"
-          :key="slot.index"
-          :disabled="slot.disabled"
-          :class="{
-            empty: slot.isEmpty,
-            'auto-casting': slot.isAutoCasting,
-            'holding': slot.isHolding
-          }"
-          :title="slot.reason || undefined"
-          @click="useSkill(slot.index)"
-          @mousedown="startSkillHold(slot.index, $event)"
-          @mouseup="stopAutoCast(slot.index)"
-          @mouseleave="stopAutoCast(slot.index)"
-          @touchstart="startSkillHold(slot.index, $event)"
-          @touchend="stopAutoCast(slot.index)"
-          @touchcancel="stopAutoCast(slot.index)"
-        >
-          <span class="skill-name">{{ slot.label }}</span>
-          <span class="skill-cost">{{ slot.costLabel }}</span>
-          <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
-          <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
-        </button>
-      </div>
+      <div class="battle-action-row">
+        <div class="battle-actions">
+          <button
+            v-for="slot in skillSlots"
+            :key="slot.index"
+            :disabled="slot.disabled"
+            :class="{
+              empty: slot.isEmpty,
+              'auto-casting': slot.isAutoCasting,
+              'holding': slot.isHolding,
+              'on-cooldown': slot.isOnCooldown,
+              'has-image': slot.hasImage
+            }"
+            :title="slot.reason || undefined"
+            :style="slot.cooldownStyle"
+            @click="useSkill(slot.index)"
+            @mousedown="startSkillHold(slot.index, $event)"
+            @mouseup="stopAutoCast(slot.index)"
+            @mouseleave="stopAutoCast(slot.index)"
+            @touchstart="startSkillHold(slot.index, $event)"
+            @touchend="stopAutoCast(slot.index)"
+            @touchcancel="stopAutoCast(slot.index)"
+          >
+            <template v-if="slot.hasImage">
+              <div class="skill-image-container">
+                <img
+                  v-if="slot.imageSrc"
+                  :src="slot.imageSrc"
+                  :alt="slot.label"
+                  class="skill-image"
+                >
+              </div>
+            </template>
+            <template v-else>
+              <span class="skill-name">{{ slot.label }}</span>
+              <span class="skill-cost">{{ slot.costLabel }}</span>
+            </template>
+            <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>
+            <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
+            <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
+          </button>
+        </div>
 
-      <QuickItemBar />
+        <QuickItemBar class="battle-quick-items" />
+      </div>
 
       <footer class="flex flex-between flex-center">
         <button class="btn" @click="backToSelect">退出战斗</button>
-        <div class="text-small text-muted">当前回合：{{ battle.turn === 'player' ? '玩家' : '敌人' }}</div>
+        <div class="text-small text-muted">敌方下一次攻击：{{ monsterAttackCountdownLabel }}</div>
       </footer>
     </section>
 

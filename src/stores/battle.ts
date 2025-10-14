@@ -15,6 +15,13 @@ import type { BattleState, Monster, FlashEffectKind, Equipment, EquipSlot, LootR
 
 const ITEM_MAP = new Map(ITEMS.map((item) => [item.id, item]))
 
+const TICK_INTERVAL_MS = 1000 / 15
+const MAX_FRAME_TIME = 0.25
+const MONSTER_ATTACK_INTERVAL = 1.6
+const FALLBACK_SKILL_COOLDOWN = 2
+export const ITEM_COOLDOWN = 10
+const SKILL_SLOT_COUNT = 4
+
 const EQUIPMENT_TIER_LEVEL: Record<EquipmentTier, number> = {
   iron: 1,
   steel: 10,
@@ -120,7 +127,6 @@ function initialState(): BattleState {
   return {
     monster: null,
     monsterHp: 0,
-    turn: 'player',
     rngSeed: Date.now() >>> 0,
     floatTexts: [],
     flashEffects: [],
@@ -128,6 +134,11 @@ function initialState(): BattleState {
     lastOutcome: null,
     rematchTimer: null,
     loot: [],
+    loopHandle: null,
+    lastTickAt: 0,
+    monsterTimer: MONSTER_ATTACK_INTERVAL,
+    skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
+    itemCooldowns: {},
   }
 }
 
@@ -136,6 +147,13 @@ let flashId = 1
 
 function randomInRange(min: number, max: number) {
   return Math.random() * (max - min) + min
+}
+
+function getNow(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now()
+  }
+  return Date.now()
 }
 
 export const useBattleStore = defineStore('battle', {
@@ -155,39 +173,118 @@ export const useBattleStore = defineStore('battle', {
   },
   actions: {
     reset() {
+      this.stopLoop()
       this.clearRematchTimer()
       Object.assign(this, initialState())
     },
     exitBattle() {
+      this.stopLoop()
       this.clearRematchTimer()
       this.monster = null
       this.monsterHp = 0
-      this.turn = 'player'
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
       this.rematchTimer = null
+      this.skillCooldowns = Array(this.skillCooldowns.length || SKILL_SLOT_COUNT).fill(0)
+      this.itemCooldowns = {}
+      this.monsterTimer = MONSTER_ATTACK_INTERVAL
+      this.lastTickAt = 0
       // 保留lastOutcome和loot以便在结算页面显示
       // this.lastOutcome = null
       // this.loot = []
     },
     start(monster: Monster, seed?: number) {
       this.clearRematchTimer()
+      this.stopLoop()
       this.monster = monster
       this.monsterHp = monster.hpMax
-      this.turn = 'player'
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
       this.rngSeed = (seed ?? Date.now()) >>> 0
       this.lastOutcome = null
       this.loot = []
+      const player = usePlayerStore()
+      const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
+      this.skillCooldowns = Array(slotCount).fill(0)
+      this.itemCooldowns = {}
+      this.monsterTimer = MONSTER_ATTACK_INTERVAL
+      this.lastTickAt = getNow()
+      this.startLoop()
     },
     clearRematchTimer() {
       if (this.rematchTimer !== null) {
         clearTimeout(this.rematchTimer)
         this.rematchTimer = null
       }
+    },
+    startLoop() {
+      if (this.loopHandle !== null) return
+      this.loopHandle = setInterval(() => {
+        this.tick()
+      }, TICK_INTERVAL_MS)
+    },
+    stopLoop() {
+      if (this.loopHandle !== null) {
+        clearInterval(this.loopHandle)
+        this.loopHandle = null
+      }
+    },
+    tick() {
+      if (!this.monster || this.concluded !== 'idle') {
+        this.stopLoop()
+        return
+      }
+
+      const now = getNow()
+      const last = this.lastTickAt || now
+      let delta = (now - last) / 1000
+      if (!Number.isFinite(delta) || delta < 0) {
+        delta = 0
+      }
+      if (delta > MAX_FRAME_TIME) {
+        delta = MAX_FRAME_TIME
+      }
+      this.lastTickAt = now
+
+      if (delta <= 0) return
+
+      for (let index = 0; index < this.skillCooldowns.length; index += 1) {
+        const remaining = this.skillCooldowns[index] ?? 0
+        if (remaining > 0) {
+          const next = remaining - delta
+          this.skillCooldowns[index] = next > 0 ? next : 0
+        }
+      }
+
+      const entries = Object.entries(this.itemCooldowns)
+      if (entries.length > 0) {
+        for (let i = 0; i < entries.length; i += 1) {
+          const [itemId, value] = entries[i]!
+          const next = value - delta
+          if (next <= 0) {
+            delete this.itemCooldowns[itemId]
+          } else {
+            this.itemCooldowns[itemId] = next
+          }
+        }
+      }
+
+      this.monsterTimer -= delta
+      while (this.monsterTimer <= 0 && this.concluded === 'idle' && this.monster) {
+        this.monsterAttack()
+        this.monsterTimer += MONSTER_ATTACK_INTERVAL
+      }
+    },
+    getSkillCooldown(slotIndex: number) {
+      return this.skillCooldowns[slotIndex] ?? 0
+    },
+    isSkillReady(slotIndex: number) {
+      return this.getSkillCooldown(slotIndex) <= 0
+    },
+    getItemCooldown(itemId: string) {
+      return this.itemCooldowns[itemId] ?? 0
     },
     pushFloat(value: string, kind: 'hitP' | 'hitE' | 'heal' | 'miss' | 'loot') {
       const id = floatId++
@@ -307,6 +404,7 @@ export const useBattleStore = defineStore('battle', {
     },
     conclude(result: 'victory' | 'defeat', loot: LootResult[] = []) {
       const currentMonster = this.monster
+      this.stopLoop()
       this.concluded = result
       this.loot = loot
       if (currentMonster) {
@@ -317,8 +415,11 @@ export const useBattleStore = defineStore('battle', {
           drops: loot.length > 0 ? loot : undefined,
         }
       }
-      this.turn = 'player'
       this.monsterHp = 0
+      this.skillCooldowns = Array(this.skillCooldowns.length || SKILL_SLOT_COUNT).fill(0)
+      this.itemCooldowns = {}
+      this.monsterTimer = MONSTER_ATTACK_INTERVAL
+      this.lastTickAt = 0
       if (result === 'victory') {
         if (currentMonster) {
           // 只有普通怪才会自动重赛，BOSS不会
@@ -332,33 +433,48 @@ export const useBattleStore = defineStore('battle', {
         this.monsterHp = 0
       }
     },
-    playerUseSkill(slotIndex: number) {
-      if (!this.monster || this.concluded !== 'idle' || this.turn !== 'player') return
+    playerUseSkill(slotIndex: number, options?: { silent?: boolean }): boolean {
+      if (!this.monster || this.concluded !== 'idle') return false
 
       const player = usePlayerStore()
-      const skillId = player.skills.loadout[slotIndex] ?? null
-      if (!skillId) {
-        this.pushFloat('未装备技能', 'miss')
-        return
+      const silent = options?.silent ?? false
+      const loadout = player.skills.loadout
+
+      if (slotIndex < 0 || slotIndex >= loadout.length) {
+        if (!silent) this.pushFloat('无效技能槽', 'miss')
+        return false
       }
+
+      const skillId = loadout[slotIndex] ?? null
+      if (!skillId) {
+        if (!silent) this.pushFloat('未装备技能', 'miss')
+        return false
+      }
+
       const skill = getSkillDefinition(skillId)
       if (!skill) {
-        this.pushFloat('技能不存在', 'miss')
-        return
+        if (!silent) this.pushFloat('技能不存在', 'miss')
+        return false
+      }
+
+      const cooldownRemaining = this.getSkillCooldown(slotIndex)
+      if (cooldownRemaining > 0) {
+        if (!silent) this.pushFloat(`冷却中 ${cooldownRemaining.toFixed(1)}s`, 'miss')
+        return false
       }
 
       const cost = skill.cost
       if (cost.type === 'sp') {
         const amount = cost.amount ?? 0
         if (!player.spendSp(amount)) {
-          this.pushFloat('SP不足', 'miss')
-          return
+          if (!silent) this.pushFloat('SP不足', 'miss')
+          return false
         }
       } else if (cost.type === 'xp') {
         const amount = cost.amount ?? 0
         if (!player.spendXp(amount)) {
-          this.pushFloat('XP不足', 'miss')
-          return
+          if (!silent) this.pushFloat('XP不足', 'miss')
+          return false
         }
       }
 
@@ -396,7 +512,14 @@ export const useBattleStore = defineStore('battle', {
         this.pushFloat(result.message, 'miss')
       }
 
-      if (this.concluded !== 'idle') return
+      const skillCooldown = skill.cooldown ?? FALLBACK_SKILL_COOLDOWN
+      for (let index = 0; index < loadout.length; index += 1) {
+        if (loadout[index] === skillId) {
+          this.skillCooldowns[index] = skillCooldown
+        }
+      }
+
+      if (this.concluded !== 'idle') return true
 
       if (this.monsterHp <= 0 && this.monster) {
         player.gainExp(this.monster.rewardExp)
@@ -416,28 +539,34 @@ export const useBattleStore = defineStore('battle', {
         const loot = this.applyVictoryLoot(this.monster, player)
 
         this.conclude('victory', loot)
-        return
+        return true
       }
 
-      this.turn = 'enemy'
-      this.enemyTurn()
+      return true
     },
-    useItem(itemId: string) {
-      if (!this.monster || this.concluded !== 'idle' || this.turn !== 'player') return
+    useItem(itemId: string, options?: { silent?: boolean }): boolean {
+      if (!this.monster || this.concluded !== 'idle') return false
+
+      const silent = options?.silent ?? false
+      const cooldownRemaining = this.getItemCooldown(itemId)
+      if (cooldownRemaining > 0) {
+        if (!silent) this.pushFloat(`冷却中 ${cooldownRemaining.toFixed(1)}s`, 'miss')
+        return false
+      }
 
       const inventory = useInventoryStore()
       const player = usePlayerStore()
       const def = ITEMS.find(item => item.id === itemId)
 
       if (!def || (!('heal' in def && def.heal) && !('restoreSp' in def && def.restoreSp) && !('restoreXp' in def && def.restoreXp))) {
-        this.pushFloat('无法使用', 'miss')
-        return
+        if (!silent) this.pushFloat('无法使用', 'miss')
+        return false
       }
 
       const used = inventory.spend(itemId, 1)
       if (!used) {
-        this.pushFloat('无库存', 'miss')
-        return
+        if (!silent) this.pushFloat('无库存', 'miss')
+        return false
       }
 
       if ('heal' in def && def.heal) {
@@ -453,15 +582,15 @@ export const useBattleStore = defineStore('battle', {
         this.pushFloat(`XP+${def.restoreXp}`, 'heal')
       }
 
-      this.turn = 'enemy'
-      this.enemyTurn()
+      this.itemCooldowns[itemId] = ITEM_COOLDOWN
+      return true
     },
     applyPlayerDamage(dmg: number, source: 'attack' | 'skill' | 'ult') {
       this.monsterHp = Math.max(0, this.monsterHp - dmg)
       this.pushFloat(`-${dmg}`, 'hitE')
       this.triggerFlash(source)
     },
-    enemyTurn() {
+    monsterAttack() {
       if (!this.monster || this.concluded !== 'idle') return
       const player = usePlayerStore()
       const stats = player.finalStats
@@ -482,8 +611,6 @@ export const useBattleStore = defineStore('battle', {
         this.conclude('defeat')
         return
       }
-
-      this.turn = 'player'
     },
     applyDeathPenalty() {
       const player = usePlayerStore()

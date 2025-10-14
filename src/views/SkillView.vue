@@ -14,6 +14,7 @@ const loadoutSlots = computed(() =>
       skillId,
       skill,
       label: `槽位 ${index + 1}`,
+      icon: skill?.icon ?? null,
     }
   }),
 )
@@ -75,7 +76,6 @@ function equipToFirstEmpty(skillId: string) {
         >
           <option v-for="option in skillOptions" :key="option.id || 'empty'" :value="option.id">{{ option.name }}</option>
         </select>
-        <span class="text-small text-muted skill-slot-meta">{{ formatCostDisplay(slot.skillId ?? null) }}</span>
       </div>
       <div class="text-small text-muted">提示：技能槽位可重复装备相同技能，但建议尝试不同的战术组合。</div>
     </div>
@@ -91,9 +91,17 @@ function equipToFirstEmpty(skillId: string) {
           style="margin: 0; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08);"
         >
           <header class="flex flex-between flex-center skill-card-header">
-            <div>
-              <h4 style="margin: 0; font-size: 16px;">{{ skill.name }}</h4>
-              <span class="text-small text-muted">消耗：{{ formatSkillCost(skill.cost) }}</span>
+            <div class="skill-card-heading">
+              <img
+                v-if="skill.icon"
+                :src="skill.icon"
+                :alt="skill.name"
+                class="skill-card-icon"
+              >
+              <div class="skill-card-heading-text">
+                <h4 class="skill-card-title">{{ skill.name }}</h4>
+                <span class="text-small text-muted">消耗：{{ formatSkillCost(skill.cost) }}</span>
+              </div>
             </div>
             <button class="btn" type="button" @click="equipToFirstEmpty(skill.id)">
               装备到空槽
@@ -109,7 +117,7 @@ function equipToFirstEmpty(skillId: string) {
 <style scoped>
 .skill-slot-row {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) 120px;
+  grid-template-columns: 80px minmax(0, 1fr);
   gap: 12px;
   align-items: center;
   margin-bottom: 12px;
@@ -127,13 +135,36 @@ function equipToFirstEmpty(skillId: string) {
   color: #fff;
 }
 
+.skill-slot-preview {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.skill-slot-preview span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.skill-slot-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 .skill-slot-meta {
   text-align: right;
 }
 
 .skill-list {
   display: grid;
-  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
 }
 
 .skill-card-header {
@@ -141,7 +172,36 @@ function equipToFirstEmpty(skillId: string) {
   gap: 12px;
 }
 
+.skill-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.skill-card-heading-text {
+  display: flex;
+  flex-direction: column;
+}
+
+.skill-card-title {
+  margin: 0 0 4px;
+  font-size: 16px;
+}
+
+.skill-card-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
 @media (max-width: 640px) {
+  .skill-list {
+    grid-template-columns: 1fr;
+  }
+
   .skill-slot-row {
     grid-template-columns: 1fr;
     gap: 8px;
@@ -149,6 +209,14 @@ function equipToFirstEmpty(skillId: string) {
 
   .skill-slot-meta {
     text-align: left;
+  }
+
+  .skill-slot-preview {
+    justify-content: flex-start;
+  }
+
+  .skill-card-heading {
+    align-items: flex-start;
   }
 }
 </style>
