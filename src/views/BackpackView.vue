@@ -7,6 +7,8 @@ import { useEquipmentActions } from '@/composables/useEquipmentActions'
 import { resolveMainStatBreakdown } from '@/composables/useEnhance'
 import { ITEMS, consumableIds } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
+import { resolveItemIcon, textIcon } from '@/utils/itemIcon'
+import type { ItemIcon } from '@/utils/itemIcon'
 import type { EquipSlot, EquipSubStats, Equipment } from '@/types/domain'
 
 const inventory = useInventoryStore()
@@ -23,7 +25,7 @@ interface BackpackStackEntry {
   id: string
   name: string
   quantity: number
-  icon: string
+  icon: ItemIcon
   detail: string
 }
 
@@ -34,7 +36,7 @@ interface BackpackEquipmentEntry {
   source: 'inventory' | 'equipped'
   id: string
   name: string
-  icon: string
+  icon: ItemIcon
   level: number
   slot: EquipSlot
   slotLabel: string
@@ -58,29 +60,12 @@ const slotLabels: Record<EquipSlot, string> = {
   boots: '鞋子',
 }
 
-function iconForStack(id: string): string {
-  switch (id) {
-    case 'potionHP':
-      return '🧪'
-    case 'potionSP':
-      return '✨'
-    case 'potionXP':
-      return '💥'
-    case 'blessGem':
-      return '💎'
-    case 'soulGem':
-      return '💗'
-    case 'miracleGem':
-      return '💧'
-    case 'voidGem':
-      return '⚪'
-    case 'skillGem':
-      return '🟪'
-    case 'ultGem':
-      return '🛡️'
-    default:
-      return '📦'
+function iconForStack(id: string): ItemIcon {
+  const icon = resolveItemIcon(id)
+  if (icon.type === 'text' && icon.text === '⬜') {
+    return textIcon('📦')
   }
+  return icon
 }
 
 function getEquipmentSubType(slot: EquipSlot): EquipmentSubType {
@@ -118,27 +103,27 @@ function getEquipmentSubTypeLabel(subType: EquipmentSubType): string {
   }
 }
 
-function iconForSlot(slot: EquipSlot): string {
+function iconForSlot(slot: EquipSlot): ItemIcon {
   switch (slot) {
     case 'helmet':
-      return '🎩'
+      return textIcon('🎩')
     case 'shieldL':
-      return '🛡️'
+      return textIcon('🛡️')
     case 'weaponR':
     case 'weapon2H':
-      return '⚔️'
+      return textIcon('⚔️')
     case 'armor':
-      return '🦺'
+      return textIcon('🦺')
     case 'gloves':
-      return '🧤'
+      return textIcon('🧤')
     case 'belt':
-      return '👔'
+      return textIcon('👔')
     case 'ring':
-      return '💍'
+      return textIcon('💍')
     case 'boots':
-      return '👢'
+      return textIcon('👢')
     default:
-      return '📦'
+      return textIcon('📦')
   }
 }
 
@@ -516,7 +501,14 @@ function entryTypeLabel(type: BackpackEntryType): string {
       <div v-if="filteredEntries.length > 0" class="inventory-grid">
         <article v-for="entry in filteredEntries" :key="entry.id" class="inventory-card">
           <header class="inventory-card__header">
-            <div class="inventory-card__icon">{{ entry.icon }}</div>
+            <div class="inventory-card__icon">
+              <img
+                v-if="entry.icon.type === 'image'"
+                :src="entry.icon.src"
+                :alt="entry.icon.alt || entry.name"
+              >
+              <span v-else>{{ entry.icon.text }}</span>
+            </div>
             <div>
               <div class="inventory-card__name">{{ entry.name }}</div>
               <div class="inventory-card__meta text-small text-muted">
@@ -663,7 +655,19 @@ function entryTypeLabel(type: BackpackEntryType): string {
 }
 
 .inventory-card__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   font-size: 24px;
+  line-height: 1;
+}
+
+.inventory-card__icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .inventory-card__name {

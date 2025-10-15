@@ -551,41 +551,35 @@ button {
 .quick-item-slot {
   width: 100%;
   aspect-ratio: 1 / 1;
-  padding: 12px 8px;
+  padding: 0;
   border-radius: 12px;
-  border: 1px solid rgba(86, 164, 255, 0.6);
-  background: radial-gradient(circle at 25% 30%, rgba(252, 236, 179, 0.22) 0%, rgba(219, 174, 96, 0.55) 48%, rgba(55, 33, 14, 0.9) 100%);
+  border: none;
+  background: transparent;
   color: #fff;
   cursor: pointer;
-  transition: transform 120ms ease, border-color 120ms ease, box-shadow 120ms ease, filter 120ms ease;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  align-items: center;
-  justify-content: center;
+  transition: transform 120ms ease, filter 120ms ease, box-shadow 120ms ease;
+  display: block;
   position: relative;
   overflow: hidden;
   isolation: isolate;
-  box-shadow: inset 0 0 0 1px rgba(255, 226, 169, 0.18);
+  box-shadow: none;
 }
 
 .quick-item-slot.empty {
-  opacity: 0.75;
-  border-color: rgba(134, 143, 173, 0.55);
-  background: radial-gradient(circle at 25% 30%, rgba(206, 213, 229, 0.15) 0%, rgba(73, 82, 110, 0.45) 55%, rgba(15, 18, 26, 0.85) 100%);
-  box-shadow: inset 0 0 0 1px rgba(166, 217, 255, 0.12);
+  opacity: 0.65;
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .quick-item-slot.disabled {
-  opacity: 0.45;
+  opacity: 1;
+  filter: grayscale(0.55) saturate(0.55) brightness(0.85);
   cursor: not-allowed;
 }
 
 .quick-item-slot:not(.disabled):hover {
-  transform: translateY(-4px);
-  border-color: rgba(255, 215, 141, 0.8);
-  box-shadow: 0 14px 24px rgba(66, 37, 13, 0.55);
-  filter: brightness(1.08) saturate(1.05);
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 12px 24px rgba(14, 22, 40, 0.55);
+  filter: brightness(1.05) saturate(1.05);
 }
 
 .quick-item-slot::before {
@@ -593,50 +587,72 @@ button {
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: conic-gradient(
-    from 0deg,
-    rgba(245, 208, 111, 0) 0deg,
-    rgba(245, 208, 111, 0) calc(360deg - var(--cooldown-angle, 0deg)),
-    rgba(245, 208, 111, 0.85) calc(360deg - var(--cooldown-angle, 0deg)),
-    rgba(245, 208, 111, 0.85) 360deg
-  );
   opacity: 0;
   transition: opacity 160ms ease, background 120ms linear;
-  z-index: 0;
-  mix-blend-mode: screen;
+  pointer-events: none;
+  z-index: 2;
+  background: conic-gradient(
+    from -90deg,
+    rgba(10, 16, 30, 0.78) 0deg,
+    rgba(10, 16, 30, 0.78) calc(var(--cooldown-progress, 0) * 360deg),
+    rgba(245, 213, 124, 0) calc(var(--cooldown-progress, 0) * 360deg),
+    rgba(245, 213, 124, 0) 360deg
+  );
+  mix-blend-mode: multiply;
+  transform: rotate(90deg) scaleY(-1);
+  transform-origin: 50% 50%;
 }
 
 .quick-item-slot.on-cooldown::before {
   opacity: 1;
 }
 
-.quick-item-slot > * {
-  position: relative;
-  z-index: 1;
+.quick-item-quantity {
+  position: absolute;
+  bottom: 2px;
+  right: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.95);
+  background: rgba(0, 0, 0, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 6px;
+  padding: 1px 3px;
+  letter-spacing: 0.4px;
+  z-index: 3;
 }
 
-.quick-item-icon {
-  font-size: 28px;
+.quick-item-slot .quick-item-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  width: 100%;
+  height: 100%;
+  z-index: 0;
 }
 
-.quick-item-name {
-  font-weight: 600;
-  font-size: 13px;
-  letter-spacing: 0.6px;
-  text-align: center;
+.quick-item-slot .quick-item-icon img {
+  width: 95%;
+  height: 95%;
+  object-fit: contain;
+  object-position: center;
 }
 
-.quick-item-effect {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.82);
-  text-align: center;
-  line-height: 1.2;
+.quick-item-slot .quick-item-icon__text {
+  font-size: clamp(32px, 7vw, 48px);
+  text-shadow: 0 0 12px rgba(0, 0, 0, 0.6);
+  line-height: 1;
 }
 
-.quick-item-stock {
-  font-size: 11px;
-  color: rgba(255, 255, 255, 0.7);
-  margin-top: auto;
+.quick-item-slot .quick-item-icon--text {
+  color: #fff;
+}
+
+.quick-item-slot .skill-cooldown {
+  z-index: 3;
 }
 
 

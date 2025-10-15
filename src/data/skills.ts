@@ -44,6 +44,7 @@ export const SKILLS: SkillDefinition[] = [
     cost: { type: 'xp', amount: 20 },
     flash: 'ult',
     cooldown: 2,
+    icon: '/skill-destiny-slash.webp',
     execute: ({ stats, monster, rng, playerLevel }) => {
       const result = dmgUlt(stats.ATK, monster.def, randRange(rng, 0, 1), {
         contentLevel: monster.lv,

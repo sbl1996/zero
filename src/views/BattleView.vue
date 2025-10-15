@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useRouter } from 'vue-router'
 import { useBattleStore } from '@/stores/battle'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
+import { useInventoryStore } from '@/stores/inventory'
 import { getSkillDefinition } from '@/data/skills'
 import { getMonsterMap } from '@/data/monsters'
 import type { FloatText, LootResult } from '@/types/domain'
@@ -15,6 +16,7 @@ const router = useRouter()
 const battle = useBattleStore()
 const playerStore = usePlayerStore()
 const uiStore = useUiStore()
+const inventory = useInventoryStore()
 
 const { res } = storeToRefs(playerStore)
 const { enableHoldAutoCast } = storeToRefs(uiStore)
@@ -35,6 +37,14 @@ const isLongPress = ref<Map<number, boolean>>(new Map())
 const AUTO_CAST_DELAY = 1000 // 1 second hold to start auto-casting
 const AUTO_CAST_INTERVAL = 200 // 200ms interval between casts
 
+// Skill hotkey mapping
+const SKILL_HOTKEYS = ['z', 'x', 'c', 'v'] as const
+const hotkeyLabels = ['Z', 'X', 'C', 'V']
+// Quick item hotkey mapping
+const ITEM_HOTKEYS = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'] as const
+const itemHotkeyLabels = ['NUM1', 'NUM2', 'NUM3', 'NUM4']
+const itemHotkeyMap = new Map<string, number>(ITEM_HOTKEYS.map((code, index) => [code, index]))
+
 const skillSlots = computed(() => {
   const inBattle = battle.inBattle
   const concluded = battle.concluded
@@ -44,11 +54,16 @@ const skillSlots = computed(() => {
     const cost = skill?.cost
     const label = skill?.name ?? '空槽'
     const iconSrc = skill?.icon ?? null
-    const costLabel = (() => {
-      if (!skill) return '未装备'
-      if (!cost || cost.type === 'none') return '无消耗'
+    const { label: costLabel, badge: costBadge, type: costType } = (() => {
+      if (!skill) {
+        return { label: '未装备', badge: null, type: null as const }
+      }
+      if (!cost || cost.type === 'none') {
+        return { label: '无消耗', badge: null, type: null as const }
+      }
       const amount = cost.amount ?? 0
-      return `${cost.type.toUpperCase()} ${amount}`
+      const value = `${cost.type.toUpperCase()} ${amount}`
+      return { label: value, badge: value, type: cost.type }
     })()
 
     const cooldown = skill ? (battle.skillCooldowns[index] ?? 0) : 0
@@ -84,11 +99,17 @@ const skillSlots = computed(() => {
     const isAutoCasting = autoCastTimers.value.has(index)
     const isHolding = autoCastHoldStart.value.has(index) && !isLongPress.value.has(index)
 
+    // Get hotkey info for this slot
+    const hotkey = index < SKILL_HOTKEYS.length ? SKILL_HOTKEYS[index] : null
+    const hotkeyLabel = index < hotkeyLabels.length ? hotkeyLabels[index] : null
+
     return {
       index,
       id: skillId,
       label,
       costLabel,
+      costBadge,
+      costType,
       cooldown,
       cooldownLabel: cooldown > 0 ? `冷却：${cooldown.toFixed(1)}s` : '',
       cooldownDisplay,
@@ -102,6 +123,8 @@ const skillSlots = computed(() => {
       isHolding,
       hasImage: Boolean(iconSrc),
       imageSrc: iconSrc,
+      hotkey,
+      hotkeyLabel,
     }
   })
 })
@@ -245,6 +268,14 @@ function useSkill(slotIndex: number) {
   battle.playerUseSkill(slotIndex)
 }
 
+function useQuickItem(slotIndex: number) {
+  if (!battle.inBattle || battle.concluded !== 'idle') return
+  if (slotIndex < 0 || slotIndex >= inventory.quickSlots.length) return
+  const itemId = inventory.quickSlots[slotIndex]
+  if (typeof itemId !== 'string') return
+  battle.useItem(itemId)
+}
+
 // Auto-cast functions
 function startSkillHold(slotIndex: number, event?: MouseEvent | TouchEvent) {
   const slot = skillSlots.value[slotIndex]
@@ -365,7 +396,37 @@ function handleBossPortraitClick() {
   battle.start(currentMonster)
 }
 
+// Keyboard event handler for skill hotkeys
+function handleKeyDown(event: KeyboardEvent) {
+  // Only handle keydown events during active battle
+  if (!battle.inBattle || battle.concluded !== 'idle') return
+
+  const key = event.key.toLowerCase()
+  const hotkeyIndex = SKILL_HOTKEYS.indexOf(key as typeof SKILL_HOTKEYS[number])
+
+  if (hotkeyIndex !== -1) {
+    // Prevent default behavior and use the skill
+    event.preventDefault()
+    useSkill(hotkeyIndex)
+    return
+  }
+
+  const itemSlotIndex = itemHotkeyMap.get(event.code)
+  if (itemSlotIndex !== undefined) {
+    event.preventDefault()
+    useQuickItem(itemSlotIndex)
+  }
+}
+
+onMounted(() => {
+  // Add global keyboard event listener
+  window.addEventListener('keydown', handleKeyDown)
+})
+
 onBeforeUnmount(() => {
+  // Remove keyboard event listener
+  window.removeEventListener('keydown', handleKeyDown)
+
   battle.exitBattle()
   stopAllAutoCast()
   if (portraitTimer) {
@@ -459,6 +520,13 @@ onBeforeUnmount(() => {
   z-index: 1;
 }
 
+.battle-actions button > .skill-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 3;
+}
+
 .skill-cooldown {
   position: absolute;
   left: 50%;
@@ -470,6 +538,50 @@ onBeforeUnmount(() => {
   text-shadow: 0 0 12px rgba(16, 28, 66, 0.8), 0 0 2px rgba(255, 255, 255, 0.7);
   letter-spacing: 1px;
   pointer-events: none;
+}
+
+.skill-hotkey {
+  position: absolute;
+  bottom: 6px;
+  left: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 4px;
+  padding: 2px 4px;
+  text-transform: uppercase;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.skill-cost-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  color: rgba(255, 255, 255, 0.94);
+  text-transform: uppercase;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(3px);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.skill-cost-badge--sp {
+  color: #7ee1ff;
+}
+
+.skill-cost-badge--xp {
+  color: #ffd166;
 }
 
 .boss-portrait {
@@ -680,13 +792,32 @@ onBeforeUnmount(() => {
               <span class="skill-name">{{ slot.label }}</span>
               <span class="skill-cost">{{ slot.costLabel }}</span>
             </template>
+            <div class="skill-overlay">
+              <span
+                v-if="slot.hasImage && slot.costBadge"
+                class="skill-cost-badge"
+                :class="slot.costType ? `skill-cost-badge--${slot.costType}` : ''"
+              >
+                {{ slot.costBadge }}
+              </span>
+              <span
+                v-if="slot.hotkeyLabel && !slot.isEmpty"
+                class="skill-hotkey"
+              >
+                {{ slot.hotkeyLabel }}
+              </span>
+            </div>
             <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>
             <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
             <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
           </button>
         </div>
 
-        <QuickItemBar class="battle-quick-items" />
+        <QuickItemBar
+          class="battle-quick-items"
+          :hotkeys="ITEM_HOTKEYS"
+          :hotkey-labels="itemHotkeyLabels"
+        />
       </div>
 
       <footer class="flex flex-between flex-center">

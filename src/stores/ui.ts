@@ -5,7 +5,7 @@ export const useUiStore = defineStore('ui', {
     showAttributes: false,
     showEquipment: false,
     showCheatPanel: false,
-    enableHoldAutoCast: true,
+    enableHoldAutoCast: false,
   }),
   actions: {
     toggleAttributes(value?: boolean) {

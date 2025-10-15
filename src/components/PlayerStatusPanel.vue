@@ -5,6 +5,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBattleStore } from '@/stores/battle'
 import { ITEMS, consumableIds } from '@/data/items'
+import { resolveItemIcon } from '@/utils/itemIcon'
 
 const props = withDefaults(
   defineProps<{
@@ -55,16 +56,25 @@ function handleOpenAllocate() {
 
 // 计算可用的消耗品道具
 const availableConsumables = computed(() => {
+  const { hp, hpMax, sp, spMax, xp, xpMax } = res.value
+  const needsHp = hp < hpMax
+  const needsSp = sp < spMax
+  const needsXp = xp < xpMax
+
   return ITEMS.filter(item => consumableIds.has(item.id)).map(item => {
     const quantity = inventory.quantity(item.id)
-    const isConsumable = 'heal' in item || 'restoreSp' in item || 'restoreXp' in item
-    const canUse = quantity > 0 && isConsumable
+    const healsHp = 'heal' in item && typeof item.heal === 'number' && item.heal > 0 && needsHp
+    const restoresSp = 'restoreSp' in item && typeof item.restoreSp === 'number' && item.restoreSp > 0 && needsSp
+    const restoresXp = 'restoreXp' in item && typeof item.restoreXp === 'number' && item.restoreXp > 0 && needsXp
+    const effectApplies = healsHp || restoresSp || restoresXp
+    const canUse = quantity > 0 && effectApplies && !battle.inBattle
 
     return {
       ...item,
       quantity,
       canUse,
-      disabled: battle.inBattle || quantity <= 0 || !canUse
+      disabled: !canUse,
+      icon: resolveItemIcon(item.id),
     }
   })
 })
@@ -87,16 +97,6 @@ function useItem(itemId: string) {
   }
   if (consumable.restoreXp) {
     playerStore.restoreXp(consumable.restoreXp)
-  }
-}
-
-// 获取道具图标
-function getItemIcon(itemId: string) {
-  switch (itemId) {
-    case 'potionHP': return '🧪'
-    case 'potionSP': return '✨'
-    case 'potionXP': return '💥'
-    default: return '⬜'
   }
 }
 
@@ -183,7 +183,7 @@ function getItemEffect(item: any) {
     </div>
 
     <div class="panel" style="margin-top: 20px; background: rgba(255,255,255,0.04);">
-      <h3 class="section-title" style="font-size: 16px;">快速道具栏</h3>
+      <h3 class="section-title" style="font-size: 16px; margin-top: 0;">快速道具栏</h3>
       <div class="quick-items-grid">
         <button
           v-for="item in availableConsumables"
@@ -196,7 +196,14 @@ function getItemEffect(item: any) {
           :title="`${item.name} - ${(item as any).description || ''} ${getItemEffect(item)}`"
         >
           <div class="quick-item-content">
-            <span class="quick-item-icon">{{ getItemIcon(item.id) }}</span>
+            <span class="quick-item-icon">
+              <img
+                v-if="item.icon.type === 'image'"
+                :src="item.icon.src"
+                :alt="item.icon.alt || item.name"
+              >
+              <span v-else>{{ item.icon.text }}</span>
+            </span>
             <div class="quick-item-info">
               <div class="quick-item-name">{{ item.name }}</div>
               <div class="quick-item-effect">{{ getItemEffect(item) }}</div>
@@ -242,7 +249,7 @@ function getItemEffect(item: any) {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  margin-top: 12px;
+  margin-top: 8px;
 }
 
 .quick-item-button {
@@ -252,7 +259,7 @@ function getItemEffect(item: any) {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
-  padding: 12px;
+  padding: 8px 10px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: white;
@@ -280,13 +287,24 @@ function getItemEffect(item: any) {
 .quick-item-content {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
   flex: 1;
 }
 
 .quick-item-icon {
-  font-size: 24px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  font-size: 26px;
   line-height: 1;
+}
+
+.quick-item-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
 }
 
 .quick-item-info {
@@ -298,24 +316,32 @@ function getItemEffect(item: any) {
 
 .quick-item-name {
   font-weight: 600;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .quick-item-effect {
-  font-size: 11px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
   font-weight: 500;
 }
 
 .quick-item-quantity {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: static;
   font-size: 13px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.9);
   background: rgba(255, 255, 255, 0.1);
-  padding: 4px 8px;
+  padding: 3px 6px;
   border-radius: 12px;
   min-width: 32px;
   text-align: center;
+  flex-shrink: 0;
+  opacity: 1;
+  visibility: visible;
+  margin-left: 8px;
 }
 
 .quick-items-hint {
@@ -337,19 +363,21 @@ function getItemEffect(item: any) {
 /* 响应式调整 */
 @media (max-width: 768px) {
   .quick-item-button {
-    padding: 10px;
+    padding: 8px;
   }
 
   .quick-item-icon {
-    font-size: 20px;
+    width: 28px;
+    height: 28px;
+    font-size: 22px;
   }
 
   .quick-item-name {
-    font-size: 13px;
+    font-size: 14px;
   }
 
   .quick-item-effect {
-    font-size: 10px;
+    font-size: 11px;
   }
 }
 </style>

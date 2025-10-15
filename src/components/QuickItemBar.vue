@@ -1,27 +1,31 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import { storeToRefs } from 'pinia'
 import { ITEMS } from '@/data/items'
 import { useBattleStore, ITEM_COOLDOWN } from '@/stores/battle'
 import { useInventoryStore } from '@/stores/inventory'
+import { usePlayerStore } from '@/stores/player'
+import { resolveItemIcon } from '@/utils/itemIcon'
 
 const battle = useBattleStore()
 const inventory = useInventoryStore()
+const playerStore = usePlayerStore()
+const { res } = storeToRefs(playerStore)
+const props = withDefaults(defineProps<{
+  hotkeys?: readonly string[]
+  hotkeyLabels?: readonly string[]
+}>(), {
+  hotkeys: () => ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'],
+  hotkeyLabels: () => ['NUM1', 'NUM2', 'NUM3', 'NUM4'],
+})
 
-function getIcon(id: string | null) {
-  switch (id) {
-    case 'potionHP':
-      return '🧪'
-    case 'potionSP':
-      return '✨'
-    case 'potionXP':
-      return '💥'
-    default:
-      return '⬜'
-  }
-}
+const slots = computed(() => {
+  const { hp, hpMax, sp, spMax, xp, xpMax } = res.value
+  const needsHp = hp < hpMax
+  const needsSp = sp < spMax
+  const needsXp = xp < xpMax
 
-const slots = computed(() =>
-  inventory.quickSlots.map((id, index) => {
+  return inventory.quickSlots.map((id, index) => {
     const item = typeof id === 'string' ? ITEMS.find(def => def.id === id) : undefined
     const quantity = item ? inventory.quantity(item.id) : 0
     const effects: string[] = []
@@ -37,6 +41,27 @@ const slots = computed(() =>
         effects.push(`XP+${item.restoreXp}`)
       }
     }
+
+    let healsHp = false
+    let restoresSp = false
+    let restoresXp = false
+    if (item) {
+      if ('heal' in item && typeof item.heal === 'number' && item.heal > 0) {
+        healsHp = true
+      }
+      if ('restoreSp' in item && typeof item.restoreSp === 'number' && item.restoreSp > 0) {
+        restoresSp = true
+      }
+      if ('restoreXp' in item && typeof item.restoreXp === 'number' && item.restoreXp > 0) {
+        restoresXp = true
+      }
+    }
+    const hasResourceEffect = healsHp || restoresSp || restoresXp
+    const effectApplies = !!(
+      (healsHp && needsHp) ||
+      (restoresSp && needsSp) ||
+      (restoresXp && needsXp)
+    )
 
     const cooldown = item ? (battle.itemCooldowns[item.id] ?? 0) : 0
     const cooldownPercent = ITEM_COOLDOWN > 0 ? Math.min(Math.max(cooldown / ITEM_COOLDOWN, 0), 1) : 0
@@ -60,19 +85,33 @@ const slots = computed(() =>
     } else if (quantity <= 0) {
       disabled = true
       reason = '库存不足'
+    } else if (hasResourceEffect && !effectApplies) {
+      disabled = true
+      reason = '状态已满'
     } else if (cooldown > 0) {
       disabled = true
       reason = `冷却中 ${cooldown.toFixed(1)}s`
     }
+
+    const label = item?.name ?? '空槽位'
+    const effectText = effects.join(' ')
+    const tooltipSegments = item
+      ? [label, effectText].filter(Boolean)
+      : [label]
+    if (disabled && reason) {
+      tooltipSegments.push(reason)
+    }
+    const tooltip = tooltipSegments.join(' • ')
 
     return {
       index,
       id,
       item,
       quantity,
-      icon: getIcon(typeof id === 'string' ? id : null),
-      label: item?.name ?? '空槽位',
-      effectText: effects.join(' '),
+      hotkey: props.hotkeys[index] ?? null,
+      hotkeyLabel: props.hotkeyLabels[index] ?? null,
+      icon: resolveItemIcon(typeof id === 'string' ? id : null),
+      label,
       cooldown,
       cooldownDisplay,
       cooldownStyle,
@@ -80,9 +119,10 @@ const slots = computed(() =>
       disabled,
       reason,
       isEmpty: !item,
+      tooltip,
     }
-  }),
-)
+  })
+})
 
 function handleUse(slotIndex: number) {
   const slot = slots.value[slotIndex]
@@ -103,15 +143,33 @@ function handleUse(slotIndex: number) {
         'on-cooldown': slot.isOnCooldown
       }"
       type="button"
-      :title="slot.reason || undefined"
+      :title="slot.tooltip || undefined"
       :style="slot.cooldownStyle"
       :disabled="slot.disabled"
       @click="handleUse(slot.index)"
     >
-      <span class="quick-item-icon">{{ slot.icon }}</span>
-      <span class="quick-item-name">{{ slot.label }}</span>
-      <span v-if="slot.effectText" class="quick-item-effect">{{ slot.effectText }}</span>
-      <span class="quick-item-stock">库存：{{ slot.quantity }}</span>
+      <span
+        class="quick-item-icon"
+        :class="{ 'quick-item-icon--text': slot.icon.type === 'text' }"
+      >
+        <img
+          v-if="slot.icon.type === 'image'"
+          :src="slot.icon.src"
+          :alt="slot.icon.alt || slot.label"
+        >
+        <span
+          v-else
+          class="quick-item-icon__text"
+        >
+          {{ slot.icon.text }}
+        </span>
+      </span>
+      <span
+        v-if="!slot.isEmpty"
+        class="quick-item-quantity"
+      >
+        ×{{ slot.quantity }}
+      </span>
       <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>
     </button>
   </div>

@@ -27,15 +27,6 @@ const knownSkills = computed(() =>
 
 const skillOptions = computed(() => [{ id: '', name: '空槽' }, ...knownSkills.value.map(skill => ({ id: skill.id, name: skill.name }))])
 
-function formatCostDisplay(skillId: string | null) {
-  const skill = getSkillDefinition(skillId)
-  if (!skill) return '未装备'
-  const cost = skill.cost
-  if (!cost || cost.type === 'none') return '无消耗'
-  const amount = cost.amount ?? 0
-  return `${cost.type.toUpperCase()} ${amount}`
-}
-
 function formatSkillCost(cost: SkillCost | undefined) {
   if (!cost || cost.type === 'none') return '无消耗'
   const amount = cost.amount ?? 0
