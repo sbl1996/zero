@@ -25,9 +25,24 @@ const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
 const lootList = computed(() => battle.loot)
 const hpRate = computed(() => (monster.value ? Math.max(0, battle.monsterHp) / monster.value.hpMax : 0))
+const isMonsterAttackActive = computed(() => battle.inBattle && battle.concluded === 'idle')
 const monsterAttackCountdownLabel = computed(() => {
-  if (!battle.monster || battle.concluded !== 'idle') return '—'
+  if (!battle.monster || !isMonsterAttackActive.value) return '—'
   return `${Math.max(0, battle.monsterTimer).toFixed(2)}s`
+})
+
+// 进度条式倒计时相关计算
+const monsterAttackProgress = computed(() => {
+  if (!battle.monster || !isMonsterAttackActive.value) return 0
+  return Math.max(0, Math.min(1, battle.monsterTimer / 1.6)) // 1.6是攻击间隔
+})
+
+const monsterAttackProgressColor = computed(() => {
+  if (!isMonsterAttackActive.value) return 'rgba(255, 255, 255, 0.3)'
+  const progress = monsterAttackProgress.value
+  if (progress > 0.6) return '#4ade80' // 绿色
+  if (progress > 0.3) return '#fbbf24' // 黄色
+  return '#ef4444' // 红色
 })
 
 // Auto-cast state
@@ -653,6 +668,201 @@ onBeforeUnmount(() => {
     transform: scale(1.08);
   }
 }
+
+/* 怪物攻击倒计时进度条样式 */
+.monster-attack-timer {
+  margin-top: 8px;
+  position: relative;
+}
+
+.monster-attack-timer--inactive .monster-attack-progress {
+  background: rgba(255, 255, 255, 0.15);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.monster-attack-timer-label {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  margin-bottom: 4px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.monster-attack-timer--inactive .monster-attack-timer-label {
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.monster-attack-progress {
+  width: 100%;
+  height: 6px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.monster-attack-progress-bar {
+  height: 100%;
+  transition: width 0.1s linear, background-color 0.2s ease;
+  border-radius: 2px;
+  position: relative;
+  background: v-bind('monsterAttackProgressColor');
+  box-shadow: 0 0 8px v-bind('monsterAttackProgressColor');
+}
+
+.monster-attack-progress-bar.inactive {
+  background: rgba(255, 255, 255, 0.2);
+  box-shadow: none;
+}
+
+.monster-attack-progress-bar.warning {
+  animation: pulse-warning 0.5s infinite alternate;
+}
+
+.monster-attack-progress-bar.danger {
+  animation: pulse-danger 0.3s infinite alternate;
+}
+
+@keyframes pulse-warning {
+  from {
+    opacity: 0.8;
+    transform: scaleY(1);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1.1);
+  }
+}
+
+@keyframes pulse-danger {
+  from {
+    opacity: 0.9;
+    transform: scaleY(1);
+  }
+  to {
+    opacity: 1;
+    transform: scaleY(1.2);
+  }
+}
+
+/* 敌方头像视觉效果 */
+.enemy-portrait-container {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform-origin: center bottom;
+  --enemy-portrait-width: clamp(260px, 42%, 460px);
+  width: var(--enemy-portrait-width);
+  max-width: 52%;
+  padding: 0;
+  align-self: center;
+}
+
+.enemy-portrait-container--boss {
+  --enemy-portrait-width: clamp(340px, 48%, 520px);
+}
+
+.enemy-portrait-container--warning {
+  animation: portrait-warning-shake 2s infinite;
+}
+
+.enemy-portrait-container--danger {
+  animation: portrait-danger-shake 1s infinite;
+}
+
+.enemy-portrait-container .battle-portrait.enemy {
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+}
+
+.attack-warning-aura {
+  position: absolute;
+  left: 50%;
+  bottom: clamp(6px, 1.5vw, 18px);
+  width: calc(var(--enemy-portrait-width) + clamp(18px, 4vw, 40px));
+  aspect-ratio: 1 / 1;
+  transform: translate(-50%, 12%);
+  transform-origin: center;
+  border-radius: 50%;
+  background: radial-gradient(circle at center, rgba(74, 222, 128, 0.35) 0%, transparent 70%);
+  box-shadow: 0 0 20px rgba(74, 222, 128, 0.25);
+  z-index: -1;
+  transition: all 0.3s ease;
+}
+
+.attack-warning-aura.aura-warning {
+  background: radial-gradient(circle at center, rgba(251, 191, 36, 0.45) 0%, transparent 70%);
+  box-shadow: 0 0 22px rgba(251, 191, 36, 0.35);
+  animation: aura-warning-pulse 1s infinite alternate;
+}
+
+.attack-warning-aura.aura-danger {
+  background: radial-gradient(circle at center, rgba(239, 68, 68, 0.55) 0%, transparent 70%);
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.38);
+  animation: aura-danger-pulse 0.5s infinite alternate;
+}
+
+@media (max-width: 640px) {
+  .enemy-portrait-container {
+    --enemy-portrait-width: clamp(200px, 70%, 360px);
+  }
+
+  .enemy-portrait-container--boss {
+    --enemy-portrait-width: clamp(240px, 82%, 400px);
+  }
+
+  .attack-warning-aura {
+    bottom: clamp(4px, 1.8vw, 12px);
+    width: calc(var(--enemy-portrait-width) + clamp(14px, 8vw, 28px));
+    transform: translate(-50%, 10%);
+  }
+}
+
+.battle-portrait.enemy.portrait-warning {
+  filter: brightness(1.1) drop-shadow(0 0 8px rgba(251, 191, 36, 0.6));
+}
+
+.battle-portrait.enemy.portrait-danger {
+  filter: brightness(1.2) drop-shadow(0 0 12px rgba(239, 68, 68, 0.8));
+}
+
+@keyframes aura-warning-pulse {
+  from {
+    transform: translate(-50%, 12%) scale(1);
+    opacity: 0.7;
+  }
+  to {
+    transform: translate(-50%, 12%) scale(1.1);
+    opacity: 1;
+  }
+}
+
+@keyframes aura-danger-pulse {
+  from {
+    transform: translate(-50%, 12%) scale(1);
+    opacity: 0.8;
+  }
+  to {
+    transform: translate(-50%, 12%) scale(1.15);
+    opacity: 1;
+  }
+}
+
+@keyframes portrait-warning-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  25% { transform: translateX(-1px) rotate(-0.5deg); }
+  75% { transform: translateX(1px) rotate(0.5deg); }
+}
+
+@keyframes portrait-danger-shake {
+  0%, 100% { transform: translateX(0) rotate(0deg); }
+  25% { transform: translateX(-2px) rotate(-1deg); }
+  75% { transform: translateX(2px) rotate(1deg); }
+}
 </style>
 
 <template>
@@ -671,17 +881,38 @@ onBeforeUnmount(() => {
     <PlayerStatusPanel />
 
     <section class="panel" style="display: flex; flex-direction: column; gap: 20px;">
-      <header class="flex flex-between flex-center">
+      <header class="flex flex-between" style="align-items: flex-start;">
         <div>
-          <h2 class="section-title" style="margin-bottom: 4px;">{{ monster.name }}</h2>
+          <h2 class="section-title" style="margin: 0 0 4px;">{{ monster.name }}</h2>
           <div class="text-muted text-small">LV {{ monster.lv }} ｜ 攻击力 {{ monster.atk }} ｜ 防御力 {{ monster.def }}</div>
+          <div class="text-small text-muted" style="margin-top: 6px;">奖励：{{ monster.rewardExp }} EXP ・ {{ monster.rewardGold }} GOLD</div>
         </div>
-        <div class="text-right">
-          <div class="text-small text-muted">奖励：{{ monster.rewardExp }} EXP ・ {{ monster.rewardGold }} GOLD</div>
-          <div class="resource-bar" style="width: 200px; margin-top: 8px;">
+        <div class="text-right" style="margin-top: 10px;">
+          <div class="resource-bar" style="width: 200px;">
             <span class="resource-hp" :style="{ width: `${Math.floor(hpRate * 100)}%` }" />
           </div>
           <div class="text-small text-muted" style="margin-top: 4px;">HP {{ battle.monsterHp }} / {{ monster.hpMax }}</div>
+
+          <!-- 怪物攻击倒计时进度条 -->
+          <div
+            class="monster-attack-timer"
+            :class="{ 'monster-attack-timer--inactive': !isMonsterAttackActive }"
+          >
+            <div class="monster-attack-progress">
+              <div
+                class="monster-attack-progress-bar"
+                :class="{
+                  'warning': isMonsterAttackActive && monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
+                  'danger': isMonsterAttackActive && monsterAttackProgress <= 0.3,
+                  'inactive': !isMonsterAttackActive
+                }"
+                :style="{ width: isMonsterAttackActive ? `${monsterAttackProgress * 100}%` : '100%' }"
+              />
+            </div>
+            <div class="monster-attack-timer-label">
+              <span>{{ monsterAttackCountdownLabel }}</span>
+            </div>
+          </div>
         </div>
       </header>
 
@@ -693,17 +924,37 @@ onBeforeUnmount(() => {
           }"
         >
           <img class="battle-portrait player" :src="playerPortraitSrc" alt="主角立绘" />
-          <img
-            class="battle-portrait enemy"
-            :class="{
-              'boss-portrait': monster.isBoss,
-              'victory-state': monster.isBoss && battle.concluded === 'victory'
-            }"
-            :src="monsterPortraitSrc"
-            :alt="monster.name"
-            @error="onMonsterPortraitError"
-            @click="handleBossPortraitClick"
-          />
+        <div
+          class="enemy-portrait-container"
+          :class="{
+            'enemy-portrait-container--boss': monster.isBoss,
+            'enemy-portrait-container--warning': battle.inBattle && battle.concluded === 'idle' && monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
+            'enemy-portrait-container--danger': battle.inBattle && battle.concluded === 'idle' && monsterAttackProgress <= 0.3
+          }"
+        >
+            <!-- 攻击预警光环效果 -->
+            <div
+              v-if="battle.inBattle && battle.concluded === 'idle'"
+              class="attack-warning-aura"
+              :class="{
+                'aura-warning': monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
+                'aura-danger': monsterAttackProgress <= 0.3
+              }"
+            />
+            <img
+              class="battle-portrait enemy"
+              :class="{
+                'boss-portrait': monster.isBoss,
+                'victory-state': monster.isBoss && battle.concluded === 'victory',
+                'portrait-warning': monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
+                'portrait-danger': monsterAttackProgress <= 0.3
+              }"
+              :src="monsterPortraitSrc"
+              :alt="monster.name"
+              @error="onMonsterPortraitError"
+              @click="handleBossPortraitClick"
+            />
+          </div>
         </div>
         <div
           v-for="flash in battle.flashEffects"
@@ -822,7 +1073,6 @@ onBeforeUnmount(() => {
 
       <footer class="flex flex-between flex-center">
         <button class="btn" @click="backToSelect">退出战斗</button>
-        <div class="text-small text-muted">敌方下一次攻击：{{ monsterAttackCountdownLabel }}</div>
       </footer>
     </section>
 

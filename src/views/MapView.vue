@@ -23,7 +23,7 @@
         <div class="map-canvas">
           <img class="map-image" :src="currentMap.image" :alt="`${currentMap.name} 地图`" />
           <button
-            v-for="location in currentMap.locations"
+            v-for="location in visibleLocations"
             :key="location.id"
             type="button"
             class="map-location"
@@ -170,7 +170,7 @@ import { getMonsterMap, MONSTERS } from '@/data/monsters'
 import { useBattleStore } from '@/stores/battle'
 import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'
-import type { MapLocation } from '@/types/map'
+import type { GameMap, MapLocation } from '@/types/map'
 import type { AttributeKey } from '@/types/domain'
 
 const route = useRoute()
@@ -182,22 +182,30 @@ const progress = useProgressStore()
 
 const { unspentPoints, baseStats } = storeToRefs(playerStore)
 
-const mapsList = mapDefinitions
-const fallbackMap = mapsList.find((map) => map.id === defaultMapId) ?? mapsList[0] ?? null
+const mapsList = computed(() => mapDefinitions.filter((map) => !isMapLocked(map)))
+const fallbackMap = computed(() => {
+  const defaultTarget = mapsList.value.find((map) => map.id === defaultMapId)
+  return defaultTarget ?? mapsList.value[0] ?? null
+})
 
 const activeMapId = computed(() => {
   if (typeof route.params.mapId === 'string') {
     return route.params.mapId
   }
-  return progress.currentMapId || fallbackMap?.id
+  const savedId = progress.currentMapId
+  const savedMap = getMapById(savedId)
+  if (savedMap && !isMapLocked(savedMap)) {
+    return savedId
+  }
+  return fallbackMap.value?.id
 })
 
 function getMapById(id: string | undefined) {
   if (!id) return undefined
-  return mapsList.find((map) => map.id === id)
+  return mapDefinitions.find((map) => map.id === id)
 }
 
-function isMapLocked(map: (typeof mapsList)[number] | undefined) {
+function isMapLocked(map: GameMap | undefined) {
   if (!map) return false
   if (map.category === 'wild') {
     return !progress.isMapUnlocked(map.id)
@@ -208,7 +216,7 @@ function isMapLocked(map: (typeof mapsList)[number] | undefined) {
 watch(
   () => route.params.mapId,
   (mapId) => {
-    if (!mapsList.length || !fallbackMap) return
+    if (!mapsList.value.length || !fallbackMap.value) return
     const id = typeof mapId === 'string' ? mapId : undefined
     const target = getMapById(id)
 
@@ -219,7 +227,7 @@ watch(
       if (savedTarget && !isMapLocked(savedTarget)) {
         router.replace({ name: 'map', params: { mapId: savedMapId } })
       } else {
-        router.replace({ name: 'map', params: { mapId: fallbackMap.id } })
+        router.replace({ name: 'map', params: { mapId: fallbackMap.value.id } })
       }
     } else {
       // 地图有效，保存到store
@@ -230,9 +238,18 @@ watch(
 )
 
 const currentMap = computed(() => {
-  if (!mapsList.length) return null
+  if (!mapsList.value.length) return null
   const id = activeMapId.value
-  return getMapById(id) ?? fallbackMap
+  const target = getMapById(id)
+  if (!target || isMapLocked(target)) {
+    return fallbackMap.value
+  }
+  return target
+})
+
+const visibleLocations = computed<MapLocation[]>(() => {
+  if (!currentMap.value) return []
+  return currentMap.value.locations.filter((location) => !isLocationLocked(location))
 })
 
 const isCityMap = computed(() => currentMap.value?.category === 'city')
@@ -261,8 +278,8 @@ const focusedLocationId = ref<string | null>(null)
 const focusedMonsterId = ref<string | null>(null)
 
 const focusedLocation = computed<MapLocation | null>(() => {
-  if (!currentMap.value || !focusedLocationId.value) return null
-  return currentMap.value.locations.find((location) => location.id === focusedLocationId.value) ?? null
+  if (!focusedLocationId.value) return null
+  return visibleLocations.value.find((location) => location.id === focusedLocationId.value) ?? null
 })
 
 function isLocationLocked(location: MapLocation) {
@@ -419,9 +436,9 @@ function maximizeAttribute(attr: AttributeKey) {
 }
 
 function returnToCity() {
-  if (fallbackMap) {
-    progress.setCurrentMap(fallbackMap.id)
-    router.push({ name: 'map', params: { mapId: fallbackMap.id } })
+  if (fallbackMap.value) {
+    progress.setCurrentMap(fallbackMap.value.id)
+    router.push({ name: 'map', params: { mapId: fallbackMap.value.id } })
   }
 }
 

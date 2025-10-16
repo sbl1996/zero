@@ -5,11 +5,15 @@ import type { ItemDefinition, Equipment, InventorySave } from '@/types/domain'
 type StackRecord = Record<string, number>
 
 function defaultStacks(): StackRecord {
-  return { potionHP: 5 }
+  return {
+    potionHP: 5,
+    potionSP: 3,
+    potionXP: 1,
+  }
 }
 
 function defaultQuickSlots(): (string | null)[] {
-  return ['potionHP', null, null, null]
+  return ['potionHP', 'potionSP', 'potionXP', null]
 }
 
 export const useInventoryStore = defineStore('inventory', {

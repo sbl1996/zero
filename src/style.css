@@ -658,7 +658,7 @@ button {
 
 .float-area {
   position: relative;
-  min-height: 320px;
+  min-height: 400px;
   background: rgba(0, 0, 0, 0.25);
   border-radius: 16px;
   overflow: hidden;
@@ -669,7 +669,7 @@ button {
   inset: 0;
   display: flex;
   justify-content: space-between;
-  align-items: flex-end;
+  align-items: center;
   padding: 16px 24px;
   pointer-events: none;
   z-index: 0;
@@ -684,9 +684,10 @@ button {
 }
 
 .battle-portrait {
-  max-width: 42%;
-  max-height: 280px;
-  width: auto;
+  flex: 0 0 auto;
+  width: clamp(260px, 42%, 460px);
+  max-width: 52%;
+  max-height: 480px;
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.45));
@@ -694,11 +695,40 @@ button {
 }
 
 .battle-portrait.player {
-  align-self: flex-end;
+  align-self: center;
 }
 
 .battle-portrait.enemy {
-  align-self: flex-end;
+  align-self: center;
+  width: clamp(260px, 42%, 460px);
+  max-height: 480px;
+}
+
+.battle-portrait.enemy.boss-portrait {
+  align-self: center;
+  width: clamp(340px, 48%, 520px);
+  max-height: 540px;
+}
+
+@media (max-width: 640px) {
+  .float-area {
+    min-height: 340px;
+  }
+
+  .battle-portrait {
+    width: clamp(200px, 70vw, 360px);
+    max-height: 360px;
+  }
+
+  .battle-portrait.enemy {
+    width: clamp(200px, 70vw, 360px);
+    max-height: 360px;
+  }
+
+  .battle-portrait.enemy.boss-portrait {
+    width: clamp(240px, 82vw, 400px);
+    max-height: 420px;
+  }
 }
 
 .flash-effect {
