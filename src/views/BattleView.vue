@@ -19,13 +19,17 @@ const uiStore = useUiStore()
 const inventory = useInventoryStore()
 
 const { res } = storeToRefs(playerStore)
-const { enableHoldAutoCast } = storeToRefs(uiStore)
+const { enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(uiStore)
 
 const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
 const lootList = computed(() => battle.loot)
 const hpRate = computed(() => (monster.value ? Math.max(0, battle.monsterHp) / monster.value.hpMax : 0))
 const isMonsterAttackActive = computed(() => battle.inBattle && battle.concluded === 'idle')
+const canClickRematch = computed(() => {
+  return battle.concluded === 'victory' && monster.value &&
+    (!autoRematchAfterVictory.value || monster.value.isBoss)
+})
 const monsterAttackCountdownLabel = computed(() => {
   if (!battle.monster || !isMonsterAttackActive.value) return '—'
   return `${Math.max(0, battle.monsterTimer).toFixed(2)}s`
@@ -71,10 +75,10 @@ const skillSlots = computed(() => {
     const iconSrc = skill?.icon ?? null
     const { label: costLabel, badge: costBadge, type: costType } = (() => {
       if (!skill) {
-        return { label: '未装备', badge: null, type: null as const }
+        return { label: '未装备', badge: null, type: null }
       }
       if (!cost || cost.type === 'none') {
-        return { label: '无消耗', badge: null, type: null as const }
+        return { label: '无消耗', badge: null, type: null }
       }
       const amount = cost.amount ?? 0
       const value = `${cost.type.toUpperCase()} ${amount}`
@@ -400,7 +404,7 @@ function backToSelect() {
 }
 
 function handleBossPortraitClick() {
-  if (!monster.value || !monster.value.isBoss) return
+  if (!monster.value) return
   if (battle.concluded !== 'victory') return
 
   // Get the current monster before resetting
@@ -606,6 +610,22 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+.battle-portraits--interactive .battle-portrait.enemy {
+  cursor: pointer;
+  transition: transform 0.2s ease, filter 0.2s ease;
+  z-index: 10;
+  position: relative;
+}
+
+.battle-portraits--interactive .battle-portrait.enemy:hover {
+  transform: scale(1.05);
+  filter: brightness(1.1) drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
+}
+
+.battle-portraits--interactive .battle-portrait.enemy:active {
+  transform: scale(0.98);
+}
+
 .boss-portrait:hover {
   transform: scale(1.05);
   filter: brightness(1.1) drop-shadow(0 0 8px rgba(255, 215, 0, 0.6));
@@ -754,15 +774,15 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   transform-origin: center bottom;
-  --enemy-portrait-width: clamp(260px, 42%, 460px);
+  --enemy-portrait-width: var(--battle-portrait-width);
   width: var(--enemy-portrait-width);
-  max-width: 52%;
+  max-width: var(--battle-portrait-max-width);
   padding: 0;
   align-self: center;
 }
 
 .enemy-portrait-container--boss {
-  --enemy-portrait-width: clamp(340px, 48%, 520px);
+  --enemy-portrait-width: var(--battle-portrait-boss-width);
 }
 
 .enemy-portrait-container--warning {
@@ -807,14 +827,6 @@ onBeforeUnmount(() => {
 }
 
 @media (max-width: 640px) {
-  .enemy-portrait-container {
-    --enemy-portrait-width: clamp(200px, 70%, 360px);
-  }
-
-  .enemy-portrait-container--boss {
-    --enemy-portrait-width: clamp(240px, 82%, 400px);
-  }
-
   .attack-warning-aura {
     bottom: clamp(4px, 1.8vw, 12px);
     width: calc(var(--enemy-portrait-width) + clamp(14px, 8vw, 28px));
@@ -920,7 +932,7 @@ onBeforeUnmount(() => {
         <div
           class="battle-portraits"
           :class="{
-            'battle-portraits--interactive': monster.isBoss && battle.concluded === 'victory'
+            'battle-portraits--interactive': canClickRematch
           }"
         >
           <img class="battle-portrait player" :src="playerPortraitSrc" alt="主角立绘" />
@@ -945,7 +957,7 @@ onBeforeUnmount(() => {
               class="battle-portrait enemy"
               :class="{
                 'boss-portrait': monster.isBoss,
-                'victory-state': monster.isBoss && battle.concluded === 'victory',
+                'victory-state': canClickRematch,
                 'portrait-warning': monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
                 'portrait-danger': monsterAttackProgress <= 0.3
               }"

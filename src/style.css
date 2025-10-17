@@ -6,6 +6,15 @@
   font-weight: 400;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
+  --battle-portrait-width: clamp(240px, 36%, 460px);
+  --battle-portrait-max-width: 52%;
+  --battle-portrait-max-height: 480px;
+  --battle-portrait-boss-width: clamp(340px, 48%, 520px);
+  --battle-portrait-boss-max-height: 540px;
+  --battle-portrait-mobile-width: clamp(200px, 70vw, 360px);
+  --battle-portrait-mobile-max-height: 360px;
+  --battle-portrait-mobile-boss-width: clamp(240px, 82vw, 400px);
+  --battle-portrait-mobile-boss-max-height: 420px;
 }
 
 * {
@@ -685,9 +694,9 @@ button {
 
 .battle-portrait {
   flex: 0 0 auto;
-  width: clamp(260px, 42%, 460px);
-  max-width: 52%;
-  max-height: 480px;
+  width: var(--battle-portrait-width);
+  max-width: var(--battle-portrait-max-width);
+  max-height: var(--battle-portrait-max-height);
   height: auto;
   object-fit: contain;
   filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.45));
@@ -700,14 +709,12 @@ button {
 
 .battle-portrait.enemy {
   align-self: center;
-  width: clamp(260px, 42%, 460px);
-  max-height: 480px;
 }
 
 .battle-portrait.enemy.boss-portrait {
   align-self: center;
-  width: clamp(340px, 48%, 520px);
-  max-height: 540px;
+  width: var(--battle-portrait-boss-width);
+  max-height: var(--battle-portrait-boss-max-height);
 }
 
 @media (max-width: 640px) {
@@ -715,19 +722,12 @@ button {
     min-height: 340px;
   }
 
-  .battle-portrait {
-    width: clamp(200px, 70vw, 360px);
-    max-height: 360px;
-  }
-
-  .battle-portrait.enemy {
-    width: clamp(200px, 70vw, 360px);
-    max-height: 360px;
-  }
-
-  .battle-portrait.enemy.boss-portrait {
-    width: clamp(240px, 82vw, 400px);
-    max-height: 420px;
+  :root {
+    --battle-portrait-width: var(--battle-portrait-mobile-width);
+    --battle-portrait-max-width: 100%;
+    --battle-portrait-max-height: var(--battle-portrait-mobile-max-height);
+    --battle-portrait-boss-width: var(--battle-portrait-mobile-boss-width);
+    --battle-portrait-boss-max-height: var(--battle-portrait-mobile-boss-max-height);
   }
 }
 

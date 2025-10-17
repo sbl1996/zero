@@ -11,6 +11,7 @@ import { MAX_EQUIP_LEVEL } from '@/composables/useEnhance'
 import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
+import { useUiStore } from './ui'
 import type { BattleState, Monster, FlashEffectKind, Equipment, EquipSlot, LootResult, ItemLootResult } from '@/types/domain'
 
 const ITEM_MAP = new Map(ITEMS.map((item) => [item.id, item]))
@@ -21,6 +22,8 @@ const MONSTER_ATTACK_INTERVAL = 1.6
 const FALLBACK_SKILL_COOLDOWN = 2
 export const ITEM_COOLDOWN = 10
 const SKILL_SLOT_COUNT = 4
+const AUTO_REMATCH_BASE_DELAY = 800
+const AUTO_REMATCH_MIN_INTERVAL = 5000
 
 const EQUIPMENT_TIER_LEVEL: Record<EquipmentTier, number> = {
   iron: 1,
@@ -133,6 +136,7 @@ function initialState(): BattleState {
     concluded: 'idle',
     lastOutcome: null,
     rematchTimer: null,
+    lastAutoRematchAt: null,
     loot: [],
     loopHandle: null,
     lastTickAt: 0,
@@ -323,10 +327,19 @@ export const useBattleStore = defineStore('battle', {
     },
     scheduleRematch(monster: Monster) {
       this.clearRematchTimer()
+      const now = Date.now()
+      let delay = AUTO_REMATCH_BASE_DELAY
+      if (this.lastAutoRematchAt !== null) {
+        const elapsed = now - this.lastAutoRematchAt
+        if (elapsed < AUTO_REMATCH_MIN_INTERVAL) {
+          delay = Math.max(delay, AUTO_REMATCH_MIN_INTERVAL - elapsed)
+        }
+      }
       this.rematchTimer = setTimeout(() => {
         this.rematchTimer = null
         this.start(monster)
-      }, 800)
+        this.lastAutoRematchAt = Date.now()
+      }, delay)
     },
     applyVictoryLoot(monster: Monster, player: ReturnType<typeof usePlayerStore>): LootResult[] {
       const entries = getDropEntries(monster)
@@ -422,9 +435,12 @@ export const useBattleStore = defineStore('battle', {
       this.lastTickAt = 0
       if (result === 'victory') {
         if (currentMonster) {
-          // 只有普通怪才会自动重赛，BOSS不会
+          // 检查金手指设置中的自动重赛开关，只有普通怪且开启自动重赛才会自动重赛
           if (!currentMonster.isBoss) {
-            this.scheduleRematch(currentMonster)
+            const uiStore = useUiStore()
+            if (uiStore.autoRematchAfterVictory) {
+              this.scheduleRematch(currentMonster)
+            }
           }
         }
       } else {

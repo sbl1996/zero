@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui'
 const playerStore = usePlayerStore()
 const progressStore = useProgressStore()
 const ui = useUiStore()
-const { showCheatPanel, enableHoldAutoCast } = storeToRefs(ui)
+const { showCheatPanel, enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(ui)
 
 const goldAmount = ref(1000)
 
@@ -59,6 +59,12 @@ function handleAutoCastToggle(event: Event) {
   if (!target) return
   ui.toggleHoldAutoCast(target.checked)
 }
+
+function handleAutoRematchToggle(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  ui.toggleAutoRematch(target.checked)
+}
 </script>
 
 <template>
@@ -90,6 +96,19 @@ function handleAutoCastToggle(event: Event) {
             长按技能自动施法
           </label>
           <p class="text-small text-muted" style="margin-top: 6px;">关闭后长按技能不会自动连发。</p>
+        </div>
+
+        <div class="cheat-settings">
+          <label class="cheat-settings-toggle">
+            <input
+              class="cheat-settings-checkbox"
+              type="checkbox"
+              :checked="autoRematchAfterVictory"
+              @change="handleAutoRematchToggle"
+            >
+            胜利后自动重赛
+          </label>
+          <p class="text-small text-muted" style="margin-top: 6px;">开启后战斗胜利会自动开始下一场（不包括BOSS）。</p>
         </div>
 
         <div class="cheat-danger">

@@ -182,6 +182,7 @@ export interface BattleState {
   concluded: 'idle' | 'victory' | 'defeat'
   lastOutcome: BattleOutcome | null
   rematchTimer: number | null
+  lastAutoRematchAt: number | null
   loot: LootResult[]
   loopHandle: ReturnType<typeof setInterval> | null
   lastTickAt: number

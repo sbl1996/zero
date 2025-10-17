@@ -43,7 +43,7 @@ export const SKILLS: SkillDefinition[] = [
     description: '终极爆发斩击（倍率 250%）。',
     cost: { type: 'xp', amount: 20 },
     flash: 'ult',
-    cooldown: 2,
+    cooldown: 10,
     icon: '/skill-destiny-slash.webp',
     execute: ({ stats, monster, rng, playerLevel }) => {
       const result = dmgUlt(stats.ATK, monster.def, randRange(rng, 0, 1), {
