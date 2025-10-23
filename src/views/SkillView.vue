@@ -1,10 +1,48 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { SkillCost } from '@/types/domain'
+import type { QiFocusProfile, SkillCost } from '@/types/domain'
 import { usePlayerStore } from '@/stores/player'
 import { getSkillDefinition } from '@/data/skills'
+import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
 
 const player = usePlayerStore()
+
+const FOCUS_LABELS: Record<'atk' | 'def' | 'agi' | 'recovery', string> = {
+  atk: '攻击',
+  def: '防御',
+  agi: '敏捷',
+  recovery: '恢复',
+}
+
+const FOCUS_ORDER = ['atk', 'def', 'agi', 'recovery'] as const
+
+function buildFocusLines(focus: QiFocusProfile): string[] {
+  return FOCUS_ORDER.reduce<string[]>((lines, key) => {
+    const value = focus[key] ?? 0
+    if (value > 0) {
+      const percent = Math.round(value * 100)
+      lines.push(`${FOCUS_LABELS[key]} ${percent}%`)
+    }
+    return lines
+  }, [])
+}
+
+const cultivationMethods = computed(() => {
+  const current = player.cultivation.method
+  const def = getCultivationMethodDefinition(current.id)
+  if (!def) return []
+  const focusLines = buildFocusLines(def.focus)
+  return [
+    {
+      id: def.id,
+      name: def.name,
+      description: def.description,
+      isCurrent: true,
+      focusLines,
+      effects: def.effects,
+    },
+  ]
+})
 
 const loadoutSlots = computed(() =>
   player.skills.loadout.map((skillId, index) => {
@@ -29,8 +67,20 @@ const skillOptions = computed(() => [{ id: '', name: '空槽' }, ...knownSkills.
 
 function formatSkillCost(cost: SkillCost | undefined) {
   if (!cost || cost.type === 'none') return '无消耗'
+  if (cost.type === 'qi') {
+    const segments: string[] = []
+    if (typeof cost.amount === 'number') {
+      segments.push(`${cost.amount}`)
+    }
+    if (typeof cost.percentOfQiMax === 'number') {
+      segments.push(`${Math.round(cost.percentOfQiMax * 100)}%上限`)
+    }
+    const detail = segments.length > 0 ? segments.join(' + ') : '0'
+    return `斗气 ${detail}`
+  }
   const amount = cost.amount ?? 0
-  return `${cost.type.toUpperCase()} ${amount}`
+  const typeLabel = (cost.type ?? 'none') as string
+  return `${typeLabel.toUpperCase()} ${amount}`
 }
 
 function handleSlotChange(index: number, value: string) {
@@ -51,6 +101,39 @@ function equipToFirstEmpty(skillId: string) {
   <section class="panel">
     <h2 class="section-title">技能配置</h2>
     <p class="text-muted text-small">在此管理角色掌握的技能，并为战斗界面四个技能槽位进行装备。</p>
+
+    <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
+      <h3 class="section-title" style="font-size: 16px;">斗气功法</h3>
+      <div v-if="cultivationMethods.length === 0" class="text-small text-muted">暂未掌握任何斗气功法。</div>
+      <div v-else class="method-list">
+        <article
+          v-for="method in cultivationMethods"
+          :key="method.id"
+          class="panel method-card"
+          style="margin: 0; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08);"
+        >
+          <header class="method-card-header">
+            <div class="method-card-heading">
+              <h4 class="method-card-title">{{ method.name }}</h4>
+              <span v-if="method.isCurrent" class="method-tag">当前运转</span>
+            </div>
+            <div v-if="method.focusLines.length > 0" class="method-focus">
+              <span v-for="line in method.focusLines" :key="line" class="method-focus-item text-small">{{ line }}</span>
+            </div>
+          </header>
+          <p class="text-small text-muted method-description">{{ method.description }}</p>
+          <ul class="method-effects">
+            <li
+              v-for="effect in method.effects"
+              :key="effect"
+              class="text-small"
+            >
+              {{ effect }}
+            </li>
+          </ul>
+        </article>
+      </div>
+    </div>
 
     <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
       <h3 class="section-title" style="font-size: 16px;">技能栏</h3>
@@ -156,6 +239,72 @@ function equipToFirstEmpty(skillId: string) {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
+}
+
+.method-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.method-card {
+  padding: 16px;
+}
+
+.method-card-header {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.method-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.method-card-title {
+  margin: 0;
+  font-size: 16px;
+}
+
+.method-tag {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 213, 79, 0.16);
+  border: 1px solid rgba(255, 213, 79, 0.35);
+  color: #ffd54f;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.method-focus {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+
+.method-focus-item {
+  padding: 2px 6px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.method-description {
+  margin: 0 0 8px;
+}
+
+.method-effects {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: disc;
 }
 
 .skill-card-header {

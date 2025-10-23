@@ -598,9 +598,6 @@ export const BASE_EQUIPMENT_TEMPLATES: EquipmentTemplate[] = [
 ]
 
 export const STARTING_EQUIPMENT_IDS: Partial<Record<EquipSlot, string>> = {
-  weaponR: 'iron-sword',
-  armor: 'iron-plate',
-  helmet: 'iron-helm',
 }
 
 export function getStartingEquipment(): Partial<Record<EquipSlot, Equipment>> {

@@ -125,7 +125,7 @@ const allowedEquipmentTemplates = computed(() =>
 const bossMonsters = MONSTERS.filter((monster) => monster.isBoss)
 
 function hasClearedBossAtOrAbove(level: number) {
-  return bossMonsters.some((monster) => monster.lv >= level && progressStore.isMonsterCleared(monster.id))
+  return bossMonsters.some((monster) => (monster.lv ?? 0) >= level && progressStore.isMonsterCleared(monster.id))
 }
 
 const gemItems = computed(() => {
@@ -193,8 +193,7 @@ watch(currentItems, (items) => {
 
 const getItemIcon = (item: ItemDefinition | EquipmentTemplate) => {
   if ('heal' in item && item.heal) return '🧪'
-  if ('restoreSp' in item && item.restoreSp) return '✨'
-  if ('restoreXp' in item && item.restoreXp) return '💥'
+  if ('restoreQi' in item && item.restoreQi) return '✨'
   if ('usage' in item) {
     if (item.name.includes('祝福')) return '💎'
     if (item.name.includes('灵魂')) return '💗'
@@ -219,15 +218,15 @@ const getItemDescription = (item: ItemDefinition | EquipmentTemplate) => {
   if ('usage' in item) return item.usage
   if ('slot' in item) {
     const stats = []
-    if (item.baseMain.ATK) stats.push(`攻击力 +${item.baseMain.ATK}`)
-    if (item.baseMain.DEF) stats.push(`防御力 +${item.baseMain.DEF}`)
-    if (item.baseMain.HP) stats.push(`生命值 +${item.baseMain.HP}`)
+    if (item.baseMain.ATK) stats.push(`攻击 +${item.baseMain.ATK}`)
+    if (item.baseMain.DEF) stats.push(`防御 +${item.baseMain.DEF}`)
+    if (item.baseMain.HP) stats.push(`生命 +${item.baseMain.HP}`)
 
     // 添加副属性描述
     const subStats = []
-    if (item.baseSubs.addATK) subStats.push(`攻击力 +${item.baseSubs.addATK}`)
-    if (item.baseSubs.addDEF) subStats.push(`防御力 +${item.baseSubs.addDEF}`)
-    if (item.baseSubs.addHP) subStats.push(`生命值 +${item.baseSubs.addHP}`)
+    if (item.baseSubs.addATK) subStats.push(`攻击 +${item.baseSubs.addATK}`)
+    if (item.baseSubs.addDEF) subStats.push(`防御 +${item.baseSubs.addDEF}`)
+    if (item.baseSubs.addHP) subStats.push(`生命 +${item.baseSubs.addHP}`)
 
     let description = stats.join(', ')
     if (subStats.length > 0) {
@@ -286,7 +285,7 @@ const buyItem = (item: ItemDefinition | EquipmentTemplate, rawQuantity?: number)
     return
   }
 
-  if ('heal' in item || 'restoreSp' in item || 'restoreXp' in item || 'usage' in item) {
+  if ('heal' in item || 'restoreQi' in item || 'usage' in item) {
     inventoryStore.addItem(item.id, quantity)
   } else if ('slot' in item) {
     for (let index = 0; index < quantity; index += 1) {

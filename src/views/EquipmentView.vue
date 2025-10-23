@@ -3,7 +3,7 @@ import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
-import { ITEMS, consumableIds } from '@/data/items'
+import { ITEMS, quickConsumableIds } from '@/data/items'
 import { resolveMainStatBreakdown } from '@/composables/useEnhance'
 
 const player = usePlayerStore()
@@ -23,8 +23,8 @@ const slots = [
 ] as const
 
 const statLabels = {
-  ATK: '攻击力',
-  DEF: '防御力',
+  ATK: '攻击',
+  DEF: '防御',
   HP: '生命值',
 } as const
 
@@ -36,7 +36,7 @@ const equipList = computed(() =>
   }),
 )
 
-const quickSlotOptions = ITEMS.filter(item => consumableIds.has(item.id))
+const quickSlotOptions = ITEMS.filter(item => quickConsumableIds.has(item.id))
 
 function handleQuickSlotChange(index: number, value: string) {
   inventory.setQuickSlot(index, value.length > 0 ? value : null)
@@ -53,16 +53,15 @@ function quickSlotEffectText(itemId: string | null) {
   if (!item) return ''
   const effects: string[] = []
   if ('heal' in item && item.heal) effects.push(`HP+${item.heal}`)
-  if ('restoreSp' in item && item.restoreSp) effects.push(`SP+${item.restoreSp}`)
-  if ('restoreXp' in item && item.restoreXp) effects.push(`XP+${item.restoreXp}`)
+  if ('restoreQi' in item && item.restoreQi) effects.push(`斗气+${item.restoreQi}`)
   return effects.join(' ')
 }
 
 function formatSubStats(subs: Record<string, number>) {
   const stats: string[] = []
-  if (subs.addATK) stats.push(`攻击力 +${subs.addATK}`)
-  if (subs.addDEF) stats.push(`防御力 +${subs.addDEF}`)
-  if (subs.addHP) stats.push(`生命值 +${subs.addHP}`)
+  if (subs.addATK) stats.push(`攻击 +${subs.addATK}`)
+  if (subs.addDEF) stats.push(`防御 +${subs.addDEF}`)
+  if (subs.addHP) stats.push(`生命 +${subs.addHP}`)
   return stats.length > 0 ? stats.join(', ') : '无'
 }
 
@@ -115,8 +114,8 @@ function goEnhance(slotKey: typeof slots[number][0]) {
                 </span>
               </template>
               <template v-else-if="slot.item">
-                <span v-if="slot.item.mainStat.ATK">攻击力 {{ slot.item.mainStat.ATK }}</span>
-                <span v-else-if="slot.item.mainStat.DEF">防御力 {{ slot.item.mainStat.DEF }}</span>
+                <span v-if="slot.item.mainStat.ATK">攻击 {{ slot.item.mainStat.ATK }}</span>
+                <span v-else-if="slot.item.mainStat.DEF">防御 {{ slot.item.mainStat.DEF }}</span>
                 <span v-else-if="slot.item.mainStat.HP">HP {{ slot.item.mainStat.HP }}</span>
               </template>
               <template v-else>-</template>

@@ -198,16 +198,8 @@ button {
   background: linear-gradient(90deg, #ff4f71, #ff8359);
 }
 
-.resource-sp {
-  background: linear-gradient(90deg, #2d9fff, #6f78ff);
-}
-
-.resource-exp {
-  background: linear-gradient(90deg, #34d399, #059669);
-}
-
-.resource-xp {
-  background: linear-gradient(90deg, #f97316, #fb923c);
+.resource-qi {
+  background: linear-gradient(90deg, #38bdf8, #2563eb);
 }
 
 .flex {

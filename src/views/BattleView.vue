@@ -7,10 +7,12 @@ import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
 import { useInventoryStore } from '@/stores/inventory'
 import { getSkillDefinition } from '@/data/skills'
+import { quickConsumableIds } from '@/data/items'
 import { getMonsterMap } from '@/data/monsters'
-import type { FloatText, LootResult } from '@/types/domain'
+import type { FloatText, LootResult, Monster } from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import QuickItemBar from '@/components/QuickItemBar.vue'
+import MonsterAttackTimeline from '@/components/MonsterAttackTimeline.vue'
 
 const router = useRouter()
 const battle = useBattleStore()
@@ -24,29 +26,34 @@ const { enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(uiStore)
 const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
 const lootList = computed(() => battle.loot)
-const hpRate = computed(() => (monster.value ? Math.max(0, battle.monsterHp) / monster.value.hpMax : 0))
-const isMonsterAttackActive = computed(() => battle.inBattle && battle.concluded === 'idle')
+const hpRate = computed(() => {
+  const current = monster.value
+  if (!current) return 0
+  const maxHp = current.resources?.hpMax ?? current.hpMax ?? 0
+  if (maxHp <= 0) return 0
+  return Math.max(0, battle.monsterHp) / maxHp
+})
+const isMonsterAttackActive = computed(() => Boolean(battle.inBattle) && battle.concluded === 'idle')
 const canClickRematch = computed(() => {
   return battle.concluded === 'victory' && monster.value &&
     (!autoRematchAfterVictory.value || monster.value.isBoss)
 })
-const monsterAttackCountdownLabel = computed(() => {
-  if (!battle.monster || !isMonsterAttackActive.value) return '—'
-  return `${Math.max(0, battle.monsterTimer).toFixed(2)}s`
-})
-
-// 进度条式倒计时相关计算
 const monsterAttackProgress = computed(() => {
   if (!battle.monster || !isMonsterAttackActive.value) return 0
   return Math.max(0, Math.min(1, battle.monsterTimer / 1.6)) // 1.6是攻击间隔
 })
 
-const monsterAttackProgressColor = computed(() => {
-  if (!isMonsterAttackActive.value) return 'rgba(255, 255, 255, 0.3)'
-  const progress = monsterAttackProgress.value
-  if (progress > 0.6) return '#4ade80' // 绿色
-  if (progress > 0.3) return '#fbbf24' // 黄色
-  return '#ef4444' // 红色
+const showBattleDuration = computed(() => {
+  return battle.concluded !== 'idle' &&
+    battle.battleStartedAt !== null &&
+    battle.battleEndedAt !== null &&
+    Boolean(monster.value)
+})
+
+const battleDurationText = computed(() => {
+  if (!showBattleDuration.value || !battle.battleStartedAt || !battle.battleEndedAt) return ''
+  const duration = Math.max(0, battle.battleEndedAt - battle.battleStartedAt)
+  return formatBattleDuration(duration)
 })
 
 // Auto-cast state
@@ -64,10 +71,45 @@ const ITEM_HOTKEYS = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'] as const
 const itemHotkeyLabels = ['NUM1', 'NUM2', 'NUM3', 'NUM4']
 const itemHotkeyMap = new Map<string, number>(ITEM_HOTKEYS.map((code, index) => [code, index]))
 
+function formatMonsterRewards(monster: Monster | null | undefined): string {
+  if (!monster) return ''
+  const rewards = monster.rewards
+  const gold = rewards?.gold ?? monster.rewardGold ?? 0
+  const deltaBp = rewards?.deltaBp
+  if (typeof deltaBp === 'number') {
+    return `ΔBP ${deltaBp} ・ GOLD ${gold}`
+  }
+  return `GOLD ${gold}`
+}
+
+function formatBattleDuration(durationMs: number): string {
+  if (!Number.isFinite(durationMs) || durationMs <= 0) return '00:01'
+  const totalSeconds = Math.max(1, Math.ceil(durationMs / 1000))
+  const hours = Math.floor(totalSeconds / 3600)
+  const minutes = Math.floor((totalSeconds % 3600) / 60)
+  const seconds = totalSeconds % 60
+  const pad = (value: number) => value.toString().padStart(2, '0')
+  if (hours > 0) {
+    return `${hours}:${pad(minutes)}:${pad(seconds)}`
+  }
+  return `${pad(minutes)}:${pad(seconds)}`
+}
+
+const getNowMs = () => {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now()
+  }
+  return Date.now()
+}
+
 const skillSlots = computed(() => {
   const inBattle = battle.inBattle
   const concluded = battle.concluded
-  const { sp, xp } = res.value
+  const { qi } = res.value
+  const operationMode = res.value.operation?.mode ?? 'idle'
+  const actionLockUntil = battle.actionLockUntil
+  const nowMs = getNowMs()
+  const isActionLocked = actionLockUntil !== null && actionLockUntil > nowMs
   return playerStore.skills.loadout.map((skillId, index) => {
     const skill = getSkillDefinition(skillId)
     const cost = skill?.cost
@@ -80,9 +122,16 @@ const skillSlots = computed(() => {
       if (!cost || cost.type === 'none') {
         return { label: '无消耗', badge: null, type: null }
       }
-      const amount = cost.amount ?? 0
-      const value = `${cost.type.toUpperCase()} ${amount}`
-      return { label: value, badge: value, type: cost.type }
+      if (cost.type === 'qi') {
+        const amount = cost.amount ?? 0
+        const percent = cost.percentOfQiMax ?? 0
+        const parts: string[] = []
+        if (amount > 0) parts.push(`${amount}`)
+        if (percent > 0) parts.push(`${Math.round(percent * 100)}%`)
+        const value = parts.length ? parts.join(' + ') : '0'
+        return { label: value, badge: value, type: cost.type }
+      }
+      return { label: '斗气', badge: '斗气', type: cost.type }
     })()
 
     const cooldown = skill ? (battle.skillCooldowns[index] ?? 0) : 0
@@ -103,15 +152,23 @@ const skillSlots = computed(() => {
     } else if (!skill) {
       disabled = true
       reason = '未装备技能'
+    } else if (isActionLocked) {
+      disabled = true
+      reason = '动作硬直中'
+    } else if (operationMode === 'idle') {
+      disabled = true
+      reason = '需运转斗气'
     } else if (cooldown > 0) {
       disabled = true
       reason = `冷却中 ${cooldown.toFixed(1)}s`
-    } else if (cost?.type === 'sp' && (cost.amount ?? 0) > sp) {
-      disabled = true
-      reason = 'SP不足'
-    } else if (cost?.type === 'xp' && (cost.amount ?? 0) > xp) {
-      disabled = true
-      reason = 'XP不足'
+    } else if (cost?.type === 'qi') {
+      const percent = cost.percentOfQiMax ?? 0
+      const baseAmount = cost.amount ?? 0
+      const required = baseAmount + percent * res.value.qiMax
+      if (required > qi) {
+        disabled = true
+        reason = '斗气不足'
+      }
     }
 
     // Check if auto-casting is active for this slot
@@ -291,8 +348,8 @@ function useQuickItem(slotIndex: number) {
   if (!battle.inBattle || battle.concluded !== 'idle') return
   if (slotIndex < 0 || slotIndex >= inventory.quickSlots.length) return
   const itemId = inventory.quickSlots[slotIndex]
-  if (typeof itemId !== 'string') return
-  battle.useItem(itemId)
+  if (typeof itemId !== 'string' || !quickConsumableIds.has(itemId)) return
+  battle.useItem(itemId).catch(() => {})
 }
 
 // Auto-cast functions
@@ -546,6 +603,30 @@ onBeforeUnmount(() => {
   z-index: 3;
 }
 
+.battle-action-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+}
+
+.skill-slot-label {
+  width: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.2;
+  min-height: 1.4em;
+  overflow-wrap: anywhere;
+}
+
+.skill-slot-label--empty {
+  color: rgba(255, 255, 255, 0.5);
+}
+
 .skill-cooldown {
   position: absolute;
   left: 50%;
@@ -689,84 +770,6 @@ onBeforeUnmount(() => {
   }
 }
 
-/* 怪物攻击倒计时进度条样式 */
-.monster-attack-timer {
-  margin-top: 8px;
-  position: relative;
-}
-
-.monster-attack-timer--inactive .monster-attack-progress {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.1);
-}
-
-.monster-attack-timer-label {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.8);
-  margin-bottom: 4px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-
-.monster-attack-timer--inactive .monster-attack-timer-label {
-  color: rgba(255, 255, 255, 0.5);
-}
-
-.monster-attack-progress {
-  width: 100%;
-  height: 6px;
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 3px;
-  overflow: hidden;
-  position: relative;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-}
-
-.monster-attack-progress-bar {
-  height: 100%;
-  transition: width 0.1s linear, background-color 0.2s ease;
-  border-radius: 2px;
-  position: relative;
-  background: v-bind('monsterAttackProgressColor');
-  box-shadow: 0 0 8px v-bind('monsterAttackProgressColor');
-}
-
-.monster-attack-progress-bar.inactive {
-  background: rgba(255, 255, 255, 0.2);
-  box-shadow: none;
-}
-
-.monster-attack-progress-bar.warning {
-  animation: pulse-warning 0.5s infinite alternate;
-}
-
-.monster-attack-progress-bar.danger {
-  animation: pulse-danger 0.3s infinite alternate;
-}
-
-@keyframes pulse-warning {
-  from {
-    opacity: 0.8;
-    transform: scaleY(1);
-  }
-  to {
-    opacity: 1;
-    transform: scaleY(1.1);
-  }
-}
-
-@keyframes pulse-danger {
-  from {
-    opacity: 0.9;
-    transform: scaleY(1);
-  }
-  to {
-    opacity: 1;
-    transform: scaleY(1.2);
-  }
-}
-
 /* 敌方头像视觉效果 */
 .enemy-portrait-container {
   position: relative;
@@ -797,6 +800,33 @@ onBeforeUnmount(() => {
   width: 100%;
   max-width: 100%;
   max-height: 100%;
+}
+
+.battle-duration-banner {
+  position: absolute;
+  left: 50%;
+  bottom: 0px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.65);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #e2e8f0;
+  font-size: 14px;
+  letter-spacing: 0.4px;
+  backdrop-filter: blur(6px);
+  pointer-events: none;
+  z-index: 12;
+}
+
+.battle-duration-value {
+  font-size: 18px;
+  font-weight: 700;
+  color: #ffd166;
+  letter-spacing: 0.6px;
 }
 
 .attack-warning-aura {
@@ -896,38 +926,16 @@ onBeforeUnmount(() => {
       <header class="flex flex-between" style="align-items: flex-start;">
         <div>
           <h2 class="section-title" style="margin: 0 0 4px;">{{ monster.name }}</h2>
-          <div class="text-muted text-small">LV {{ monster.lv }} ｜ 攻击力 {{ monster.atk }} ｜ 防御力 {{ monster.def }}</div>
-          <div class="text-small text-muted" style="margin-top: 6px;">奖励：{{ monster.rewardExp }} EXP ・ {{ monster.rewardGold }} GOLD</div>
+          <div class="text-muted text-small">LV {{ monster.lv }} ｜ 攻击 {{ monster.atk }} ｜ 防御 {{ monster.def }}</div>
+          <div class="text-small text-muted" style="margin-top: 6px;">奖励：{{ formatMonsterRewards(monster) }}</div>
         </div>
         <div class="text-right" style="margin-top: 10px;">
           <div class="resource-bar" style="width: 200px;">
             <span class="resource-hp" :style="{ width: `${Math.floor(hpRate * 100)}%` }" />
           </div>
-          <div class="text-small text-muted" style="margin-top: 4px;">HP {{ battle.monsterHp }} / {{ monster.hpMax }}</div>
-
-          <!-- 怪物攻击倒计时进度条 -->
-          <div
-            class="monster-attack-timer"
-            :class="{ 'monster-attack-timer--inactive': !isMonsterAttackActive }"
-          >
-            <div class="monster-attack-progress">
-              <div
-                class="monster-attack-progress-bar"
-                :class="{
-                  'warning': isMonsterAttackActive && monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
-                  'danger': isMonsterAttackActive && monsterAttackProgress <= 0.3,
-                  'inactive': !isMonsterAttackActive
-                }"
-                :style="{ width: isMonsterAttackActive ? `${monsterAttackProgress * 100}%` : '100%' }"
-              />
-            </div>
-            <div class="monster-attack-timer-label">
-              <span>{{ monsterAttackCountdownLabel }}</span>
-            </div>
-          </div>
+          <div class="text-small text-muted" style="margin-top: 4px;">HP {{ battle.monsterHp }} / {{ monster.resources?.hpMax ?? monster.hpMax ?? '—' }}</div>
         </div>
       </header>
-
       <div class="float-area">
         <div
           class="battle-portraits"
@@ -993,7 +1001,7 @@ onBeforeUnmount(() => {
           style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; text-align: center; pointer-events: none;"
         >
           <div>胜利</div>
-          <div class="text-small" style="margin-top: 6px;">+ EXP {{ monster?.rewardExp ?? 0 }}</div>
+          <div class="text-small" style="margin-top: 6px;">奖励：{{ formatMonsterRewards(monster ?? null) }}</div>
           <div
             class="text-small"
             :class="getGoldBonus(lootList) ? 'loot-gold-bonus' : ''"
@@ -1016,64 +1024,88 @@ onBeforeUnmount(() => {
         <div v-else-if="battle.concluded === 'defeat'" class="float-text" style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; color: #ff6b7a;">
           战败
         </div>
+        <div
+          v-if="showBattleDuration"
+          class="battle-duration-banner"
+        >
+          本次战斗用时：
+          <span class="battle-duration-value">{{ battleDurationText }}</span>
+        </div>
       </div>
+
+      <MonsterAttackTimeline
+        :active="isMonsterAttackActive"
+        :time-to-attack="isMonsterAttackActive ? battle.monsterTimer : null"
+        :pending-dodge="battle.pendingDodge"
+        :action-lock-until="battle.actionLockUntil"
+      />
 
       <div class="battle-action-row">
         <div class="battle-actions">
-          <button
+          <div
             v-for="slot in skillSlots"
             :key="slot.index"
-            :disabled="slot.disabled"
-            :class="{
-              empty: slot.isEmpty,
-              'auto-casting': slot.isAutoCasting,
-              'holding': slot.isHolding,
-              'on-cooldown': slot.isOnCooldown,
-              'has-image': slot.hasImage
-            }"
-            :title="slot.reason || undefined"
-            :style="slot.cooldownStyle"
-            @click="useSkill(slot.index)"
-            @mousedown="startSkillHold(slot.index, $event)"
-            @mouseup="stopAutoCast(slot.index)"
-            @mouseleave="stopAutoCast(slot.index)"
-            @touchstart="startSkillHold(slot.index, $event)"
-            @touchend="stopAutoCast(slot.index)"
-            @touchcancel="stopAutoCast(slot.index)"
+            class="battle-action-slot"
           >
-            <template v-if="slot.hasImage">
-              <div class="skill-image-container">
-                <img
-                  v-if="slot.imageSrc"
-                  :src="slot.imageSrc"
-                  :alt="slot.label"
-                  class="skill-image"
+            <button
+              :disabled="slot.disabled"
+              :class="{
+                empty: slot.isEmpty,
+                'auto-casting': slot.isAutoCasting,
+                'holding': slot.isHolding,
+                'on-cooldown': slot.isOnCooldown,
+                'has-image': slot.hasImage
+              }"
+              :title="slot.reason || undefined"
+              :style="slot.cooldownStyle"
+              @click="useSkill(slot.index)"
+              @mousedown="startSkillHold(slot.index, $event)"
+              @mouseup="stopAutoCast(slot.index)"
+              @mouseleave="stopAutoCast(slot.index)"
+              @touchstart="startSkillHold(slot.index, $event)"
+              @touchend="stopAutoCast(slot.index)"
+              @touchcancel="stopAutoCast(slot.index)"
+            >
+              <template v-if="slot.hasImage">
+                <div class="skill-image-container">
+                  <img
+                    v-if="slot.imageSrc"
+                    :src="slot.imageSrc"
+                    :alt="slot.label"
+                    class="skill-image"
+                  >
+                </div>
+              </template>
+              <template v-else>
+                <span class="skill-name">{{ slot.label }}</span>
+                <span class="skill-cost">{{ slot.costLabel }}</span>
+              </template>
+              <div class="skill-overlay">
+                <span
+                  v-if="slot.hasImage && slot.costBadge"
+                  class="skill-cost-badge"
+                  :class="slot.costType ? `skill-cost-badge--${slot.costType}` : ''"
                 >
+                  {{ slot.costBadge }}
+                </span>
+                <span
+                  v-if="slot.hotkeyLabel && !slot.isEmpty"
+                  class="skill-hotkey"
+                >
+                  {{ slot.hotkeyLabel }}
+                </span>
               </div>
-            </template>
-            <template v-else>
-              <span class="skill-name">{{ slot.label }}</span>
-              <span class="skill-cost">{{ slot.costLabel }}</span>
-            </template>
-            <div class="skill-overlay">
-              <span
-                v-if="slot.hasImage && slot.costBadge"
-                class="skill-cost-badge"
-                :class="slot.costType ? `skill-cost-badge--${slot.costType}` : ''"
-              >
-                {{ slot.costBadge }}
-              </span>
-              <span
-                v-if="slot.hotkeyLabel && !slot.isEmpty"
-                class="skill-hotkey"
-              >
-                {{ slot.hotkeyLabel }}
-              </span>
+              <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>
+              <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
+              <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
+            </button>
+            <div
+              class="skill-slot-label"
+              :class="{ 'skill-slot-label--empty': slot.isEmpty }"
+            >
+              {{ slot.label }}
             </div>
-            <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>
-            <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
-            <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
-          </button>
+          </div>
         </div>
 
         <QuickItemBar

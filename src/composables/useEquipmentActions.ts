@@ -2,7 +2,7 @@ import { useInventoryStore } from '@/stores/inventory'
 import { usePlayerStore } from '@/stores/player'
 import type { EquipSlot, Equipment } from '@/types/domain'
 
-export type EquipFailureReason = 'not-found' | 'already-equipped' | 'level-too-low' | 'apply-error'
+export type EquipFailureReason = 'not-found' | 'already-equipped' | 'apply-error'
 
 export interface EquipSuccess {
   ok: true
@@ -16,7 +16,6 @@ export interface EquipFailure {
   reason: EquipFailureReason
   slot?: EquipSlot
   equipment?: Equipment
-  requiredLevel?: number
 }
 
 export type EquipResult = EquipSuccess | EquipFailure
@@ -61,11 +60,6 @@ export function useEquipmentActions() {
         return { ok: false, reason: 'already-equipped', slot: equipped.slot, equipment: equipped.equip }
       }
       return { ok: false, reason: 'not-found' }
-    }
-
-    const requiredLevel = equipment.requiredLevel ?? 1
-    if (player.lv < requiredLevel) {
-      return { ok: false, reason: 'level-too-low', requiredLevel, slot: equipment.slot, equipment }
     }
 
     const removedFromInventory = inventory.removeEquipment(equipmentId)

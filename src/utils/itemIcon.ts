@@ -4,14 +4,14 @@ export type ItemIcon =
 
 const IMAGE_ICON_MAP: Record<string, { src: string; alt: string }> = {
   potionHP: { src: '/potion-hp-1.webp', alt: '生命药水' },
-  potionSP: { src: '/potion-sp-1.webp', alt: '技能药水' },
-  potionXP: { src: '/potion-xp-1.webp', alt: '必杀药水' },
+  potionQi: { src: '/potion-sp-1.webp', alt: '斗气药水' },
+  potionQiPlus: { src: '/potion-xp-1.webp', alt: '精制斗气药水' },
 }
 
 const TEXT_ICON_MAP: Record<string, string> = {
   potionHP: '🧪',
-  potionSP: '✨',
-  potionXP: '💥',
+  potionQi: '✨',
+  potionQiPlus: '💥',
   blessGem: '💎',
   soulGem: '💗',
   miracleGem: '💧',

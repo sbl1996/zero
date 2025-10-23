@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ITEMS } from '@/data/items'
+import { ITEMS, quickConsumableIds } from '@/data/items'
 import { useBattleStore, ITEM_COOLDOWN } from '@/stores/battle'
 import { useInventoryStore } from '@/stores/inventory'
 import { usePlayerStore } from '@/stores/player'
@@ -19,48 +19,50 @@ const props = withDefaults(defineProps<{
   hotkeyLabels: () => ['NUM1', 'NUM2', 'NUM3', 'NUM4'],
 })
 
+const getNowMs = () => {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now()
+  }
+  return Date.now()
+}
+
 const slots = computed(() => {
-  const { hp, hpMax, sp, spMax, xp, xpMax } = res.value
+  const { hp, hpMax, qi, qiMax } = res.value
   const needsHp = hp < hpMax
-  const needsSp = sp < spMax
-  const needsXp = xp < xpMax
+  const needsQi = qi < qiMax
+  const actionLockUntil = battle.actionLockUntil
+  const nowMs = getNowMs()
+  const isActionLocked = actionLockUntil !== null && actionLockUntil > nowMs
 
   return inventory.quickSlots.map((id, index) => {
-    const item = typeof id === 'string' ? ITEMS.find(def => def.id === id) : undefined
-    const quantity = item ? inventory.quantity(item.id) : 0
+    const itemId = typeof id === 'string' && quickConsumableIds.has(id) ? id : null
+    const item = itemId ? ITEMS.find(def => def.id === itemId) : undefined
+    const quantity = itemId ? inventory.quantity(itemId) : 0
     const effects: string[] = []
 
     if (item) {
       if ('heal' in item && item.heal) {
         effects.push(`HP+${item.heal}`)
       }
-      if ('restoreSp' in item && item.restoreSp) {
-        effects.push(`SP+${item.restoreSp}`)
-      }
-      if ('restoreXp' in item && item.restoreXp) {
-        effects.push(`XP+${item.restoreXp}`)
+      if ('restoreQi' in item && item.restoreQi) {
+        effects.push(`斗气+${item.restoreQi}`)
       }
     }
 
     let healsHp = false
-    let restoresSp = false
-    let restoresXp = false
+    let restoresQi = false
     if (item) {
       if ('heal' in item && typeof item.heal === 'number' && item.heal > 0) {
         healsHp = true
       }
-      if ('restoreSp' in item && typeof item.restoreSp === 'number' && item.restoreSp > 0) {
-        restoresSp = true
-      }
-      if ('restoreXp' in item && typeof item.restoreXp === 'number' && item.restoreXp > 0) {
-        restoresXp = true
+      if ('restoreQi' in item && typeof item.restoreQi === 'number' && item.restoreQi > 0) {
+        restoresQi = true
       }
     }
-    const hasResourceEffect = healsHp || restoresSp || restoresXp
+    const hasResourceEffect = healsHp || restoresQi
     const effectApplies = !!(
       (healsHp && needsHp) ||
-      (restoresSp && needsSp) ||
-      (restoresXp && needsXp)
+      (restoresQi && needsQi)
     )
 
     const cooldown = item ? (battle.itemCooldowns[item.id] ?? 0) : 0
@@ -82,6 +84,9 @@ const slots = computed(() => {
     } else if (!item) {
       disabled = true
       reason = '未装备道具'
+    } else if (isActionLocked) {
+      disabled = true
+      reason = '动作硬直中'
     } else if (quantity <= 0) {
       disabled = true
       reason = '库存不足'
@@ -105,12 +110,12 @@ const slots = computed(() => {
 
     return {
       index,
-      id,
+      id: itemId,
       item,
       quantity,
       hotkey: props.hotkeys[index] ?? null,
       hotkeyLabel: props.hotkeyLabels[index] ?? null,
-      icon: resolveItemIcon(typeof id === 'string' ? id : null),
+      icon: resolveItemIcon(itemId),
       label,
       cooldown,
       cooldownDisplay,
@@ -127,7 +132,7 @@ const slots = computed(() => {
 function handleUse(slotIndex: number) {
   const slot = slots.value[slotIndex]
   if (!slot || slot.disabled || !slot.item) return
-  battle.useItem(slot.item.id)
+  battle.useItem(slot.item.id).catch(() => {})
 }
 </script>
 

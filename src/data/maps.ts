@@ -57,11 +57,11 @@ export const monsterPositions: Record<string, Record<string, { x: number; y: num
     'boss-dragon': { x: 50, y: 45 },
   },
   'green-elysium': {
-    'm-faerie': { x: 25, y: 35 },
-    'm-bloomfiend': { x: 65, y: 25 },
-    'm-dreamstag': { x: 45, y: 60 },
-    'm-sylvan-sentinel': { x: 75, y: 70 },
-    'boss-queen-of-blooms': { x: 50, y: 45 },
+    'm-faerie': { x: 14, y: 55 },
+    'm-bloomfiend': { x: 80, y: 52 },
+    'm-dreamstag': { x: 29, y: 25 },
+    'm-sylvan-sentinel': { x: 25, y: 82 },
+    'boss-queen-of-blooms': { x: 51, y: 35 },
   },
 }
 
@@ -85,6 +85,13 @@ export const maps: GameMap[] = [
         description: '整备补给与售卖战利品的最佳去处。',
         position: { x: 74, y: 62 },
         routeName: 'shop',
+      },
+      {
+        id: 'warrior-guild',
+        name: '战士公会',
+        description: '由帝国骑士团维护，可在此研习战技。',
+        position: { x: 40, y: 55 },
+        routeName: 'warrior-guild',
       },
       {
         id: 'to-fringe',

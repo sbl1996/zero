@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ITEMS } from '@/data/items'
+import { ITEMS, quickConsumableIds } from '@/data/items'
 import type { ItemDefinition, Equipment, InventorySave } from '@/types/domain'
 
 type StackRecord = Record<string, number>
@@ -7,13 +7,13 @@ type StackRecord = Record<string, number>
 function defaultStacks(): StackRecord {
   return {
     potionHP: 5,
-    potionSP: 3,
-    potionXP: 1,
+    potionQi: 3,
+    potionQiPlus: 1,
   }
 }
 
 function defaultQuickSlots(): (string | null)[] {
-  return ['potionHP', 'potionSP', 'potionXP', null]
+  return ['potionHP', 'potionQi', 'potionQiPlus', null]
 }
 
 export const useInventoryStore = defineStore('inventory', {
@@ -47,7 +47,7 @@ export const useInventoryStore = defineStore('inventory', {
       const base = defaultQuickSlots()
       this.quickSlots = base.map((fallback, index) => {
         const candidate = slots[index]
-        if (typeof candidate === 'string' && candidate.length > 0) {
+        if (typeof candidate === 'string' && candidate.length > 0 && quickConsumableIds.has(candidate)) {
           return candidate
         }
         return fallback ?? null
@@ -96,7 +96,8 @@ export const useInventoryStore = defineStore('inventory', {
     },
     setQuickSlot(index: number, itemId: string | null) {
       if (index < 0 || index >= this.quickSlots.length) return
-      this.quickSlots.splice(index, 1, itemId ?? null)
+      const nextId = itemId && quickConsumableIds.has(itemId) ? itemId : null
+      this.quickSlots.splice(index, 1, nextId)
     },
     serialize(): InventorySave {
       return this.snapshot

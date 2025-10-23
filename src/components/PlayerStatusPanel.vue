@@ -1,45 +1,137 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onMounted, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBattleStore } from '@/stores/battle'
-import { ITEMS, consumableIds } from '@/data/items'
+import { ITEMS, quickConsumableIds } from '@/data/items'
 import { resolveItemIcon } from '@/utils/itemIcon'
+import type { CultivationEnvironment } from '@/composables/useLeveling'
 
-const props = withDefaults(
-  defineProps<{
-    allowAllocation?: boolean
-  }>(),
-  {
-    allowAllocation: false,
-  },
-)
-
-const emit = defineEmits<{
-  (e: 'open-allocate'): void
-}>()
+const props = withDefaults(defineProps<{
+  tickEnvironment?: CultivationEnvironment
+  autoTick?: boolean
+}>(), {
+  tickEnvironment: 'idle',
+  autoTick: true,
+})
 
 const playerStore = usePlayerStore()
 const inventory = useInventoryStore()
 const battle = useBattleStore()
 
-const { res, finalStats, expRequired, lv, exp, unspentPoints, gold, equipStats } = storeToRefs(playerStore)
+const { res, finalStats, gold, equipStats, cultivation } = storeToRefs(playerStore)
 
 const hpRate = computed(() => (res.value.hpMax > 0 ? res.value.hp / res.value.hpMax : 0))
-const spRate = computed(() => (res.value.spMax > 0 ? res.value.sp / res.value.spMax : 0))
-const xpRate = computed(() => (res.value.xpMax > 0 ? res.value.xp / res.value.xpMax : 0))
-const expProgress = computed(() => (expRequired.value === 0 ? 0 : Math.min(1, exp.value / expRequired.value)))
+const qiRate = computed(() => (res.value.qiMax > 0 ? res.value.qi / res.value.qiMax : 0))
+const hpRecoveryText = computed(() => formatRecoveryPerSecond(res.value.recovery?.hpPerSecond))
+const qiRecoveryText = computed(() => formatRecoveryPerSecond(res.value.recovery?.qiPerSecond))
+const warmupPercent = computed(() => Math.round((res.value.operation?.fValue ?? 0) * 100))
+const isMeditating = computed(() => res.value.recovery.mode === 'meditate')
+const bpCurrent = computed(() => Math.round(cultivation.value.bp.current))
+const realmInfo = computed(() => cultivation.value.realm)
+const isWarmingUp = computed(() => warmupPercent.value > 0 && warmupPercent.value < 100)
+
+const PHASE_LABELS: Record<string, string> = {
+  none: '无',
+  initial: '初阶',
+  middle: '中阶',
+  high: '高阶',
+  peak: '巅峰',
+  limit: '极限',
+}
+
+const REALM_LABELS: Record<string | number, string> = {
+  1: '一级',
+  2: '二级',
+  3: '三级',
+  4: '四级',
+  5: '五级',
+  6: '六级',
+  7: '七级',
+  8: '八级',
+  9: '九级',
+  'sanctuary': '圣域',
+}
+
+function startQi() {
+  if (isMeditating.value) return
+  playerStore.setRecoveryMode('run')
+  playerStore.startQiOperation()
+}
+
+function stopQi() {
+  playerStore.stopQiOperation()
+}
+
+const qiProgressDisabled = computed(() => isMeditating.value || isWarmingUp.value)
+const qiProgressActive = computed(() => !isMeditating.value && warmupPercent.value >= 100)
+const qiProgressLabel = computed(() => {
+  const percentText = `${warmupPercent.value}%`
+  if (isMeditating.value) return '冥想中'
+  if (warmupPercent.value === 0) return `点击启动运转 · ${percentText}`
+  if (isWarmingUp.value) return `预热中 · ${percentText}`
+  return `点击停止运转 · ${percentText}`
+})
+
+function formatRecoveryPerSecond(rate: number | undefined | null) {
+  const value = (rate ?? 0).toFixed(1)
+  const sign = parseFloat(value) >= 0 ? '+' : ''
+  return `（${sign}${value}/s）`
+}
+
+function handleQiProgressClick() {
+  if (qiProgressDisabled.value) return
+  if (isMeditating.value) return
+  if (warmupPercent.value === 0) {
+    startQi()
+    return
+  }
+  stopQi()
+}
+
+const realmLabel = computed(() => {
+  const realm = realmInfo.value
+  const realmName = REALM_LABELS[realm.tier] ?? realm.tier
+  const phase = realm.phase && realm.phase !== 'none' ? `${PHASE_LABELS[realm.phase] ?? realm.phase}` : ''
+  return `${realmName}战士 ${phase}`
+})
+
+let qiTickTimer: ReturnType<typeof setInterval> | null = null
+let lastTickTs: number | null = null
+
+onMounted(() => {
+  lastTickTs = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
+  if (!props.autoTick) return
+  qiTickTimer = setInterval(() => {
+    const now = (typeof performance !== 'undefined' && performance.now) ? performance.now() : Date.now()
+    const delta = Math.min(Math.max(((now - (lastTickTs || now)) / 1000), 0), 0.25)
+    lastTickTs = now
+    if (!battle.inBattle && delta > 0) {
+      const environment: CultivationEnvironment = props.tickEnvironment ?? 'idle'
+      playerStore.tickCultivation(delta, { environment, inBattle: false, bossBattle: false })
+    }
+  }, 200)
+})
+
+onBeforeUnmount(() => {
+  if (qiTickTimer) {
+    clearInterval(qiTickTimer)
+    qiTickTimer = null
+  }
+})
 
 const attributeRows = computed(() => {
   const entries = [
-    { key: 'ATK', label: '攻击力', equipKey: 'addATK' },
-    { key: 'DEF', label: '防御力', equipKey: 'addDEF' },
+    { key: 'ATK', label: '攻击', equipKey: 'addATK' },
+    { key: 'DEF', label: '防御', equipKey: 'addDEF' },
+    { key: 'AGI', label: '敏捷', equipKey: 'addAGI' },
+    { key: 'REC', label: '恢复', equipKey: 'addREC' },
   ] as const
 
   return entries.map(({ key, label, equipKey }) => {
-    const finalValue = finalStats.value[key]
-    const equipBonus = equipKey ? equipStats.value[equipKey] ?? 0 : 0
+    const finalValue = Math.floor(finalStats.value.totals[key] ?? 0)
+    const equipBonus = Math.floor(equipKey ? (equipStats.value[equipKey] ?? 0) : 0)
     return {
       key,
       label,
@@ -49,31 +141,27 @@ const attributeRows = computed(() => {
   })
 })
 
-function handleOpenAllocate() {
-  if (!props.allowAllocation || unspentPoints.value <= 0) return
-  emit('open-allocate')
-}
-
 // 计算可用的消耗品道具
-const availableConsumables = computed(() => {
-  const { hp, hpMax, sp, spMax, xp, xpMax } = res.value
-  const needsHp = hp < hpMax
-  const needsSp = sp < spMax
-  const needsXp = xp < xpMax
+const quickBarLocked = computed(() => isMeditating.value)
 
-  return ITEMS.filter(item => consumableIds.has(item.id)).map(item => {
+const availableConsumables = computed(() => {
+  const { hp, hpMax, qi, qiMax } = res.value
+  const needsHp = hp < hpMax
+  const needsQi = qi < qiMax
+
+  return ITEMS.filter(item => quickConsumableIds.has(item.id)).map(item => {
     const quantity = inventory.quantity(item.id)
     const healsHp = 'heal' in item && typeof item.heal === 'number' && item.heal > 0 && needsHp
-    const restoresSp = 'restoreSp' in item && typeof item.restoreSp === 'number' && item.restoreSp > 0 && needsSp
-    const restoresXp = 'restoreXp' in item && typeof item.restoreXp === 'number' && item.restoreXp > 0 && needsXp
-    const effectApplies = healsHp || restoresSp || restoresXp
-    const canUse = quantity > 0 && effectApplies && !battle.inBattle
+    const restoresQi = 'restoreQi' in item && typeof item.restoreQi === 'number' && item.restoreQi > 0 && needsQi
+    const effectApplies = healsHp || restoresQi
+    const canUse = quantity > 0 && effectApplies && !battle.inBattle && !quickBarLocked.value
 
     return {
       ...item,
       quantity,
       canUse,
       disabled: !canUse,
+      locked: quickBarLocked.value,
       icon: resolveItemIcon(item.id),
     }
   })
@@ -81,22 +169,17 @@ const availableConsumables = computed(() => {
 
 // 使用道具函数（仅在非战斗状态使用）
 function useItem(itemId: string) {
+  if (quickBarLocked.value) return
   const item = availableConsumables.value.find(i => i.id === itemId)
-  if (!item || item.disabled) return
+  if (!item || item.disabled || !quickConsumableIds.has(itemId)) return
 
   // 非战斗状态下的道具使用逻辑
   const used = inventory.spend(itemId, 1)
   if (!used) return
 
-  const consumable = item as any
-  if (consumable.heal) {
-    playerStore.heal(consumable.heal)
-  }
-  if (consumable.restoreSp) {
-    playerStore.restoreSp(consumable.restoreSp)
-  }
-  if (consumable.restoreXp) {
-    playerStore.restoreXp(consumable.restoreXp)
+  const applied = playerStore.useItem(itemId)
+  if (!applied) {
+    inventory.addItem(itemId, 1)
   }
 }
 
@@ -105,8 +188,7 @@ function getItemEffect(item: any) {
   const effects = []
   const consumable = item as any
   if (consumable.heal) effects.push(`HP+${consumable.heal}`)
-  if (consumable.restoreSp) effects.push(`SP+${consumable.restoreSp}`)
-  if (consumable.restoreXp) effects.push(`XP+${consumable.restoreXp}`)
+  if (consumable.restoreQi) effects.push(`斗气+${consumable.restoreQi}`)
   return effects.join(' ')
 }
 </script>
@@ -116,21 +198,10 @@ function getItemEffect(item: any) {
     <h2 class="section-title">角色状态</h2>
     <div class="flex flex-between gap-sm">
       <div>
-        <div>LV {{ lv }}</div>
-        <template v-if="allowAllocation">
-          <div
-            v-if="unspentPoints > 0"
-            class="unspent-points"
-            role="button"
-            tabindex="0"
-            @click="handleOpenAllocate"
-            @keyup.enter="handleOpenAllocate"
-          >
-            可分配点数：{{ unspentPoints }}
-          </div>
-          <div v-else class="text-muted text-small">可分配点数：{{ unspentPoints }}</div>
-        </template>
-        <div v-else class="text-muted text-small">可分配点数：{{ unspentPoints }}</div>
+        <div>{{ realmLabel }}</div>
+        <div class="text-muted text-small">
+          本源 {{ bpCurrent }}
+        </div>
       </div>
       <div class="text-right">
         <div>{{ gold }} G</div>
@@ -140,26 +211,34 @@ function getItemEffect(item: any) {
       <div class="resource-bar" style="margin-bottom: 10px;">
         <span class="resource-hp" :style="{ width: `${Math.floor(hpRate * 100)}%` }" />
       </div>
-      <div class="text-small text-muted">HP {{ res.hp }} / {{ res.hpMax }}</div>
+      <div class="text-small text-muted">生命 {{ Math.round(res.hp) }} / {{ Math.round(res.hpMax) }} {{ hpRecoveryText }}</div>
 
       <div class="resource-bar" style="margin: 14px 0 10px;">
-        <span class="resource-sp" :style="{ width: `${Math.floor(spRate * 100)}%` }" />
+        <span class="resource-qi" :style="{ width: `${Math.floor(qiRate * 100)}%` }" />
       </div>
-      <div class="text-small text-muted">SP {{ res.sp }} / {{ res.spMax }}</div>
-
-      <div class="resource-bar" style="margin: 14px 0 10px;">
-        <span class="resource-xp" :style="{ width: `${Math.floor(xpRate * 100)}%` }" />
-      </div>
-      <div class="text-small text-muted">XP {{ res.xp }} / {{ res.xpMax }}</div>
-
-      <div class="resource-bar" style="margin: 14px 0 10px;">
-        <span class="resource-exp" :style="{ width: `${Math.floor(expProgress * 100)}%` }" />
-      </div>
-      <div class="text-small text-muted">经验值 {{ exp }} / {{ expRequired }}</div>
+      <div class="text-small text-muted">斗气 {{ Math.round(res.qi) }} / {{ Math.round(res.qiMax) }} {{ qiRecoveryText }}</div>
     </div>
 
     <div class="attribute-section">
       <h3 class="section-title attribute-title">属性详情</h3>
+      <div class="qi-controls">
+        <button
+          class="qi-progress"
+          type="button"
+          :class="{
+            disabled: qiProgressDisabled,
+            'qi-progress--active': qiProgressActive,
+            'qi-progress--meditate': isMeditating,
+          }"
+          :disabled="qiProgressDisabled"
+          @click="handleQiProgressClick"
+        >
+          <span class="qi-progress__bar" :style="{ width: `${warmupPercent}%` }" />
+          <span class="qi-progress__label">
+            {{ qiProgressLabel }}
+          </span>
+        </button>
+      </div>
       <table class="stat-table">
         <tbody>
           <tr v-for="stat in attributeRows" :key="stat.key">
@@ -184,6 +263,12 @@ function getItemEffect(item: any) {
 
     <div class="panel" style="margin-top: 20px; background: rgba(255,255,255,0.04);">
       <h3 class="section-title" style="font-size: 16px; margin-top: 0;">快速道具栏</h3>
+      <div
+        v-if="quickBarLocked"
+        class="quick-items-lock"
+      >
+        冥想中无法使用快捷道具
+      </div>
       <div class="quick-items-grid">
         <button
           v-for="item in availableConsumables"
@@ -193,7 +278,7 @@ function getItemEffect(item: any) {
           type="button"
           :disabled="item.disabled"
           @click="useItem(item.id)"
-          :title="`${item.name} - ${(item as any).description || ''} ${getItemEffect(item)}`"
+          :title="`${item.name} - ${(item as any).description || ''} ${getItemEffect(item)}${item.locked ? ' · 冥想中无法使用' : ''}`"
         >
           <div class="quick-item-content">
             <span class="quick-item-icon">
@@ -242,6 +327,62 @@ function getItemEffect(item: any) {
 
 .stat-equip--zero {
   color: rgba(255, 255, 255, 0.45);
+}
+
+.qi-controls {
+  display: flex;
+  margin: 12px 0 16px;
+}
+
+.qi-progress {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  overflow: hidden;
+  transition: border-color 0.2s ease, background 0.2s ease, opacity 0.2s ease;
+}
+
+.qi-progress.disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.qi-progress--active {
+  border-color: rgba(90, 211, 152, 0.9);
+  background: rgba(90, 211, 152, 0.12);
+}
+
+.qi-progress--meditate {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.qi-progress__bar {
+  position: absolute;
+  inset: 0;
+  width: 0;
+  background: linear-gradient(135deg, rgba(90, 211, 152, 0.85), rgba(84, 149, 255, 0.85));
+  transition: width 0.3s ease;
+}
+
+.qi-progress__label {
+  position: relative;
+  z-index: 1;
+  padding: 0 16px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
 /* 快速道具栏样式 */
@@ -325,6 +466,15 @@ function getItemEffect(item: any) {
   font-weight: 500;
 }
 
+.quick-items-lock {
+  margin-top: 4px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.75);
+  font-size: 13px;
+}
+
 .quick-item-quantity {
   display: inline-flex;
   align-items: center;
@@ -364,6 +514,11 @@ function getItemEffect(item: any) {
 @media (max-width: 768px) {
   .quick-item-button {
     padding: 8px;
+  }
+
+  .qi-progress {
+    height: 36px;
+    font-size: 13px;
   }
 
   .quick-item-icon {

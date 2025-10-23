@@ -55,7 +55,7 @@
         <button type="button" class="return-button" @click="returnToCity">返回翡冷翠</button>
       </div>
       <div v-else class="wild-layout">
-        <PlayerStatusPanel allow-allocation @open-allocate="openAttributePanel" />
+        <PlayerStatusPanel />
         <section class="wild-main">
           <header class="wild-header">
             <div class="wild-header__info">
@@ -110,7 +110,7 @@
                 </div>
                 <div class="stat-group reward">
                   <span class="stat-label">奖励</span>
-                  <span class="stat-value">{{ focusedMonster.rewardExp }} EXP ・ {{ focusedMonster.rewardGold }} GOLD</span>
+                  <span class="stat-value">{{ formatMonsterRewards(focusedMonster) }}</span>
                 </div>
               </div>
             </template>
@@ -123,36 +123,6 @@
           </div>
         </section>
       </div>
-      <div v-if="showAttributePanel" class="attribute-panel-overlay" @click.self="closeAttributePanel">
-        <div class="attribute-panel">
-          <h2 class="panel-title">属性分配</h2>
-          <div class="points-info">
-            <div>可用点数: {{ unspentPoints }}</div>
-            <div>已分配点数: {{ allocatedPoints }}</div>
-            <div>剩余点数: {{ unspentPoints - allocatedPoints }}</div>
-          </div>
-
-          <div class="attribute-list">
-            <div v-for="[attr, value] in attributeEntries" :key="attr" class="attribute-item">
-              <div class="attribute-name">{{ ATTRIBUTE_LABELS[attr] }}</div>
-              <div class="attribute-controls">
-                <button @click="adjustAttribute(attr, -1)" :disabled="value <= 0">-</button>
-                <span class="attribute-value">{{ value }}</span>
-                <button @click="adjustAttribute(attr, 1)" :disabled="allocatedPoints >= unspentPoints">+</button>
-                <button class="max-btn" @click="maximizeAttribute(attr)" :disabled="allocatedPoints >= unspentPoints">MAX</button>
-              </div>
-              <div class="attribute-preview">
-                {{ ATTRIBUTE_LABELS[attr] }}：{{ baseStats[attr] }} + {{ value }} = {{ previewStats[attr] }}
-              </div>
-            </div>
-          </div>
-
-          <div class="panel-actions">
-            <button class="btn btn-secondary" @click="closeAttributePanel">取消</button>
-            <button class="btn btn-primary" @click="confirmAttributeAllocation" :disabled="allocatedPoints === 0">确认分配</button>
-          </div>
-        </div>
-      </div>
     </div>
   </div>
   <div v-else class="map-empty">
@@ -162,25 +132,32 @@
 
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { storeToRefs } from 'pinia'
 import { useRoute, useRouter } from 'vue-router'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import { defaultMapId, maps as mapDefinitions, getMonsterPosition } from '@/data/maps'
 import { getMonsterMap, MONSTERS } from '@/data/monsters'
 import { useBattleStore } from '@/stores/battle'
-import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'
 import type { GameMap, MapLocation } from '@/types/map'
-import type { AttributeKey } from '@/types/domain'
+import type { Monster } from '@/types/domain'
 
 const route = useRoute()
 const router = useRouter()
 
 const battle = useBattleStore()
-const playerStore = usePlayerStore()
 const progress = useProgressStore()
 
-const { unspentPoints, baseStats } = storeToRefs(playerStore)
+function formatMonsterRewards(monster: Monster | null | undefined): string {
+  if (!monster) return ''
+  const rewards = monster.rewards
+  const gold = rewards?.gold ?? monster.rewardGold ?? 0
+  const deltaBp = rewards?.deltaBp
+  if (typeof deltaBp === 'number') {
+    return `ΔBP ${deltaBp} ・ GOLD ${gold}`
+  }
+  return `GOLD ${gold}`
+}
+
 
 const mapsList = computed(() => mapDefinitions.filter((map) => !isMapLocked(map)))
 const fallbackMap = computed(() => {
@@ -261,7 +238,7 @@ const monstersOnMap = computed(() => {
 
 const levelRange = computed(() => {
   if (monstersOnMap.value.length === 0) return null
-  const levels = monstersOnMap.value.map(m => m.lv)
+  const levels = monstersOnMap.value.map((m) => m.lv ?? 1)
   return {
     min: Math.min(...levels),
     max: Math.max(...levels)
@@ -295,30 +272,6 @@ function isLocationLocked(location: MapLocation) {
 const focusedLocationLocked = computed(() => {
   if (!focusedLocation.value) return false
   return isLocationLocked(focusedLocation.value)
-})
-
-const ATTRIBUTE_LABELS: Record<AttributeKey, string> = {
-  ATK: '攻击力',
-  DEF: '防御力',
-}
-
-const showAttributePanel = ref(false)
-const attributeAllocation = ref<Record<AttributeKey, number>>({
-  ATK: 0,
-  DEF: 0,
-})
-
-const attributeEntries = computed(() => Object.entries(attributeAllocation.value) as [AttributeKey, number][])
-
-const allocatedPoints = computed(() => {
-  return Object.values(attributeAllocation.value).reduce((sum, val) => sum + val, 0)
-})
-
-const previewStats = computed(() => {
-  return {
-    ATK: baseStats.value.ATK + attributeAllocation.value.ATK,
-    DEF: baseStats.value.DEF + attributeAllocation.value.DEF,
-  }
 })
 
 const focusedMonster = computed(() => {
@@ -398,43 +351,6 @@ function selectMonster(monsterId: string) {
   router.push('/battle')
 }
 
-function openAttributePanel() {
-  if (unspentPoints.value <= 0) return
-  showAttributePanel.value = true
-  attributeAllocation.value = {
-    ATK: 0,
-    DEF: 0,
-  }
-}
-
-function closeAttributePanel() {
-  showAttributePanel.value = false
-  attributeAllocation.value = {
-    ATK: 0,
-    DEF: 0,
-  }
-}
-
-function adjustAttribute(attr: AttributeKey, delta: number) {
-  const newValue = attributeAllocation.value[attr] + delta
-  if (newValue < 0) return
-  if (delta > 0 && allocatedPoints.value + delta > unspentPoints.value) return
-  attributeAllocation.value[attr] = newValue
-}
-
-function confirmAttributeAllocation() {
-  if (allocatedPoints.value === 0) return
-  if (playerStore.addAttributePoints(attributeAllocation.value)) {
-    closeAttributePanel()
-  }
-}
-
-function maximizeAttribute(attr: AttributeKey) {
-  const remainingPoints = unspentPoints.value - allocatedPoints.value
-  if (remainingPoints <= 0) return
-  attributeAllocation.value[attr] += remainingPoints
-}
-
 function returnToCity() {
   if (fallbackMap.value) {
     progress.setCurrentMap(fallbackMap.value.id)
@@ -447,7 +363,6 @@ watch(
   () => {
     focusedLocationId.value = null
     focusedMonsterId.value = null
-    showAttributePanel.value = false
   },
   { immediate: true }
 )

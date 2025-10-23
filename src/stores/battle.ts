@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
-import { dmgAttack } from '@/composables/useDamage'
+import { dmgAttack, getDefRefForRealm } from '@/composables/useDamage'
+import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS, applyDeltaBp } from '@/composables/useLeveling'
 import { makeRng, randRange } from '@/composables/useRng'
 import { bossUnlockMap } from '@/data/monsters'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
@@ -12,9 +13,36 @@ import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
 import { useUiStore } from './ui'
-import type { BattleState, Monster, FlashEffectKind, Equipment, EquipSlot, LootResult, ItemLootResult } from '@/types/domain'
+import { DODGE_LOCK_DURATION_MS, DODGE_WINDOW_MS } from '@/constants/dodge'
+import type { CultivationEnvironment } from '@/composables/useLeveling'
+import type {
+  BattleState,
+  Monster,
+  FlashEffectKind,
+  Equipment,
+  EquipSlot,
+  LootResult,
+  ItemLootResult,
+  QiOperationState,
+} from '@/types/domain'
 
 const ITEM_MAP = new Map(ITEMS.map((item) => [item.id, item]))
+
+type CultivationActionKey = keyof typeof CULTIVATION_ACTION_WEIGHTS
+
+interface CultivationFrameMetrics {
+  qiSpent: number
+  extraQiRestored: number
+  actions: Partial<Record<CultivationActionKey, number>>
+}
+
+function createEmptyCultivationMetrics(): CultivationFrameMetrics {
+  return {
+    qiSpent: 0,
+    extraQiRestored: 0,
+    actions: {},
+  }
+}
 
 const TICK_INTERVAL_MS = 1000 / 15
 const MAX_FRAME_TIME = 0.25
@@ -24,6 +52,8 @@ export const ITEM_COOLDOWN = 10
 const SKILL_SLOT_COUNT = 4
 const AUTO_REMATCH_BASE_DELAY = 800
 const AUTO_REMATCH_MIN_INTERVAL = 5000
+const DODGE_SKILL_ID = 'qi_dodge'
+const DODGE_REFUND_PERCENT = 0.04
 
 const EQUIPMENT_TIER_LEVEL: Record<EquipmentTier, number> = {
   iron: 1,
@@ -126,10 +156,73 @@ function aggregateItemDrop(
   return entry
 }
 
+function defaultQiOperationState(): QiOperationState {
+  return {
+    mode: 'idle',
+    startedAt: null,
+    lastTickAt: null,
+    warmupSeconds: DEFAULT_WARMUP_SECONDS,
+    progress: 0,
+    fValue: 0,
+  }
+}
+
+function cloneQiOperationState(operation: QiOperationState): QiOperationState {
+  return {
+    mode: operation.mode,
+    startedAt: operation.startedAt,
+    lastTickAt: operation.lastTickAt,
+    warmupSeconds: operation.warmupSeconds,
+    progress: operation.progress,
+    fValue: operation.fValue,
+  }
+}
+
+function resolveMonsterHpMax(monster: Monster): number {
+  if (monster.resources?.hpMax) return monster.resources.hpMax
+  if (monster.attributes?.caps.hpMax) return monster.attributes.caps.hpMax
+  if (typeof monster.hpMax === 'number') return monster.hpMax
+  return 0
+}
+
+function resolveMonsterQi(monster: Monster): number {
+  if (monster.resources?.qi) return monster.resources.qi
+  if (monster.resources?.qiMax) return monster.resources.qiMax
+  return 0
+}
+
+function resolveMonsterAtk(monster: Monster): number {
+  if (monster.attributes?.totals.ATK !== undefined) return monster.attributes.totals.ATK
+  if (typeof monster.atk === 'number') return monster.atk
+  return 0
+}
+
+function resolveMonsterAgi(monster: Monster): number {
+  if (monster.attributes?.totals.AGI !== undefined) return monster.attributes.totals.AGI
+  if (typeof monster.agi === 'number') return monster.agi
+  const level = monster.lv ?? 1
+  return 10 + level * 2
+}
+
+function resolveMonsterPenetration(monster: Monster) {
+  const fallbackLevel = monster.lv ?? 1
+  if (monster.penetration) {
+    return {
+      flat: monster.penetration.flat ?? 0,
+      pct: monster.penetration.pct ?? Math.min(Math.max(0.1 + 0.012 * fallbackLevel, 0), 0.6),
+    }
+  }
+  return {
+    flat: 0,
+    pct: Math.min(Math.max(0.1 + 0.012 * fallbackLevel, 0), 0.6),
+  }
+}
+
 function initialState(): BattleState {
   return {
     monster: null,
     monsterHp: 0,
+    monsterQi: 0,
     rngSeed: Date.now() >>> 0,
     floatTexts: [],
     flashEffects: [],
@@ -140,9 +233,17 @@ function initialState(): BattleState {
     loot: [],
     loopHandle: null,
     lastTickAt: 0,
+    battleStartedAt: null,
+    battleEndedAt: null,
     monsterTimer: MONSTER_ATTACK_INTERVAL,
     skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
     itemCooldowns: {},
+    actionLockUntil: null,
+    pendingDodge: null,
+    playerQi: 0,
+    playerQiMax: 0,
+    qiOperation: defaultQiOperationState(),
+    cultivationFrame: createEmptyCultivationMetrics(),
   }
 }
 
@@ -180,20 +281,35 @@ export const useBattleStore = defineStore('battle', {
       this.stopLoop()
       this.clearRematchTimer()
       Object.assign(this, initialState())
+      const player = usePlayerStore()
+      player.setRecoveryMode('idle')
+      player.stopQiOperation()
+      player.stopQiOperation()
     },
     exitBattle() {
       this.stopLoop()
       this.clearRematchTimer()
       this.monster = null
       this.monsterHp = 0
+      this.monsterQi = 0
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
       this.rematchTimer = null
       this.skillCooldowns = Array(this.skillCooldowns.length || SKILL_SLOT_COUNT).fill(0)
       this.itemCooldowns = {}
+      this.actionLockUntil = null
+      this.pendingDodge = null
       this.monsterTimer = MONSTER_ATTACK_INTERVAL
       this.lastTickAt = 0
+      this.battleStartedAt = null
+      this.battleEndedAt = null
+      this.playerQi = 0
+      this.playerQiMax = 0
+      this.qiOperation = defaultQiOperationState()
+      this.resetCultivationMetrics()
+      const player = usePlayerStore()
+      player.setRecoveryMode('idle')
       // 保留lastOutcome和loot以便在结算页面显示
       // this.lastOutcome = null
       // this.loot = []
@@ -202,17 +318,27 @@ export const useBattleStore = defineStore('battle', {
       this.clearRematchTimer()
       this.stopLoop()
       this.monster = monster
-      this.monsterHp = monster.hpMax
+      this.monsterHp = resolveMonsterHpMax(monster)
+      this.monsterQi = resolveMonsterQi(monster)
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
       this.rngSeed = (seed ?? Date.now()) >>> 0
       this.lastOutcome = null
       this.loot = []
+      this.battleStartedAt = Date.now()
+      this.battleEndedAt = null
       const player = usePlayerStore()
+      this.resetCultivationMetrics()
+      player.setRecoveryMode('run')
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
       const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
       this.skillCooldowns = Array(slotCount).fill(0)
       this.itemCooldowns = {}
+      this.actionLockUntil = null
+      this.pendingDodge = null
       this.monsterTimer = MONSTER_ATTACK_INTERVAL
       this.lastTickAt = getNow()
       this.startLoop()
@@ -235,11 +361,53 @@ export const useBattleStore = defineStore('battle', {
         this.loopHandle = null
       }
     },
+    resetCultivationMetrics() {
+      this.cultivationFrame = createEmptyCultivationMetrics()
+    },
+    recordQiSpent(amount: number) {
+      if (!Number.isFinite(amount) || amount <= 0) return
+      this.cultivationFrame.qiSpent += amount
+    },
+    recordQiRestored(amount: number) {
+      if (!Number.isFinite(amount) || amount <= 0) return
+      this.cultivationFrame.extraQiRestored += amount
+    },
+    recordCultivationAction(action: CultivationActionKey, value = 1) {
+      if (!Number.isFinite(value) || value <= 0) return
+      const current = this.cultivationFrame.actions[action] ?? 0
+      this.cultivationFrame.actions[action] = current + value
+    },
+    applyCultivationTick(deltaSeconds: number) {
+      if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return
+      const player = usePlayerStore()
+      const env: CultivationEnvironment = this.monster?.isBoss ? 'boss_battle' : 'battle'
+      if (player.res.hpMax > 0 && player.res.hp / player.res.hpMax <= 0.2) {
+        this.recordCultivationAction('lowHpPersistence', deltaSeconds)
+      }
+      player.tickCultivation(deltaSeconds, {
+        environment: env,
+        qiSpent: this.cultivationFrame.qiSpent,
+        extraQiRestored: this.cultivationFrame.extraQiRestored,
+        actions: this.cultivationFrame.actions,
+        inBattle: true,
+        bossBattle: this.monster?.isBoss ?? false,
+      })
+
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
+      this.resetCultivationMetrics()
+    },
     tick() {
       if (!this.monster || this.concluded !== 'idle') {
         this.stopLoop()
         return
       }
+
+      const player = usePlayerStore()
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
 
       const now = getNow()
       const last = this.lastTickAt || now
@@ -280,6 +448,8 @@ export const useBattleStore = defineStore('battle', {
         this.monsterAttack()
         this.monsterTimer += MONSTER_ATTACK_INTERVAL
       }
+
+      this.applyCultivationTick(delta)
     },
     getSkillCooldown(slotIndex: number) {
       return this.skillCooldowns[slotIndex] ?? 0
@@ -355,6 +525,7 @@ export const useBattleStore = defineStore('battle', {
       const equipmentDrops: LootResult[] = []
       let extraGold = 0
       let hasExtraGold = false
+      const baseRewardGold = monster.rewardGold ?? 0
 
       for (let index = 0; index < dropCount; index += 1) {
         const choice = weightedPick(entries, lootRng)
@@ -379,7 +550,7 @@ export const useBattleStore = defineStore('battle', {
         } else if (choice.kind === 'gold') {
           const multiplier = Math.max(choice.multiplier, 0)
           if (multiplier > 1) {
-            const bonus = Math.round(monster.rewardGold * (multiplier - 1))
+            const bonus = Math.round(baseRewardGold * (multiplier - 1))
             if (bonus > 0) {
               extraGold += bonus
               hasExtraGold = true
@@ -388,12 +559,12 @@ export const useBattleStore = defineStore('battle', {
         }
       }
 
-      let totalGold = monster.rewardGold
+      let totalGold = baseRewardGold
       if (hasExtraGold) {
         totalGold += extraGold
       }
 
-      if (totalGold > monster.rewardGold) {
+      if (totalGold > baseRewardGold) {
         player.gainGold(totalGold)
       }
 
@@ -404,7 +575,7 @@ export const useBattleStore = defineStore('battle', {
       if (itemDrops.size > 0) {
         lootResults.push(...itemDrops.values())
       }
-      if (totalGold > monster.rewardGold) {
+      if (totalGold > baseRewardGold) {
         lootResults.push({
           kind: 'gold',
           name: 'GOLD',
@@ -418,7 +589,9 @@ export const useBattleStore = defineStore('battle', {
     conclude(result: 'victory' | 'defeat', loot: LootResult[] = []) {
       const currentMonster = this.monster
       this.stopLoop()
+      this.resetCultivationMetrics()
       this.concluded = result
+      this.battleEndedAt = Date.now()
       this.loot = loot
       if (currentMonster) {
         this.lastOutcome = {
@@ -433,6 +606,10 @@ export const useBattleStore = defineStore('battle', {
       this.itemCooldowns = {}
       this.monsterTimer = MONSTER_ATTACK_INTERVAL
       this.lastTickAt = 0
+      this.actionLockUntil = null
+      this.pendingDodge = null
+      const player = usePlayerStore()
+      player.setRecoveryMode('idle')
       if (result === 'victory') {
         if (currentMonster) {
           // 检查金手指设置中的自动重赛开关，只有普通怪且开启自动重赛才会自动重赛
@@ -454,6 +631,11 @@ export const useBattleStore = defineStore('battle', {
 
       const player = usePlayerStore()
       const silent = options?.silent ?? false
+      const now = getNow()
+      if (this.actionLockUntil !== null && now < this.actionLockUntil) {
+        if (!silent) this.pushFloat('动作硬直中', 'miss')
+        return false
+      }
       const loadout = player.skills.loadout
 
       if (slotIndex < 0 || slotIndex >= loadout.length) {
@@ -473,41 +655,52 @@ export const useBattleStore = defineStore('battle', {
         return false
       }
 
+      const operationMode = player.res.operation?.mode ?? 'idle'
+      if (operationMode === 'idle') {
+        if (!silent) this.pushFloat('需先运转斗气', 'miss')
+        return false
+      }
+
       const cooldownRemaining = this.getSkillCooldown(slotIndex)
       if (cooldownRemaining > 0) {
         if (!silent) this.pushFloat(`冷却中 ${cooldownRemaining.toFixed(1)}s`, 'miss')
         return false
       }
 
-      const cost = skill.cost
-      if (cost.type === 'sp') {
-        const amount = cost.amount ?? 0
-        if (!player.spendSp(amount)) {
-          if (!silent) this.pushFloat('SP不足', 'miss')
+      let qiCost = 0
+      if (skill.cost.type === 'qi') {
+        const percent = Math.max(skill.cost.percentOfQiMax ?? 0, 0)
+        const base = Math.max(skill.cost.amount ?? 0, 0)
+        const mastery = player.mastery.entries[skillId]
+        const reduction = Math.min(Math.max(mastery?.bonus.costReduction ?? 0, 0), 0.9)
+        qiCost = (base + percent * player.res.qiMax) * (1 - reduction)
+        if (qiCost > 0 && !player.spendQi(qiCost)) {
+          if (!silent) this.pushFloat('斗气不足', 'miss')
           return false
         }
-      } else if (cost.type === 'xp') {
-        const amount = cost.amount ?? 0
-        if (!player.spendXp(amount)) {
-          if (!silent) this.pushFloat('XP不足', 'miss')
-          return false
-        }
+        if (qiCost > 0) this.recordQiSpent(qiCost)
       }
 
       const stats = player.finalStats
       const rng = makeRng(this.rngSeed)
       this.rngSeed = (this.rngSeed + 0x9e3779b9) >>> 0
-      const rewardOnHit = (coreDamage: number) => {
-        if (!this.monster || coreDamage <= 0) return
-        player.gainXp(1)
-      }
 
-      const result = skill.execute({ stats, monster: this.monster, rng, playerLevel: player.lv })
+      const result = skill.execute({
+        stats,
+        monster: this.monster,
+        rng,
+        resources: player.res,
+        cultivation: player.cultivation,
+        mastery: player.mastery.entries[skillId] ?? undefined,
+      })
+
       const dmg = Math.max(0, Math.round(result.damage ?? 0))
-      const coreDamage = Math.max(0, Math.round(result.coreDamage ?? 0))
       if (dmg > 0) {
         this.applyPlayerDamage(dmg, skill.flash)
-        rewardOnHit(coreDamage)
+        this.recordCultivationAction('attackHit', 1)
+        if (skillId === 'destiny_slash') {
+          this.recordCultivationAction('finisherHit', 1)
+        }
       } else {
         this.triggerFlash(skill.flash)
       }
@@ -516,16 +709,43 @@ export const useBattleStore = defineStore('battle', {
         player.heal(result.healSelf)
         this.pushFloat(`+${result.healSelf}`, 'heal')
       }
-      if (result.gainSp && result.gainSp > 0) {
-        player.restoreSp(result.gainSp)
-        this.pushFloat(`SP+${result.gainSp}`, 'heal')
+
+      if (result.gainQi && result.gainQi > 0) {
+        const beforeQi = player.res.qi
+        player.restoreQi(result.gainQi)
+        const gained = Math.max(player.res.qi - beforeQi, 0)
+        if (gained > 0) {
+          this.recordQiRestored(gained)
+          this.pushFloat(`斗气+${Math.round(gained)}`, 'heal')
+        }
       }
-      if (result.gainXp && result.gainXp > 0) {
-        player.restoreXp(result.gainXp)
-        this.pushFloat(`XP+${result.gainXp}`, 'heal')
+
+      if (result.spendQi && result.spendQi > 0) {
+        if (player.spendQi(result.spendQi)) {
+          this.recordQiSpent(result.spendQi)
+        } else if (!silent) {
+          this.pushFloat('斗气不足', 'miss')
+        }
       }
+
       if (result.message) {
         this.pushFloat(result.message, 'miss')
+      }
+
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
+
+      if (skillId === DODGE_SKILL_ID) {
+        const attemptTime = getNow()
+        const refundTarget = player.res.qiMax * DODGE_REFUND_PERCENT
+        const refund = Math.min(refundTarget, Math.max(qiCost, 0))
+        this.pendingDodge = {
+          attemptedAt: attemptTime,
+          refundAmount: refund,
+          consumedQi: qiCost,
+        }
+        this.actionLockUntil = attemptTime + DODGE_LOCK_DURATION_MS
       }
 
       const skillCooldown = skill.cooldown ?? FALLBACK_SKILL_COOLDOWN
@@ -538,13 +758,11 @@ export const useBattleStore = defineStore('battle', {
       if (this.concluded !== 'idle') return true
 
       if (this.monsterHp <= 0 && this.monster) {
-        player.gainExp(this.monster.rewardExp)
-        player.gainGold(this.monster.rewardGold)
+        player.gainGold(this.monster.rewardGold ?? 0)
 
         const progress = useProgressStore()
         progress.markMonsterCleared(this.monster.id)
 
-        // 只有击败BOSS才会解锁下一个地图
         if (this.monster.isBoss) {
           const nextMapId = bossUnlockMap[this.monster.id]
           if (nextMapId) {
@@ -554,16 +772,35 @@ export const useBattleStore = defineStore('battle', {
 
         const loot = this.applyVictoryLoot(this.monster, player)
 
+        // 战斗产出 ΔBP 与战后结算（含溢出/瓶颈提示）
+        const now = Date.now()
+        const strength = Math.max(1, (this.monster.lv ?? 1))
+        const rewardDelta = this.monster.rewards?.deltaBp
+        const baseDelta = typeof rewardDelta === 'number' ? Math.max(rewardDelta, 0) : 0.0025 * strength
+        const deltaResult = applyDeltaBp(player.cultivation, baseDelta, now)
+        if (deltaResult.applied > 0 || deltaResult.overflow > 0) {
+          if (deltaResult.applied > 0) this.pushFloat(`ΔBP+${deltaResult.applied.toFixed(2)}`, 'loot')
+          if (deltaResult.overflow > 0 || player.cultivation.realm.bottleneck) {
+            this.pushFloat('储能溢出/瓶颈', 'miss')
+          }
+          player.refreshDerived()
+        }
+
         this.conclude('victory', loot)
         return true
       }
 
       return true
     },
-    useItem(itemId: string, options?: { silent?: boolean }): boolean {
+    async useItem(itemId: string, options?: { silent?: boolean }): Promise<boolean> {
       if (!this.monster || this.concluded !== 'idle') return false
 
       const silent = options?.silent ?? false
+      const now = getNow()
+      if (this.actionLockUntil !== null && now < this.actionLockUntil) {
+        if (!silent) this.pushFloat('动作硬直中', 'miss')
+        return false
+      }
       const cooldownRemaining = this.getItemCooldown(itemId)
       if (cooldownRemaining > 0) {
         if (!silent) this.pushFloat(`冷却中 ${cooldownRemaining.toFixed(1)}s`, 'miss')
@@ -574,7 +811,7 @@ export const useBattleStore = defineStore('battle', {
       const player = usePlayerStore()
       const def = ITEMS.find(item => item.id === itemId)
 
-      if (!def || (!('heal' in def && def.heal) && !('restoreSp' in def && def.restoreSp) && !('restoreXp' in def && def.restoreXp))) {
+      if (!def) {
         if (!silent) this.pushFloat('无法使用', 'miss')
         return false
       }
@@ -585,20 +822,36 @@ export const useBattleStore = defineStore('battle', {
         return false
       }
 
-      if ('heal' in def && def.heal) {
-        player.heal(def.heal)
-        this.pushFloat(`+${def.heal}`, 'heal')
+      const beforeHp = player.res.hp
+      const beforeQi = player.res.qi
+      const beforeOverflow = player.cultivation.realm.overflow
+      const applied = await player.useItem(itemId)
+      if (!applied) {
+        inventory.addItem(itemId, 1)
+        if (!silent) this.pushFloat('未生效', 'miss')
+        return false
       }
-      if ('restoreSp' in def && def.restoreSp) {
-        player.restoreSp(def.restoreSp)
-        this.pushFloat(`SP+${def.restoreSp}`, 'heal')
+
+      const hpGain = Math.max(player.res.hp - beforeHp, 0)
+      if (hpGain > 0) {
+        this.pushFloat(`+${Math.round(hpGain)}`, 'heal')
       }
-      if ('restoreXp' in def && def.restoreXp) {
-        player.restoreXp(def.restoreXp)
-        this.pushFloat(`XP+${def.restoreXp}`, 'heal')
+
+      const qiGain = Math.max(player.res.qi - beforeQi, 0)
+      if (qiGain > 0) {
+        this.recordQiRestored(qiGain)
+        this.pushFloat(`斗气+${Math.round(qiGain)}`, 'heal')
+      }
+
+      const overflowChange = Math.max(player.cultivation.realm.overflow - beforeOverflow, 0)
+      if (overflowChange > 0) {
+        this.pushFloat(`ΔBP+${overflowChange.toFixed(2)}`, 'loot')
       }
 
       this.itemCooldowns[itemId] = ITEM_COOLDOWN
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
       return true
     },
     applyPlayerDamage(dmg: number, source: 'attack' | 'skill' | 'ult') {
@@ -612,15 +865,88 @@ export const useBattleStore = defineStore('battle', {
       const stats = player.finalStats
       const rng = makeRng(this.rngSeed ^ 0x517cc1b7)
       this.rngSeed = (this.rngSeed + 0x7f4a7c15) >>> 0
-      const penPct = Math.min(Math.max(0.1 + 0.012 * this.monster.lv, 0), 0.6)
-      const damageResult = dmgAttack(this.monster.atk, stats.DEF, randRange(rng, 0, 1), {
-        penPct,
-        contentLevel: this.monster.lv,
+      const now = getNow()
+
+      let dodged = false
+      const dodgeAttempt = this.pendingDodge
+      if (dodgeAttempt) {
+        const elapsedMs = now - dodgeAttempt.attemptedAt
+        const windowMs = DODGE_WINDOW_MS
+        if (elapsedMs >= 0 && elapsedMs <= windowMs) {
+          const playerAgi = stats.totals.AGI
+          const enemyAgi = resolveMonsterAgi(this.monster)
+          let chance = 0.1 + 0.005 * (playerAgi - enemyAgi)
+          const masteryBonus = player.mastery.entries[DODGE_SKILL_ID]?.bonus?.dodge ?? 0
+          chance += masteryBonus
+          if (chance < 0) chance = 0
+          if (chance > 1) chance = 1
+          const roll = rng()
+          if (roll < chance) {
+            dodged = true
+            this.pushFloat('闪避!', 'miss')
+            const refund = Math.max(dodgeAttempt.refundAmount, 0)
+            if (refund > 0) {
+              const beforeQi = player.res.qi
+              player.restoreQi(refund)
+              const gained = Math.max(player.res.qi - beforeQi, 0)
+              if (gained > 0) {
+                this.recordQiRestored(gained)
+                this.pushFloat(`斗气+${Math.round(gained)}`, 'heal')
+              }
+            }
+            this.recordCultivationAction('perfectDodge', 1)
+          }
+        }
+        this.pendingDodge = null
+      }
+
+      if (dodged) {
+        this.playerQi = player.res.qi
+        this.playerQiMax = player.res.qiMax
+        this.qiOperation = cloneQiOperationState(player.res.operation)
+        return
+      }
+      const monsterLevel = this.monster.lv ?? 1
+      const penetration = resolveMonsterPenetration(this.monster)
+      const defRef = getDefRefForRealm(player.cultivation?.realm)
+      const damageResult = dmgAttack(resolveMonsterAtk(this.monster), stats.totals.DEF, randRange(rng, 0, 1), {
+        penPct: penetration.pct,
+        penFlat: penetration.flat,
+        defRef: defRef || undefined,
+        contentLevel: defRef ? 0 : monsterLevel,
         defenderTough: 1,
-        attackerLevel: this.monster.lv,
       })
-      player.receiveDamage(damageResult.damage)
-      this.pushFloat(`-${damageResult.damage}`, 'hitP')
+
+      let incoming = Math.max(0, damageResult.damage)
+      // Qi Shielding (BATTLE.md §4.3)
+      const f = Math.max(0, Math.min(1, player.res.operation.fValue || 0))
+      if ((player.res.operation.mode !== 'idle') && f > 0 && incoming > 0) {
+        const ratioEff = 0.90 * f
+        const absorbedCap = 0.60 * incoming
+        const desiredAbsorb = incoming * ratioEff
+        const canAbsorb = Math.min(desiredAbsorb, absorbedCap)
+        const w = 1.1
+        const qiNeed = canAbsorb * w
+        const qiHave = Math.max(player.res.qi, 0)
+        if (qiHave >= qiNeed) {
+          if (qiNeed > 0) {
+            if (player.spendQi(qiNeed)) this.recordQiSpent(qiNeed)
+          }
+          incoming -= canAbsorb
+        } else if (qiHave > 0) {
+          const partialAbsorb = qiHave / w
+          if (player.spendQi(qiHave)) this.recordQiSpent(qiHave)
+          incoming -= partialAbsorb
+        }
+      }
+
+      const dealt = Math.round(Math.max(0, incoming))
+      player.receiveDamage(dealt)
+      this.pushFloat(`-${dealt}`, 'hitP')
+      this.recordCultivationAction('damageTaken', 1)
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
 
       if (player.res.hp <= 0) {
         this.applyDeathPenalty()
@@ -631,23 +957,18 @@ export const useBattleStore = defineStore('battle', {
     applyDeathPenalty() {
       const player = usePlayerStore()
 
-      // Lose all current level experience (player.exp)
-      player.exp = 0
-
-      // Lose 1/3 of gold (round down)
       const goldLoss = Math.floor(player.gold / 3)
       player.gold -= goldLoss
 
-      // Show death penalty floating text
-      this.pushFloat(`复活! 损失经验值和${goldLoss}G`, 'heal')
+      this.pushFloat(`复活! 损失 ${goldLoss}G`, 'heal')
+      this.pushFloat('斗气崩散，需重新预热', 'miss')
 
-      // Show additional penalty details
-      this.pushFloat(`失去全部经验值`, 'miss')
-
-      // Full health resurrection
-      player.res.hp = player.res.hpMax
-      player.res.sp = player.res.spMax
-      player.res.xp = player.res.xpMax
+      player.restoreFull()
+      player.setRecoveryMode('idle')
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
+      this.resetCultivationMetrics()
     },
   },
 })

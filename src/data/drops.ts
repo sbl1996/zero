@@ -33,8 +33,8 @@ export type DropEntry = ItemDropEntry | EquipmentDropEntry | GoldDropEntry
 
 interface PotionWeights {
   hp: number
-  sp: number
-  xp: number
+  qi: number
+  qiPlus: number
 }
 
 interface GoldWeight {
@@ -70,7 +70,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'iron',
     nextTier: 'steel',
     normal: {
-      potions: { hp: 60, sp: 20, xp: 10 },
+      potions: { hp: 60, qi: 20, qiPlus: 10 },
       equipmentWeight: 10,
     },
     boss: {
@@ -87,7 +87,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'steel',
     nextTier: 'knight',
     normal: {
-      potions: { hp: 50, sp: 20, xp: 10 },
+      potions: { hp: 50, qi: 20, qiPlus: 10 },
       equipmentWeight: 12,
     },
     boss: {
@@ -104,7 +104,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'knight',
     nextTier: 'mithril',
     normal: {
-      potions: { hp: 45, sp: 20, xp: 15 },
+      potions: { hp: 45, qi: 20, qiPlus: 15 },
       equipmentWeight: 12,
     },
     boss: {
@@ -121,7 +121,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'mithril',
     nextTier: 'rune',
     normal: {
-      potions: { hp: 40, sp: 25, xp: 15 },
+      potions: { hp: 40, qi: 25, qiPlus: 15 },
       equipmentWeight: 14,
     },
     boss: {
@@ -138,7 +138,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'rune',
     nextTier: 'dragon',
     normal: {
-      potions: { hp: 35, sp: 25, xp: 17 },
+      potions: { hp: 35, qi: 25, qiPlus: 17 },
       equipmentWeight: 16,
     },
     boss: {
@@ -155,7 +155,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'dragon',
     nextTier: 'celestial',
     normal: {
-      potions: { hp: 30, sp: 25, xp: 20 },
+      potions: { hp: 30, qi: 25, qiPlus: 20 },
       equipmentWeight: 17,
     },
     boss: {
@@ -172,7 +172,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'celestial',
     nextTier: null,
     normal: {
-      potions: { hp: 25, sp: 25, xp: 24 },
+      potions: { hp: 25, qi: 25, qiPlus: 24 },
       equipmentWeight: 18,
     },
     boss: {
@@ -189,7 +189,7 @@ const LEVEL_BANDS: LevelBand[] = [
     currentTier: 'dragon',
     nextTier: null,
     normal: {
-      potions: { hp: 25, sp: 25, xp: 24 },
+      potions: { hp: 25, qi: 25, qiPlus: 24 },
       equipmentWeight: 18,
     },
     boss: {
@@ -218,8 +218,8 @@ function normalizePotionEntries(
 ): ItemDropEntry[] {
   const entries: ItemDropEntry[] = [
     { kind: 'item', itemId: 'potionHP', weight: Math.max(0, weights.hp) },
-    { kind: 'item', itemId: 'potionSP', weight: Math.max(0, weights.sp) },
-    { kind: 'item', itemId: 'potionXP', weight: Math.max(0, weights.xp) },
+    { kind: 'item', itemId: 'potionQi', weight: Math.max(0, weights.qi) },
+    { kind: 'item', itemId: 'potionQiPlus', weight: Math.max(0, weights.qiPlus) },
   ]
   const positiveEntries = entries.filter((entry) => entry.weight > 0)
   if (!positiveEntries.length) return []
@@ -249,7 +249,7 @@ function normalizeGoldEntries(weights: GoldWeight[], totalWeight: number): GoldD
 }
 
 export function getDropEntries(monster: Monster): DropEntry[] {
-  const band = findLevelBand(monster.lv)
+  const band = findLevelBand(monster.lv ?? 1)
   if (!band) return []
 
   if (!monster.isBoss) {

@@ -4,7 +4,8 @@
       <h1 class="app-title">零 ZERO</h1>
       <nav class="app-nav">
         <RouterLink to="/map" class="nav-link" active-class="active">地图</RouterLink>
-        <RouterLink to="/skills" class="nav-link" active-class="active">技能</RouterLink>
+        <RouterLink to="/meditation" class="nav-link" active-class="active">修炼</RouterLink>
+        <RouterLink to="/skills" class="nav-link" active-class="active">功法</RouterLink>
         <RouterLink to="/equipment" class="nav-link" active-class="active">装备</RouterLink>
         <RouterLink to="/backpack" class="nav-link" active-class="active">背包</RouterLink>
       </nav>

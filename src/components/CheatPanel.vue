@@ -11,13 +11,17 @@ const ui = useUiStore()
 const { showCheatPanel, enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(ui)
 
 const goldAmount = ref(1000)
+const upgradingRealm = ref(false)
 
 const sanitizedGold = computed(() => {
   const value = Math.floor(goldAmount.value)
   return Number.isFinite(value) && value > 0 ? value : 0
 })
 
-const expNeeded = computed(() => playerStore.expRequired)
+const isRealmMaxed = computed(() => {
+  const realm = playerStore.cultivation.realm
+  return realm.tier === 'sanctuary' && realm.phase === 'limit'
+})
 
 function close() {
   ui.toggleCheatPanel(false)
@@ -27,17 +31,9 @@ function restoreFull() {
   playerStore.restoreFull()
 }
 
-function levelUp() {
-  playerStore.gainExp(expNeeded.value)
-}
-
 function grantGold() {
   if (sanitizedGold.value <= 0) return
   playerStore.gainGold(sanitizedGold.value)
-}
-
-function respecAttributes() {
-  playerStore.respecAttributes()
 }
 
 function unlockAllMonsters() {
@@ -65,6 +61,16 @@ function handleAutoRematchToggle(event: Event) {
   if (!target) return
   ui.toggleAutoRematch(target.checked)
 }
+
+async function advanceRealmDirectly() {
+  if (upgradingRealm.value || isRealmMaxed.value) return
+  upgradingRealm.value = true
+  try {
+    await playerStore.cheatAdvanceRealm()
+  } finally {
+    upgradingRealm.value = false
+  }
+}
 </script>
 
 <template>
@@ -80,10 +86,17 @@ function handleAutoRematchToggle(event: Event) {
 
         <div class="cheat-actions">
           <button class="btn" type="button" @click="restoreFull">回复全满</button>
-          <button class="btn" type="button" @click="levelUp">立即升级</button>
-          <button class="btn" type="button" @click="respecAttributes">洗点</button>
           <button class="btn" type="button" @click="unlockAllMonsters">解锁全部地图</button>
+          <button
+            class="btn"
+            type="button"
+            :disabled="upgradingRealm || isRealmMaxed"
+            @click="advanceRealmDirectly"
+          >
+            直接突破下一境界
+          </button>
         </div>
+        <p v-if="isRealmMaxed" class="text-small text-muted" style="margin: 6px 0 0;">已达最高境界。</p>
 
         <div class="cheat-settings">
           <label class="cheat-settings-toggle">

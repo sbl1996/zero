@@ -7,6 +7,8 @@ const EnhanceView = () => import('@/views/EnhanceView.vue')
 const ShopView = () => import('@/views/ShopView.vue')
 const SkillView = () => import('@/views/SkillView.vue')
 const MapView = () => import('@/views/MapView.vue')
+const MeditationView = () => import('@/views/MeditationView.vue')
+const WarriorGuildView = () => import('@/views/WarriorGuildView.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -19,5 +21,7 @@ export const router = createRouter({
     { path: '/backpack', name: 'backpack', component: BackpackView },
     { path: '/enhance/:entryKey?', name: 'enhance', component: EnhanceView },
     { path: '/shop', name: 'shop', component: ShopView },
+    { path: '/meditation', name: 'meditation', component: MeditationView },
+    { path: '/warrior-guild', name: 'warrior-guild', component: WarriorGuildView },
   ],
 })

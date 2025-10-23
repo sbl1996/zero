@@ -139,7 +139,7 @@ function formatMainStat(equipment: Equipment): string {
   if (breakdowns.length === 0) return '主要属性 —'
 
   const breakdown = breakdowns[0]!
-  const statLabel = breakdown.key === 'ATK' ? '攻击力' : breakdown.key === 'DEF' ? '防御力' : '生命值'
+  const statLabel = breakdown.key === 'ATK' ? '攻击' : breakdown.key === 'DEF' ? '防御' : '生命值'
   const increase = breakdown.total - breakdown.base
 
   return `${statLabel} ${breakdown.total} (+${increase})`
@@ -158,9 +158,15 @@ function getMainStatTooltip(equipment: Equipment): string {
 
 function formatSubs(subs: EquipSubStats): string[] {
   const entries: string[] = []
-  if (subs.addATK) entries.push(`追加攻击力 +${subs.addATK}`)
-  if (subs.addDEF) entries.push(`追加防御力 +${subs.addDEF}`)
+  if (subs.addATK) entries.push(`追加攻击 +${subs.addATK}`)
+  if (subs.addDEF) entries.push(`追加防御 +${subs.addDEF}`)
   if (subs.addHP) entries.push(`追加生命值 +${subs.addHP}`)
+  if (subs.addQiMax) entries.push(`斗气上限 +${subs.addQiMax}`)
+  if (subs.addAGI) entries.push(`敏捷 +${subs.addAGI}`)
+  if (subs.addREC) entries.push(`恢复 +${subs.addREC}`)
+  if (subs.penFlat) entries.push(`穿透(固定) +${subs.penFlat}`)
+  if (subs.penPct) entries.push(`穿透(%) +${Math.round(subs.penPct * 100)}%`)
+  if (subs.toughness) entries.push(`韧性 +${subs.toughness}`)
   return entries.length > 0 ? entries : ['无']
 }
 
@@ -357,9 +363,7 @@ function handleEquip(equipment: Equipment) {
       const replacedText = replacedNames.length > 0 ? `（替换：${replacedNames.join('、')}）` : ''
       showFeedback(`已穿戴 ${result.equipped.name}${replacedText}`, true)
     } else {
-      if (result.reason === 'level-too-low') {
-        showFeedback(`等级不足，需求 LV${result.requiredLevel}`, false)
-      } else if (result.reason === 'already-equipped' && result.slot) {
+      if (result.reason === 'already-equipped' && result.slot) {
         showFeedback('该装备已穿戴', false)
       } else {
         showFeedback('装备失败，请稍后再试', false)
@@ -398,14 +402,14 @@ function currentEquipmentName(slot: EquipSlot) {
 }
 
 function handleUseItem(itemId: string, itemName: string) {
-  withActionLock(() => {
+  withActionLock(async () => {
     const used = inventory.spend(itemId, 1)
     if (!used) {
       showFeedback('库存不足', false)
       return
     }
 
-    const effectApplied = player.useItem(itemId)
+    const effectApplied = await player.useItem(itemId)
     if (!effectApplied) {
       // Return the item if no effect was applied
       inventory.add(itemId, 1)
@@ -421,17 +425,10 @@ function canUseConsumable(itemId: string): boolean {
   const def = ITEMS.find(item => item.id === itemId)
   if (!def) return false
 
-  // Check if item has any restorative effects
-  if ('heal' in def && def.heal && def.heal > 0 && player.res.hp < player.res.hpMax) {
-    return true
-  }
-  if ('restoreSp' in def && def.restoreSp && def.restoreSp > 0 && player.res.sp < player.res.spMax) {
-    return true
-  }
-  if ('restoreXp' in def && def.restoreXp && def.restoreXp > 0 && player.res.xp < player.res.xpMax) {
-    return true
-  }
-
+  // Check if item has restorative effects or breakthrough
+  if ('heal' in def && def.heal && def.heal > 0 && player.res.hp < player.res.hpMax) return true
+  if ('restoreQi' in def && def.restoreQi && def.restoreQi > 0 && player.res.qi < player.res.qiMax) return true
+  if ('breakthroughMethod' in def && def.breakthroughMethod) return true
   return false
 }
 
@@ -537,8 +534,8 @@ function entryTypeLabel(type: BackpackEntryType): string {
           <template v-else>
             <div class="inventory-card__body">
               <div class="text-small">部位：{{ entry.slotLabel }}</div>
-              <div v-if="entry.requiredLevel && entry.requiredLevel > 0" class="text-small" :class="{ 'text-warning': player.lv < entry.requiredLevel }">
-                需求等级：{{ entry.requiredLevel }}
+              <div v-if="entry.requiredLevel && entry.requiredLevel > 0" class="text-small text-muted">
+                推荐等级：{{ entry.requiredLevel }}
               </div>
               <div class="text-small">等级：+{{ entry.level }}</div>
               <div class="text-small" style="margin-top: 6px;" :title="getMainStatTooltip(entry.equipment)">
@@ -561,7 +558,7 @@ function entryTypeLabel(type: BackpackEntryType): string {
                   <button
                     class="equip-button"
                     type="button"
-                    :disabled="actionLocked || (entry.requiredLevel !== undefined && player.lv < entry.requiredLevel)"
+                    :disabled="actionLocked"
                     @click="handleEquip(entry.equipment)"
                   >穿戴</button>
                   <button
