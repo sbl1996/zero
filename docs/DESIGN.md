@@ -504,18 +504,18 @@ MaxLV_by_Realm:
 
 | ID                     | 名称                         | 等阶 | HP   | BP   | 特化       | EXP  | GOLD | BOSS | 所属地图                       |
 |------------------------|------------------------------|------|------|------|------------|------|------|------|--------------------------------|
-| `slime`                | 史莱姆 (Slime)               | 一级 | 80   | 100  | Balanced   | 30   | 25   |      | 青苔原 (fringe)                |
-| `wolf`                 | 野狼 (Wolf)                  | 一级 | 130  | 120  | Skirmisher | 45   | 35   |      | 青苔原 (fringe)                |
-| `goblin`               | 哥布林 (Goblin)              | 一级 | 180  | 140  | Attacker   | 65   | 55   |      | 青苔原 (fringe)                |
-| `boar`                 | 巨型野猪 (Boar)              | 一级 | 260  | 160  | Bruiser    | 90   | 70   |      | 青苔原 (fringe)                |
+| `m-slime`                | 史莱姆 (Slime)               | 一级 | 80   | 100  | Balanced   | 30   | 25   |      | 青苔原 (fringe)                |
+| `m-wolf`                 | 野狼 (Wolf)                  | 一级 | 130  | 120  | Skirmisher | 45   | 35   |      | 青苔原 (fringe)                |
+| `m-goblin`               | 哥布林 (Goblin)              | 一级 | 180  | 140  | Attacker   | 65   | 55   |      | 青苔原 (fringe)                |
+| `m-boar`                 | 巨型野猪 (Boar)              | 一级 | 260  | 160  | Bruiser    | 90   | 70   |      | 青苔原 (fringe)                |
 | `boss-golden-sheep`    | 黄金绵羊 (Golden Sheep)      | 一级 | 800  | 200  | Defender   | 400  | 300  | ✔    | 青苔原 (fringe)                |
-| `ice-boli`             | 冰玻力 (Ice Boli)            | 二级 | 460  | 240  | Defender   | 160  | 140  |      | 熔冰之脊 (spine-of-frostfire)  |
-| `pyro-fox`             | 火焰狐 (Pyro Fox)            | 二级 | 520  | 300  | Skirmisher | 190  | 165  |      | 熔冰之脊 (spine-of-frostfire)  |
-| `froststone-colossus`  | 寒岩巨像 (Stone Golem)       | 二级 | 780  | 340  | Defender   | 240  | 210  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `m-ice-boli`             | 冰玻力 (Ice Boli)            | 二级 | 460  | 240  | Defender   | 160  | 140  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `m-pyro-fox`             | 火焰狐 (Pyro Fox)            | 二级 | 520  | 300  | Skirmisher | 190  | 165  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `m-froststone-colossus`  | 寒岩巨像 (Stone Golem)       | 二级 | 780  | 340  | Defender   | 240  | 210  |      | 熔冰之脊 (spine-of-frostfire)  |
 | `boss-wind-raptor`     | 风暴迅猛龙 (Wind Raptor)     | 二级 | 1600 | 400  | Agile      | 540  | 600  | ✔    | 熔冰之脊 (spine-of-frostfire)  |
-| `shade`                | 影子刺客 (Shade)             | 三级 | 980  | 480  | Agile      | 360  | 330  |      | 雷隐堡垒 (thunderveil-keep)    |
-| `thunder-knight`       | 雷霆骑士 (Thunder Knight)    | 三级 | 1200 | 600  | Defender   | 480  | 420  |      | 雷隐堡垒 (thunderveil-keep)    |
-| `abyss-witch`          | 深渊女巫 (Abyss Witch)       | 三级 | 1350 | 680  | Mystic     | 540  | 500  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `m-shade`                | 影子刺客 (Shade)             | 三级 | 980  | 480  | Agile      | 360  | 330  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `m-thunder-knight`       | 雷霆骑士 (Thunder Knight)    | 三级 | 1200 | 600  | Defender   | 480  | 420  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `m-abyss-witch`          | 深渊女巫 (Abyss Witch)       | 三级 | 1350 | 680  | Mystic     | 540  | 500  |      | 雷隐堡垒 (thunderveil-keep)    |
 | `boss-dragon-whelp`    | 幼龙 (Dragon Whelp)          | 三级 | 2200 | 800  | Balanced   | 660  | 610  | ✔    | 雷隐堡垒 (thunderveil-keep)    |
 | `m-specter`            | 沼泽魅影 (Marsh Specter)     | 四级 | 1622 | 880  | Crazy      | 441  | 378  |      | 腐沼根海 (bogroot-expanse)     |
 | `m-rockback`           | 岩背巨兽 (Marsh Rockback)    | 四级 | 1682 | 1000 | Bruiser    | 456  | 391  |      | 腐沼根海 (bogroot-expanse)     |

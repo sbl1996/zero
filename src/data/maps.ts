@@ -3,22 +3,22 @@ import { resolveAssetUrl } from '@/utils/assetUrls'
 
 export const monsterPositions: Record<string, Record<string, { x: number; y: number }>> = {
   'fringe': {
-    'slime': { x: 30, y: 40 },
-    'wolf': { x: 60, y: 23 },
-    'goblin': { x: 50, y: 50 },
-    'boar': { x: 90, y: 50 },
+    'm-slime': { x: 30, y: 40 },
+    'm-wolf': { x: 60, y: 23 },
+    'm-goblin': { x: 50, y: 50 },
+    'm-boar': { x: 90, y: 50 },
     'boss-golden-sheep': { x: 65, y: 70 },
   },
   'spine-of-frostfire': {
-    'ice-boli': { x: 25, y: 43 },
-    'pyro-fox': { x: 60, y: 52 },
-    'froststone-colossus': { x: 26, y: 70 },
-    'boss-wind-raptor': { x: 70, y: 82 },
+    'm-ice-boli': { x: 25, y: 43 },
+    'm-pyro-fox': { x: 60, y: 52 },
+    'm-froststone-colossus': { x: 26, y: 70 },
+    'm-boss-wind-raptor': { x: 70, y: 82 },
   },
   'thunderveil-keep': {
-    'shade': { x: 52, y: 45 },
-    'thunder-knight': { x: 73, y: 82 },
-    'abyss-witch': { x: 22, y: 80 },
+    'm-shade': { x: 52, y: 45 },
+    'm-thunder-knight': { x: 73, y: 82 },
+    'm-abyss-witch': { x: 22, y: 80 },
     'boss-dragon-whelp': { x: 42, y: 16 },
   },
   'bogroot-expanse': {

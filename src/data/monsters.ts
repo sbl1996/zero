@@ -62,20 +62,20 @@ interface MonsterBlueprint {
 
 const MONSTER_BLUEPRINTS: MonsterBlueprint[] = [
   // Fringe（一级）
-  { id: 'slime', name: '史莱姆', realmTier: 1, hp: 80, bp: 100, specialization: 'balanced', rewards: { exp: 30, gold: 25 } },
-  { id: 'wolf', name: '野狼', realmTier: 1, hp: 130, bp: 120, specialization: 'skirmisher', rewards: { exp: 45, gold: 35 } },
-  { id: 'goblin', name: '哥布林', realmTier: 1, hp: 180, bp: 140, specialization: 'attacker', rewards: { exp: 65, gold: 55 } },
-  { id: 'boar', name: '巨型野猪', realmTier: 1, hp: 260, bp: 160, specialization: 'bruiser', rewards: { exp: 90, gold: 70 } },
+  { id: 'm-slime', name: '史莱姆', realmTier: 1, hp: 80, bp: 100, specialization: 'balanced', rewards: { exp: 30, gold: 25 } },
+  { id: 'm-wolf', name: '野狼', realmTier: 1, hp: 130, bp: 120, specialization: 'skirmisher', rewards: { exp: 45, gold: 35 } },
+  { id: 'm-goblin', name: '哥布林', realmTier: 1, hp: 180, bp: 140, specialization: 'attacker', rewards: { exp: 65, gold: 55 } },
+  { id: 'm-boar', name: '巨型野猪', realmTier: 1, hp: 260, bp: 160, specialization: 'bruiser', rewards: { exp: 90, gold: 70 } },
   { id: 'boss-golden-sheep', name: '黄金绵羊', realmTier: 1, hp: 800, bp: 200, specialization: 'defender', rewards: { exp: 400, gold: 300 }, rank: 'boss' },
   // Spine of Frostfire（二级）
-  { id: 'ice-boli', name: '冰玻力', realmTier: 2, hp: 460, bp: 240, specialization: 'defender', rewards: { exp: 160, gold: 140 } },
-  { id: 'pyro-fox', name: '火焰狐', realmTier: 2, hp: 520, bp: 300, specialization: 'skirmisher', rewards: { exp: 190, gold: 165 } },
-  { id: 'froststone-colossus', name: '寒岩巨像', realmTier: 2, hp: 780, bp: 340, specialization: 'defender', rewards: { exp: 240, gold: 210 } },
+  { id: 'm-ice-boli', name: '冰玻力', realmTier: 2, hp: 460, bp: 240, specialization: 'defender', rewards: { exp: 160, gold: 140 } },
+  { id: 'm-pyro-fox', name: '火焰狐', realmTier: 2, hp: 520, bp: 300, specialization: 'skirmisher', rewards: { exp: 190, gold: 165 } },
+  { id: 'm-froststone-colossus', name: '寒岩巨像', realmTier: 2, hp: 780, bp: 340, specialization: 'defender', rewards: { exp: 240, gold: 210 } },
   { id: 'boss-wind-raptor', name: '风暴迅猛龙', realmTier: 2, hp: 1600, bp: 400, specialization: 'agile', rewards: { exp: 540, gold: 600 }, rank: 'boss' },
   // Thunderveil Keep（三级）
-  { id: 'shade', name: '影子刺客', realmTier: 3, hp: 980, bp: 480, specialization: 'agile', rewards: { exp: 360, gold: 330 } },
-  { id: 'thunder-knight', name: '雷霆骑士', realmTier: 3, hp: 1200, bp: 600, specialization: 'defender', rewards: { exp: 480, gold: 420 } },
-  { id: 'abyss-witch', name: '深渊女巫', realmTier: 3, hp: 1350, bp: 680, specialization: 'mystic', rewards: { exp: 540, gold: 500 } },
+  { id: 'm-shade', name: '影子刺客', realmTier: 3, hp: 980, bp: 480, specialization: 'agile', rewards: { exp: 360, gold: 330 } },
+  { id: 'm-thunder-knight', name: '雷霆骑士', realmTier: 3, hp: 1200, bp: 600, specialization: 'defender', rewards: { exp: 480, gold: 420 } },
+  { id: 'm-abyss-witch', name: '深渊女巫', realmTier: 3, hp: 1350, bp: 680, specialization: 'mystic', rewards: { exp: 540, gold: 500 } },
   { id: 'boss-dragon-whelp', name: '幼龙', realmTier: 3, hp: 2200, bp: 800, specialization: 'balanced', rewards: { exp: 660, gold: 610 }, rank: 'boss' },
   // Bogroot Expanse（四级）
   { id: 'm-specter', name: '沼泽魅影', realmTier: 4, hp: 1622, bp: 880, specialization: 'crazy', rewards: { exp: 441, gold: 378 } },
