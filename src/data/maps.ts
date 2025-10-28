@@ -1,4 +1,5 @@
 import type { GameMap } from '@/types/map'
+import { resolveAssetUrl } from '@/utils/assetUrls'
 
 export const monsterPositions: Record<string, Record<string, { x: number; y: number }>> = {
   'fringe': {
@@ -75,7 +76,7 @@ export const maps: GameMap[] = [
   {
     id: defaultMapId,
     name: '翡冷翠',
-    image: '/map-florence.webp',
+    image: resolveAssetUrl('map-florence.webp'),
     description: '帝国北方重镇。',
     category: 'city',
     locations: [
@@ -125,7 +126,7 @@ export const maps: GameMap[] = [
   {
     id: 'fringe',
     name: '青苔原',
-    image: '/map-fringe.webp',
+    image: resolveAssetUrl('map-fringe.webp'),
     description: '连绵低丘覆盖湿润苔藓，旧风车在晚风里悠悠转动。野猪与商队混杂的足迹遍布泥地，破旧营火还冒着淡淡炊烟。',
     category: 'wild',
         locations: [
@@ -134,7 +135,7 @@ export const maps: GameMap[] = [
   {
     id: 'spine-of-frostfire',
     name: '熔冰之脊',
-    image: '/map-spine-of-frostfire.webp',
+    image: resolveAssetUrl('map-spine-of-frostfire.webp'),
     description: '凛冽海风拍击晶蓝悬崖，碎裂矿石悬浮在气流中反射寒光。破损风帆挂在桅杆上，几名驭风者在峭壁边布置滑索。',
     category: 'wild',
         locations: [
@@ -143,7 +144,7 @@ export const maps: GameMap[] = [
   {
     id: 'thunderveil-keep',
     name: '雷隐堡垒',
-    image: '/map-thunderveil-keep.webp',
+    image: resolveAssetUrl('map-thunderveil-keep.webp'),
     description: '乌黑城墙被闪电劈出耀眼裂痕，暴雨在护城河上溅起高高水柱。堡垒高塔传来沉重军鼓，风暴骑士在城门外巡逻。',
     category: 'wild',
         locations: [
@@ -152,7 +153,7 @@ export const maps: GameMap[] = [
   {
     id: 'bogroot-expanse',
     name: '腐沼根海',
-    image: '/map-bogroot-expanse.webp',
+    image: resolveAssetUrl('map-bogroot-expanse.webp'),
     description: '巨树根系在浑浊沼水下缠成迷宫，磷火沿水面晃动成幽绿光带。半截沉船陷在泥里，腐朽旗帜随毒雾轻轻摆动。',
     category: 'wild',
         locations: [
@@ -161,7 +162,7 @@ export const maps: GameMap[] = [
   {
     id: 'duskfang-rift',
     name: '暮影裂谷',
-    image: '/map-duskfang-rift.webp',
+    image: resolveAssetUrl('map-duskfang-rift.webp'),
     description: '狭长裂谷只剩斜射的余晖，岩壁间不时掠过狼影。前方营地竖起猩红旗帜，暗夜佣兵围着火堆低声交谈。',
     category: 'wild',
         locations: [
@@ -170,7 +171,7 @@ export const maps: GameMap[] = [
   {
     id: 'gloomlit-arcanum',
     name: '暗辉法枢',
-    image: '/map-gloomlit-arcanum.webp',
+    image: resolveAssetUrl('map-gloomlit-arcanum.webp'),
     description: '浮空符文沿中央星盘运转，冷色光线在黑曜石地面上游走。封存的法典漂浮在半空，符文哨兵静立守卫传送门。',
     category: 'wild',
         locations: [
@@ -179,7 +180,7 @@ export const maps: GameMap[] = [
   {
     id: 'obsidian-windscar',
     name: '黑曜风痕',
-    image: '/map-obsidian-windscar.webp',
+    image: resolveAssetUrl('map-obsidian-windscar.webp'),
     description: '黑曜石沙丘被狂风削成锋利脊线，夜空里极光与雷云交织闪烁。废弃风车残叶仍被风驱动，摩擦出零碎火花。',
     category: 'wild',
         locations: [
@@ -188,7 +189,7 @@ export const maps: GameMap[] = [
   {
     id: 'frostfire-maelstrom',
     name: '霜焰裂潮',
-    image: '/map-frostfire-maelstrom.webp',
+    image: resolveAssetUrl('map-frostfire-maelstrom.webp'),
     description: '寒霜与炽焰的海潮在海沟上空撞击，蒸汽翻腾成厚重雾墙。漂浮的战舰残骸被冰封，龙骨映出幽蓝火光。',
     category: 'wild',
         locations: [
@@ -197,7 +198,7 @@ export const maps: GameMap[] = [
   {
     id: 'astral-crown',
     name: '星界王座',
-    image: '/map-astral-crown.webp',
+    image: resolveAssetUrl('map-astral-crown.webp'),
     description: '失重的殿堂悬挂着缓慢旋转的星辰，阶梯铺满银色砂砾直通中央王座。裂开的星核漂在穹顶下，星界守卫持矛监视来客。',
     category: 'wild',
         locations: [
@@ -206,7 +207,7 @@ export const maps: GameMap[] = [
   {
     id: 'green-elysium',
     name: '绿野仙境',
-    image: '/map-green-elysium.webp',
+    image: resolveAssetUrl('map-green-elysium.webp'),
     description: '永恒晨光照耀的神秘花园，奇异植物散发着柔和的光芒。古老的树木间流淌着发光的溪流，空气中弥漫着花香与魔法的气息。',
     category: 'wild',
         locations: [

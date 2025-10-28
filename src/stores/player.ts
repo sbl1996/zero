@@ -3,6 +3,7 @@ import { resolveMainStatBreakdown } from '@/composables/useEnhance'
 import {
   CULTIVATION_ACTION_WEIGHTS,
   DEFAULT_WARMUP_SECONDS,
+  attemptBreakthrough,
   advanceBodyFoundation,
   advanceQiOperation,
   applyDeltaBp,
@@ -10,14 +11,28 @@ import {
   computeEnvironmentMultiplier,
   computeRecoveryRates,
   createDefaultPlayer,
+  forceAdvanceRealm,
   PASSIVE_MEDITATION_BP_PER_SECOND,
   resetQiOperation,
 } from '@/composables/useLeveling'
 import type { RealmBodyFoundation } from '@/composables/useLeveling'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
 import { getStartingEquipment } from '@/data/equipment'
+import { applySkillUsage, createDefaultSkillProgress } from '@/composables/useSkills'
+import type { SkillUsageResult } from '@/composables/useSkills'
 import { ITEMS } from '@/data/items'
-import type { AttributeBreakdown, BreakthroughMethod, Equipment, EquipSlot, Player, RecoveryMode, Stats } from '@/types/domain'
+import type {
+  AttributeBreakdown,
+  BreakthroughMethod,
+  Equipment,
+  EquipSlotKey,
+  Player,
+  RealmStage,
+  RecoveryMode,
+  Stats,
+  SkillDefinition,
+  SkillProgress,
+} from '@/types/domain'
 import { clamp } from '@/utils/math'
 
 interface EquipSummary {
@@ -45,7 +60,7 @@ function emptyEquipSummary(): EquipSummary {
   }
 }
 
-function sumEquipStats(equips: Partial<Record<EquipSlot, Equipment>>): EquipSummary {
+function sumEquipStats(equips: Partial<Record<EquipSlotKey, Equipment>>): EquipSummary {
   const summary = emptyEquipSummary()
 
   Object.values(equips).forEach((eq) => {
@@ -69,6 +84,67 @@ function sumEquipStats(equips: Partial<Record<EquipSlot, Equipment>>): EquipSumm
 }
 
 type CultivationActionKey = keyof typeof CULTIVATION_ACTION_WEIGHTS
+
+const REALM_SKILL_UNLOCKS: Array<{ tier: number; skillId: string }> = [
+  { tier: 2, skillId: 'fallen_dragon_smash' },
+  { tier: 3, skillId: 'star_realm_dragon_blood_break' },
+]
+
+type AttributeSummaryKey = 'HP' | 'QiMax' | 'ATK' | 'DEF' | 'AGI' | 'REC'
+type AttributeSnapshot = Record<AttributeSummaryKey, number>
+
+export interface AttributeChange {
+  key: AttributeSummaryKey
+  before: number
+  after: number
+  delta: number
+}
+
+export interface LevelUpRewards {
+  previousRealm: RealmStage
+  currentRealm: RealmStage
+  attributeChanges: AttributeChange[]
+  unlockedSkills: string[]
+}
+
+const ATTRIBUTE_KEYS: AttributeSummaryKey[] = ['HP', 'QiMax', 'ATK', 'DEF', 'AGI', 'REC']
+
+function captureAttributeSnapshot(player: Player): AttributeSnapshot {
+  return {
+    HP: Math.round(player.res.hpMax),
+    QiMax: Math.round(player.res.qiMax),
+    ATK: Math.round(player.stats.totals.ATK ?? 0),
+    DEF: Math.round(player.stats.totals.DEF ?? 0),
+    AGI: Math.round(player.stats.totals.AGI ?? 0),
+    REC: Math.round(player.stats.totals.REC ?? 0),
+  }
+}
+
+function computeAttributeChanges(before: AttributeSnapshot, after: AttributeSnapshot): AttributeChange[] {
+  return ATTRIBUTE_KEYS
+    .map(key => ({
+      key,
+      before: before[key],
+      after: after[key],
+      delta: after[key] - before[key],
+    }))
+    .filter(entry => entry.delta !== 0)
+}
+
+function buildLevelUpRewards(
+  previousRealm: RealmStage,
+  currentRealm: RealmStage,
+  before: AttributeSnapshot,
+  after: AttributeSnapshot,
+  unlockedSkills: string[],
+): LevelUpRewards {
+  return {
+    previousRealm: { ...previousRealm },
+    currentRealm: { ...currentRealm },
+    attributeChanges: computeAttributeChanges(before, after),
+    unlockedSkills,
+  }
+}
 
 function getBodyFoundationSnapshot(player: Player): RealmBodyFoundation {
   return {
@@ -222,6 +298,21 @@ export const usePlayerStore = defineStore('player', {
     }),
   },
   actions: {
+    ensureSkillProgress(skillId: string): SkillProgress {
+      if (!skillId) {
+        throw new Error('skillId is required')
+      }
+      const existing = this.skills.progress[skillId]
+      if (existing) return existing
+      const entry = createDefaultSkillProgress(skillId)
+      this.skills.progress[skillId] = entry
+      return entry
+    },
+    ensureAllSkillProgress() {
+      this.skills.known.forEach(skillId => {
+        this.ensureSkillProgress(skillId)
+      })
+    },
     hydrate(save: Partial<Player>) {
       const basePlayer = makeInitialPlayer()
       const merged: Player = {
@@ -254,15 +345,13 @@ export const usePlayerStore = defineStore('player', {
           },
           delta: { ...basePlayer.cultivation.delta, ...(save?.cultivation?.delta ?? {}) },
         },
-        mastery: {
-          entries: {
-            ...basePlayer.mastery.entries,
-            ...(save?.mastery?.entries ?? {}),
-          },
-        },
         skills: {
           known: save?.skills?.known ?? basePlayer.skills.known,
           loadout: save?.skills?.loadout ?? basePlayer.skills.loadout,
+          progress: {
+            ...basePlayer.skills.progress,
+            ...(save?.skills?.progress ?? {}),
+          },
         },
       }
 
@@ -270,7 +359,9 @@ export const usePlayerStore = defineStore('player', {
       const finalPlayer = hasEquipment ? merged : withStartingEquipment(merged)
 
       Object.assign(this, finalPlayer)
+      this.ensureAllSkillProgress()
       this.refreshDerived({ maintainRatios: false })
+      this.ensureTierRewards()
 
       const savedHp = save?.res?.hp
       if (typeof savedHp === 'number') {
@@ -369,36 +460,76 @@ export const usePlayerStore = defineStore('player', {
       this.res.qi = clamp(this.res.qi, 0, this.res.qiMax)
       this.res.recovery.mode = 'idle'
     },
-    setRecoveryMode(mode: RecoveryMode) {
-      if (mode === 'meditate') {
+    setRecoveryMode(mode: RecoveryMode, options: { preserveOperation?: boolean } = {}) {
+      if (mode === 'meditate' && !options.preserveOperation) {
         this.res.operation = resetQiOperation(this.res.operation)
       }
+      this.res.recovery.mode = mode
+    },
+    setRecoveryModeKeepOperation(mode: RecoveryMode) {
+      // 设置恢复模式但不重置斗气运转状态
       this.res.recovery.mode = mode
     },
     async attemptBreakthrough(method: BreakthroughMethod) {
       const now = Date.now()
       const previousRealm = { ...this.cultivation.realm }
+      const statsBefore = captureAttributeSnapshot(this)
       const foundationBefore = getBodyFoundationSnapshot(this)
-      const { attemptBreakthrough } = await import('@/composables/useLeveling')
       const result = attemptBreakthrough(this.cultivation, method, now)
+      let rewards: LevelUpRewards | undefined
       if (result.success) {
         const foundationAfter = advanceBodyFoundation(foundationBefore, previousRealm, this.cultivation.realm)
         applyBodyFoundationSnapshot(this, foundationAfter)
       }
       this.refreshDerived({ maintainRatios: true })
-      return result
+      if (result.success) {
+        const unlockedSkills = this.ensureTierRewards({ autoEquipNew: true })
+        const statsAfter = captureAttributeSnapshot(this)
+        rewards = buildLevelUpRewards(previousRealm, this.cultivation.realm, statsBefore, statsAfter, unlockedSkills)
+      }
+      return { ...result, rewards }
     },
     async cheatAdvanceRealm() {
       const previousRealm = { ...this.cultivation.realm }
+      const statsBefore = captureAttributeSnapshot(this)
       const foundationBefore = getBodyFoundationSnapshot(this)
-      const { forceAdvanceRealm } = await import('@/composables/useLeveling')
       const result = forceAdvanceRealm(this.cultivation)
+      let rewards: LevelUpRewards | undefined
       if (result.advanced) {
         const foundationAfter = advanceBodyFoundation(foundationBefore, previousRealm, result.realm)
         applyBodyFoundationSnapshot(this, foundationAfter)
       }
       this.refreshDerived({ maintainRatios: false })
-      return result
+      if (result.advanced) {
+        const unlockedSkills = this.ensureTierRewards({ autoEquipNew: true })
+        const statsAfter = captureAttributeSnapshot(this)
+        rewards = buildLevelUpRewards(previousRealm, this.cultivation.realm, statsBefore, statsAfter, unlockedSkills)
+      }
+      return { ...result, rewards }
+    },
+    cheatFillBasePower() {
+      const bpState = this.cultivation.bp
+      const realm = this.cultivation.realm
+      const deltaState = this.cultivation.delta
+      const now = Date.now()
+      const span = Math.max(bpState.range.max - bpState.range.min, 0)
+
+      bpState.current = bpState.range.max
+      bpState.delta = Math.max(bpState.delta, span)
+      bpState.overflow = 0
+      bpState.pendingDelta = 0
+      bpState.lastUpdatedAt = now
+
+      realm.progress = 1
+      realm.bottleneck = true
+      realm.overflow = 0
+
+      deltaState.accumulated = Math.max(deltaState.accumulated, span)
+      deltaState.pending = 0
+      deltaState.bottlenecked = true
+      deltaState.lastGainAt = now
+
+      this.refreshDerived({ maintainRatios: true })
     },
     tickCultivation(deltaSeconds: number, options: CultivationTickOptions = {}) {
       if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) {
@@ -502,7 +633,7 @@ export const usePlayerStore = defineStore('player', {
     getEquipmentById(id: string) {
       const entry = Object.entries(this.equips).find(([, eq]) => eq?.id === id)
       if (!entry) return null
-      const [slot, equip] = entry as [EquipSlot, Equipment]
+      const [slot, equip] = entry as [EquipSlotKey, Equipment]
       return { slot, equip }
     },
     updateEquippedEquipment(id: string, changes: Partial<Equipment>) {
@@ -513,7 +644,7 @@ export const usePlayerStore = defineStore('player', {
       this.refreshDerived()
       return true
     },
-    equip(slot: EquipSlot, equipment: Equipment) {
+    equip(slot: EquipSlotKey, equipment: Equipment) {
       const hpRatio = this.res.hpMax > 0 ? this.res.hp / this.res.hpMax : 1
       const qiRatio = this.res.qiMax > 0 ? this.res.qi / this.res.qiMax : 1
       this.equips[slot] = { ...equipment }
@@ -522,7 +653,7 @@ export const usePlayerStore = defineStore('player', {
       this.res.qi = clamp(Math.round(this.res.qiMax * qiRatio), 0, this.res.qiMax)
       this.res.qiReserve = clamp(this.res.qiReserve, 0, this.res.qiMax)
     },
-    unequip(slot: EquipSlot) {
+    unequip(slot: EquipSlotKey) {
       const current = this.equips[slot]
       if (!current) return null
       const hpRatio = this.res.hpMax > 0 ? this.res.hp / this.res.hpMax : 1
@@ -534,9 +665,33 @@ export const usePlayerStore = defineStore('player', {
       this.res.qiReserve = clamp(this.res.qiReserve, 0, this.res.qiMax)
       return current
     },
+    ensureTierRewards(options: { autoEquipNew?: boolean } = {}): string[] {
+      this.ensureAllSkillProgress()
+      const tier = this.cultivation.realm.tier
+      if (typeof tier !== 'number') return []
+      const unlocked: string[] = []
+      REALM_SKILL_UNLOCKS.forEach(({ tier: requiredTier, skillId }) => {
+        if (tier >= requiredTier && !this.skills.known.includes(skillId)) {
+          this.skills.known.push(skillId)
+          this.ensureSkillProgress(skillId)
+          unlocked.push(skillId)
+        }
+      })
+      if (options.autoEquipNew) {
+        unlocked.forEach((skillId) => {
+          if (this.skills.loadout.includes(skillId)) return
+          const emptyIndex = this.skills.loadout.findIndex(slot => slot === null)
+          if (emptyIndex !== -1) {
+            this.skills.loadout[emptyIndex] = skillId
+          }
+        })
+      }
+      return unlocked
+    },
     unlockSkill(skillId: string) {
       if (!this.skills.known.includes(skillId)) {
         this.skills.known.push(skillId)
+        this.ensureSkillProgress(skillId)
       }
     },
     equipSkill(slotIndex: number, skillId: string | null) {
@@ -549,6 +704,27 @@ export const usePlayerStore = defineStore('player', {
       if (slotIndex < 0 || slotIndex >= this.skills.loadout.length) return false
       this.skills.loadout[slotIndex] = null
       return true
+    },
+    recordSkillUsage(
+      skill: SkillDefinition,
+      options: { rng: () => number; baseCooldown: number; hit: boolean; streak: number; timestamp?: number },
+    ): (SkillUsageResult & { progress: SkillProgress }) | null {
+      if (!skill) return null
+      const progress = this.ensureSkillProgress(skill.id)
+      const result = applySkillUsage({
+        progress,
+        definition: skill,
+        realm: this.cultivation.realm,
+        rng: options.rng,
+        baseCooldown: options.baseCooldown,
+        hit: options.hit,
+        streak: options.streak,
+        timestamp: options.timestamp,
+      })
+      return {
+        ...result,
+        progress,
+      }
     },
     async useItem(itemId: string) {
       const def = ITEMS.find(item => item.id === itemId)
@@ -586,7 +762,6 @@ export const usePlayerStore = defineStore('player', {
 
       if (hasBreak) {
         const now = Date.now()
-        const { attemptBreakthrough } = await import('@/composables/useLeveling')
         const method = def.breakthroughMethod!
         attemptBreakthrough(this.cultivation, method, now)
         this.refreshDerived({ maintainRatios: true })

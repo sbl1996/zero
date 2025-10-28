@@ -1,4 +1,5 @@
 import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
+import { createDefaultSkillProgress } from '@/composables/useSkills'
 import { clamp } from '@/utils/math'
 import type {
   AttributeAllocation,
@@ -541,6 +542,7 @@ export function createDefaultPlayer(): Player {
   const bpCurrent = cultivation.bp.current
   const stats = composeStats(DEFAULT_ATTRIBUTE_ALLOCATION, bpCurrent, cultivation.method, 0)
   const res = createDefaultResources(stats.caps.hpMax, stats.caps.qiMax)
+  const starterSkill = 'dragon_breath_slash'
 
   return {
     gold: 0,
@@ -550,12 +552,12 @@ export function createDefaultPlayer(): Player {
     stats,
     res,
     cultivation,
-    mastery: {
-      entries: {},
-    },
     skills: {
-      known: ['basic_strike', 'charged_cleave'],
-      loadout: ['basic_strike', 'charged_cleave', null, null],
+      known: [starterSkill],
+      loadout: [starterSkill, null, null, null],
+      progress: {
+        [starterSkill]: createDefaultSkillProgress(starterSkill),
+      },
     },
   }
 }
@@ -660,7 +662,7 @@ export function attemptBreakthrough(
 
   // Cooldowns by method
   const cooldowns: Record<BreakthroughMethod, number> = {
-    force: 60 * 1000,
+    force: 1 * 1000,
     mentor: 90 * 1000,
     treasure: 300 * 1000,
   }

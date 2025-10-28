@@ -8,7 +8,7 @@
 * **斗气 Qi**：战斗资源，`Qi ∈ [0, QiMax]`
 * **斗气本源 BP**：隐藏绝对值，修炼/战斗行为驱动增长
 * **境界 Realm**：一级→六级（无小境界），七级→九级（各含“初/中/高/巅”），圣域（“初/中/高/巅/极限”）
-* **运转预热**：`F(t)=clamp(t/30s,0,1)`；凡 **Qi 派生**量在预热期按 `F(t)` 缩放
+* **运转预热**：`F(t)=clamp(t/5s,0,1)`；凡 **Qi 派生**量在预热期按 `F(t)` 缩放
 * **韧性 tough**：入减伤端；玩家=1.0，怪物=1.0，BOSS=1.5
 * **随机口径**：`roll ~ U[0.8,1.2]`；UI对外四舍五入，内部累计到帧末再取整
 
@@ -24,7 +24,7 @@
 BP_current = BP_min + (BP_max - BP_min) * p
 ```
 
-**推荐区间（示例，指数式平滑递增）：**
+**区间**
 
 | 大境界 | 小境界        | BP区间（含起止）                               | 备注                       |
 | --- | ---------- | --------------------------------------- | ------------------------ |
@@ -71,7 +71,7 @@ DEF_final = Body_DEF + F(t)*Qi_DEF
 AGI_final = Body_AGI + F(t)*Qi_AGI
 ```
 
-**侧重示例**：
+**功法侧重**：
 龙血 0.40/0.40/0.20；不死 0.45/0.50/0.05；虎纹 0.50/0.10/0.40；**紫焰** 0.30/0.30/0.15 + **恢复系 0.25**（§4）
 
 ### 1.4 修炼、瓶颈与突破
@@ -106,7 +106,7 @@ K_actions：普攻150 / 受击300 / 完美闪避800 / 终招1200 / 重伤坚持2
 
 ### 2.1 运转与预热
 
-进入运转→30s 达满 `F(t)`；动作会消耗 Qi，`Qi < 5%*QiMax` 自动退出；重开需重预热。
+进入运转→5s 达满 `F(t)`；动作会消耗 Qi，`Qi < 5%*QiMax` 自动退出；重开需重预热。
 
 ### 2.2 消耗与恢复
 
@@ -128,7 +128,7 @@ F_mult：运转=F(t) / 非运转&冥想=1.0
 * **斗气防御**（运转中自动生效）
   吸收比：`0.90 * F(t)`；单次吸收 ≤ 来伤 60%；**Qi 代价**：吸收值×1.1；Qi 不足则按上限吸收后退出
 * **斗气闪避**（主动帧技）
-  `P = clamp(0.10 + 0.005*(AGI_final - AGI_enemy_final), 0, 1)`；窗口 0.4s；持续0.7s；消耗 6% QiMax，成功返 4% QiMax
+  成功率100%，不同闪避技能有不同的无敌窗口、后摇、冷却与消耗
 
 ### 2.4 资源回满触发
 
@@ -141,54 +141,239 @@ F_mult：运转=F(t) / 非运转&冥想=1.0
 
 ---
 
-## 3. 伤害与对抗
+## 3. 怪物系统
 
-### 3.1 参考防御与穿透
+### 3.1 核心思路
 
-* **DEF_ref(realm_stage)**：七级起点 3,840 → … → 圣域前四段 61,440（固定表，游戏内以查表/插值实现）
-* **穿透（敌方）**：`PenPct = clamp(0.05 + 0.01*Realm + 0.03*rank, 0, 0.60)`；`PenFlat` 默认 0（技能/词缀赋予）
-* **tough**：玩家=1.0，怪=1.0，BOSS=1.5（地图/词缀可在 0.5–2.0 微调）
+* 怪物没有直接的ATK/DEF/AGI，而是由隐藏 `BP`与`特化类型`转化而来。
+* 怪物**没有 QiMax**、没有运转预热、没有斗气防御、AGI直接进入“破绽机制”。
 
-### 3.2 结算流程
+### 3.2 从 BP 到属性的换算
 
-**命中前**：若在闪避窗口且闪避成功 → 免伤；否则入伤害管线
-**物理主干**：
+#### 特化类型
+
+| 特化             | 说明        | (ATK, DEF, AGI) 系数 |
+| -------------- | --------- | ------------------ |
+| Balanced（均衡）   | 类龙血的通用型   | (0.40, 0.40, 0.20) |
+| Attacker（攻击）   | 高输出，低防中速  | (0.55, 0.25, 0.20) |
+| Defender（防御）   | 高减伤，输出偏低  | (0.30, 0.55, 0.15) |
+| Agile（敏捷）      | 高速、破绽威胁   | (0.35, 0.20, 0.45) |
+| Bruiser（重装）    | 压迫近战      | (0.50, 0.40, 0.10) |
+| Skirmisher（游击） | 灵活快打      | (0.40, 0.20, 0.40) |
+| Mystic（奥术）     | 均衡偏防，技能输出    | (0.35, 0.40, 0.25) |
+| Crazy（疯狂）     | 极高攻，极脆    | (0.65, 0.10, 0.25) |
+
+#### 公式与常量
 
 ```
-raw   = ATK_final * skill.mult * roll(0.8~1.2)
-effDF = max(0, DEF_final - PenFlat) * (1 - PenPct) * tough_target
+unit = BP / K_mon               # K_mon = 5（怪物BP→单位值换算常数）
 
-# 平衡点 f=0.5
-K     = DEF_ref(realm_stage_target)     # K = f/(1-f) * DEF_ref = DEF_ref
-mitig = K / (K + effDF)
+ATK = round(unit * coef_ATK * S_ATK)
+DEF = round(unit * coef_DEF * S_DEF)
+AGI = round(unit * coef_AGI * S_AGI)
 
-dmg   = round(raw * mitig)
+S_ATK = 1.2
+S_DEF = 1.0
+S_AGI = 1.0
 ```
 
-**斗气防御层**：按 §2.3 规则再行吸收后入 HP
-**技能倍率（统一）**：普攻 1.0 / 小 1.6 / 中 2.4 / 大 3.6 / 终招 6.0
+### 3.3 怪物设计
+* **普通怪物**统一 tough=**1.0**；**BOSS** tough 默认 **1.5**（个别 BOSS可覆盖）。
+* **攻击节奏**：普通怪 1.6s/次，BOSS 独立设计。
+* `怪物数据`与`BOSS列表`见文档末尾表格。
 
 ---
 
-## 4. 技能与消耗品
+## 4. 伤害与对抗
 
-### 4.1 技能配置
+### 4.1 参考防御与穿透
 
-* 战斗界面 4 槽（可重复装）；资源类型：**无消耗 / Qi 消耗**；资源不足不可施放
-* **自动施法**：长按≥1s 进入自动模式；CD 完成即重放；两次触发间隔≥200ms；任一条件不满足即停
+* **参考防御常数 K**
+  
+  由**攻击方威胁等级**取表而来：
 
-### 4.2 基础技能（重写成本）
+  ```
+  K = DEF_ref(threat_tier_attacker)
+  ```
 
-| 技能                  | 资源                 |  倍率 | 说明                      |
-| ------------------- | ------------------ | --: | ----------------------- |
-| 随手一击 basic_strike   | Qi 3            | 1.0 | 基本攻击   |
-| 蓄力劈砍 charged_cleave | Qi 10  | 1.6 | 单体                      |
-| 命运斩击 destiny_slash   | Qi 20 + 20% | 3.5 | 爆发                      |
-| 气息调整 focus_breath   | Qi 5  | 0.5 | 命中返还 |
+  * `threat_tier_attacker`：基于**攻击方境界、rank（精英/首领等）与地图/词缀**综合评定的威胁等级。
+  * 暂时仅基于攻击方境界：一到七级依次为25/45/75/127/224/405/750。
 
-> 需要“终招 6.0 倍率”的职业/剧情技可另行配置为大技能变体或 QTE，仍走 Qi 成本
+* **穿透（由攻击方决定）**
 
-### 4.3 消耗品（移除 XP/必杀）
+  ```
+  PenPct = clamp(0.05 + 0.01*Realm_att + 0.03*rank_att, 0, 0.60)
+  PenFlat = 来自技能/词缀的固定穿透（默认 0）
+  ```
+
+* **tough（目标韧性，入减伤端）**
+  玩家=1.0，普通怪=1.0，BOSS=1.5（地图/词缀可在 0.5–2.0 范围微调）。
+
+### 4.2 敏捷属性与破绽机制
+
+**破绽机制**：敏捷将作为一项**相对属性**，决定攻击方发现并利用敌人弱点的能力。
+
+```
+# 1. 计算双方敏捷比
+Ratio_AGI = AGI_final_def / AGI_final_att
+
+# 2. 计算最终破绽率 (Chance_Weakness)
+Chance_Weakness = 0.05 + 0.75 * clamp(1 - Ratio_AGI, 0, 1)^1.3
+```
+
+### 4.3 结算流程
+
+**1) 命中前判定**
+处于闪避窗口且判定成功 → 免伤；否则进入伤害管线。
+
+**2) 物理主干**
+
+```
+# 原始伤害（攻击方面板与技能）
+raw   = ATK_final * skill.mult * roll(0.8~1.2)
+
+# 有效防御（防守方面板 - 攻击方穿透，再乘以目标韧性）
+effDF = max(0, DEF_final - PenFlat) * (1 - PenPct) * tough_target
+
+# 参考防御常数：按“攻击方威胁等级”取表
+K     = DEF_ref(threat_tier_attacker)
+
+# 标准化减伤曲线（f = 0.5 的平衡点）
+mitig = K / (K + effDF)
+
+# 基础伤害结果（进入斗气防御层前）
+dmg   = round(raw * mitig)
+```
+
+**3) 破绽判定层**
+基于双方的 `AGI_final` 计算破绽率，判定是否触发破绽伤害。
+```
+Chance_Weakness = F_Weakness(AGI_final_att, AGI_final_def) # 参考 4.2 节公式
+IF roll(0,1) < Chance_Weakness:
+    dmg = round(dmg * 1.5)  # 破绽伤害，固定+50%
+```
+
+**4) 斗气防御层**（若防守方处于“运转”状态则生效）
+* 吸收比：`0.90 * F(t)`；**单次吸收上限**：来伤的 60%。
+* **Qi 代价**：`吸收值 × 1.1`；Qi 不足则按上限吸收后退出运转。
+* 余量进入 HP 扣减。
+
+---
+
+## 5. 技能系统
+
+### 5.1 技能配置
+
+* 战斗界面 4 槽（可重复装，同技能共享冷却）；资源类型：**无消耗 / Qi 消耗**；资源不足不可施放
+
+# 5.2 技能等级
+
+## 5.2.1 基本规则
+
+* 适用对象：除`斗气闪避`外的全部可造成效果的技能（含伤害或明确命中判定的非伤害技）。
+* 等级范围：基础为1级，各技能等级上限不同。
+* 进度条：每次**使用**获得熟练度 `XP`；**XP 满** → 进入**瓶颈**；瓶颈期继续使用会触发**突破判定**，成功则 `LV+1`。
+
+## 5.2.2 熟练度获取（每次使用）
+
+```
+ΔXP = clamp( round( X0 + B*base_cd + C*hit_bonus ), 1, 10 )
+# 常量：X0 = 1.0,  B = 0.15,  C = 0.5
+# base_cd：技能基础冷却（秒，取技能表“冷却”）
+# hit_bonus：若该次使用命中（或生效）=1，否则=0
+```
+
+* **反刷衰减**：同一场战斗内，对**同一目标**的第 n 次连续使用：
+  `ΔXP *= (0.95)^(n-1)`
+
+## 5.2.3 瓶颈与突破
+
+* 达到上限：`XP >= XP_CAP(LV)` ⇒ `at_cap = true`、`bt_stack = 0`（仅用于记录“瓶颈冲击层数”）。
+* 瓶颈期每次使用进行突破判定：
+
+```
+P_break = min(0.35,  P0 + P_stack * bt_stack)
+# 常量：P0 = 0.06（6%），P_stack = 0.03（每层+3%），单次上限 35%
+# 失败：bt_stack += 1；成功：LV+1，XP=0，at_cap=false，bt_stack=0
+```
+
+## 5.2.4 经验上限（每级）
+
+```
+XP_CAP(L) = round( 80 * 1.25^(L-1) )
+```
+
+## 5.2.5 上限与境界软门槛
+
+```
+MaxLV_by_Realm:
+  一级~三级：≤3
+  四级~六级：≤5
+  七级~九级：≤7
+  圣域： ≤10
+```
+
+* 当角色境界不足时，使用技能不继续积累 `XP`（显示“已达当前上限”）。
+
+
+### 5.3 技能列表
+
+* 斗气闪避 (qi_dodge)
+  * 消耗Qi 6%，冷却0.7s，无敌窗口0.4s，后摇0.3s
+  * 成功躲避敌人伤害返 4% QiMax
+
+* 龙息斩 (dragon_breath_slash)
+  * 消耗Qi 2%，冷却2s，后摇0.2s
+  * 基础倍率1.0
+  * 等级1-10：每级+2%伤害、-2%CD；L3 破绽伤加成 +5%；L6 消耗×0.8；L10 命中后2s内下一次**陨龙击**CD -25%
+
+* 陨龙击 (fallen_dragon_smash)
+  * 消耗Qi 4%，冷却5s，蓄力0.2s，后摇0.2s
+  * 基础倍率1.6
+  * 等级1-10：每级+4%伤害、-2%CD；L3 破绽伤加成 +10%；L6 消耗×0.8
+
+* 星界龙血破 (star_realm_dragon_blood_break)
+  * 消耗Qi 10%，冷却20s，蓄力0.5s，后摇0.2s
+  * 基础倍率3.6
+  * 等级1-10：每级+8%伤害、-2%CD；L3 触发时获得0.5s霸体；L6 消耗×0.8；L10 命中50%概率给10s易伤+10%
+
+---
+
+## 6. 装备与强化
+
+### 6.1 槽位与互斥
+
+头盔、左手（盾）、右手（武器）、双手武器（与双持互斥）、铠甲、戒指×2
+
+### 6.2 强化（主属性）
+
+* `L∈[0,15]`；Flat 与 Percent 双路叠加：
+  `FinalMain(L) = round((BaseMain + FlatBonus(L)) * (1 + MainBonus(L)))`
+  进度曲线、分段成功率/掉级/材料与金币消耗维持原表（0–4/5–9/10–14）
+
+### 6.3 背包换装
+
+沿用原流：背包页可穿戴/卸下/丢弃（确认弹窗）；换装即时重算面板（含 **QiMax**）
+
+---
+
+## 7. 战斗系统
+
+### 7.1 流程
+
+进入战斗即启动：玩家即时操作；怪物默认每 **X秒** 行动一次，不同怪物可能有不同的行动频率；任一方 HP≤0 即结算
+
+### 7.2 退出战斗
+
+按钮或切页即可退出；清状态与计时；不结算掉落与 GOLD；**HP/Qi 不回满**
+
+### 7.3 胜败与自动重赛（改写）
+
+* **胜利**：`GOLD += rewardGold`；BOSS 首杀解锁下一张野外地图；**0.8s** 后普通怪可自动重赛（**不回满 HP/Qi**）；BOSS 留场展示战利品，点击立绘可重赛（不回满）
+* **失败**：`GOLD -= floor(GOLD/3)`；随后 **回满 HP 与 Qi** 并返回地图
+* **RNG**：统一 32 位种子；掉落与强化也纳入统一 RNG 序列以复现
+
+### 7.4 消耗品
 
 | ID                              | 名称         | 功能            |                 单价 |
 | ------------------------------- | ---------- | ------------- | -----------------: |
@@ -199,64 +384,10 @@ dmg   = round(raw * mitig)
 
 **快捷物品栏**（底部 4 槽）：点击即生效，统一 10s 冷却；不同物品分开计时；默认绑定：生命Ⅰ/斗气Ⅰ/斗气Ⅱ/（空）
 
----
-
-## 5. 装备与强化
-
-### 5.1 槽位与互斥
-
-头盔、左手（盾）、右手（武器）、双手武器（与双持互斥）、铠甲、手套、腰带、戒指、鞋子
-
-### 5.2 强化（主属性）
-
-* `L∈[0,15]`；Flat 与 Percent 双路叠加：
-  `FinalMain(L) = round((BaseMain + FlatBonus(L)) * (1 + MainBonus(L)))`
-  进度曲线、分段成功率/掉级/材料与金币消耗维持原表（0–4/5–9/10–14）
-
-### 5.3 背包换装
-
-沿用原流：背包页可穿戴/卸下/丢弃（确认弹窗）；换装即时重算面板（含 **QiMax**）
 
 ---
 
-## 6. 战斗系统（沿用并对齐 Qi 体系）
-
-### 6.1 流程
-
-进入战斗即启动：玩家即时操作；怪物默认每 **1.6s** 攻击一次；任一方 HP≤0 即结算
-
-### 6.2 退出战斗
-
-按钮或切页即可退出；清状态与计时；不结算掉落与 GOLD；**HP/Qi 不回满**
-
-### 6.3 胜败与自动重赛（改写）
-
-* **胜利**：`GOLD += rewardGold`；BOSS 首杀解锁下一张野外地图；**0.8s** 后普通怪可自动重赛（**不回满 HP/Qi**）；BOSS 留场展示战利品，点击立绘可重赛（不回满）
-* **失败**：`GOLD -= floor(GOLD/3)`；随后 **回满 HP 与 Qi** 并返回地图
-* **RNG**：统一 32 位种子；掉落与强化也纳入统一 RNG 序列以复现
-
----
-
-## 7. 怪物与对抗参数（改写为境界制）
-
-### 7.1 数据字段
-
-```
-id, name, realm_stage, rank, hpMax, atk, def, rewardGold, isBoss?, tough?
-```
-
-* `realm_stage`：用于查表 `DEF_ref(realm_stage)`
-* `rank`：普通=0 / 精英=1 / BOSS=2（用于穿透公式）
-* `tough`：普通 1.0，BOSS 1.5（可随地图/词缀调整）
-
-### 7.2 参考防御与穿透
-
-* `DEF_ref(realm_stage)` 按固定表/插值
-* 敌方穿透：`PenPct = clamp(0.05 + 0.01*Realm + 0.03*rank, 0, 0.60)`；`PenFlat` 由个别词缀/技能赋予
-
----
-
-## 8. 掉落与经济（最小必要改写）
+## 8. 掉落与经济
 
 ### 8.1 掉落槽
 
@@ -270,8 +401,6 @@ id, name, realm_stage, rank, hpMax, atk, def, rewardGold, isBoss?, tough?
 
   * 装备“**越阶概率**”30%（至少为当前段位）；**预强化**：BOSS 装备 2–5 级等概率（普通 0–2）
 
-> 原“等级段通用池”改为按 **境界段** 配置（初学=一至三境、进阶=四至六、高阶=七至九、圣域）。各段产出的系列（Iron/Steel/Knight/Mithril/Rune/Dragon…）与解锁阈值在产线中统一维护；表格可复用原结构，仅将“LV段”改为“境界段”。
-
 ### 8.3 商店
 
 * **消耗品**：无限量（见 §4.3）
@@ -280,7 +409,7 @@ id, name, realm_stage, rank, hpMax, atk, def, rewardGold, isBoss?, tough?
 
 ---
 
-## 9. 地图系统（保持）
+## 9. 地图系统
 
 * 地图页为默认落点：左侧列表 / 右侧根据地图类型切换布局
 * 城市地图：地点标记按钮（百分比坐标）
@@ -290,7 +419,7 @@ id, name, realm_stage, rank, hpMax, atk, def, rewardGold, isBoss?, tough?
 
 ---
 
-## 10. UI 与可视化（新增/更新）
+## 10. UI 与可视化
 
 * **境界条**：显示当前段与小境界进度；满值高亮“瓶颈”，弹出可选突破途径与成功率修正
 * **斗气环**：显示 `Qi/QiMax`、运转/预热 `F(t)`、低蓝警示（<5%）
@@ -304,18 +433,18 @@ id, name, realm_stage, rank, hpMax, atk, def, rewardGold, isBoss?, tough?
   * 刻度：默认 6.0s 视图（12 格，每格 0.5s）；时间向右滚动，当前帧用竖线标记；暂停逻辑沿用调试工具
   * 轨道：双轨展示——上轨绑定玩家 4 槽与基础互动，下轨绑定敌方动作与环境事件（如陷阱、地图技）
   * 玩家轨：按技能槽顺序堆叠色块，块长 = 动作前摇+施放时间；冷却阶段以浅色描边延伸至下一次可施放节点；自动施法模式下补入重复排程
-  * 敌方轨：按实体列出；怪物普攻节奏（默认 1.6s）预先排入；读条技与 Boss 技能以加粗描边强调；提供 0.4s “完美闪避窗”半透明覆盖
+  * 敌方轨：按实体列出；怪物普攻节奏预先排入；读条技与 Boss 技能以加粗描边强调；提供 0.4s “完美闪避窗”半透明覆盖
   * 资源反馈：当 `Qi < cost` 或预热 `F(t)` 未达阈值时，同步点亮黄色警示；触发斗气防御时在对应时间段插入 90% 吸收条
   * 交互：鼠标悬停显示 tooltip（技能名/伤害/消耗/预计命中时间）；点击玩家块可快速切换到该技能槽；键盘/手柄不增设额外操作
 
 ---
 
-## 11. 调参起点（统一抄数）
+## 11. 调参起点
 
-* **BP→单位**：`K_bp2unit = 10`
+* **BP→单位**：`K_bp2unit = 5`
 * **修炼**：仅怪物击杀获得 BP；其余行为不产出 BP
 * **突破**：强突 `P0=0.08-0.04p`（≤35%）；导师 ×1.15
-* **运转**：预热 30s；退出阈值 5% QiMax；成本 1/3/7/12% QiMax；闪避 6%（成功返 4%）
+* **运转**：预热 5s；退出阈值 5% QiMax；成本 1/3/7/12% QiMax；闪避 6%（成功返 4%）
 * **恢复**：`Qi/sec=(1+0.06*REC)*state_mult*F_mult`；紫焰×`(1+0.2F)`、`REC+20`；HP 自然恢复 `0.1*REC`（战中×0.5、Boss×0.25）
 * **防御**：斗气防御固定 90%×F(t)，单击上限 60%，Qi 代价=吸收×1.1
 * **对抗**：`PenPct = clamp(0.05 + 0.01*Realm + 0.03*rank, 0, 0.60)`；`PenFlat` 由技能/装备提供
@@ -333,111 +462,152 @@ id, name, realm_stage, rank, hpMax, atk, def, rewardGold, isBoss?, tough?
 | 左手盾 | iron-shield | 铁盾 | 1 | DEF 10 | +2 DEF | 250 |
 | 铠甲 | iron-plate | 铁甲 | 1 | DEF 15 | +2 DEF, +20 HP | 400 |
 | 头盔 | iron-helm | 铁盔 | 1 | DEF 8 | +1 DEF | 200 |
-| 手套 | iron-gloves | 铁手套 | 1 | DEF 5 | +1 DEF | 150 |
-| 腰带 | leather-belt | 皮带 | 1 | DEF 6 | +1 DEF | 180 |
 | 戒指 | iron-ring | 铁戒指 | 1 | HP 30 | +5 HP | 220 |
-| 鞋子 | iron-boots | 铁靴 | 1 | DEF 7 | +1 DEF | 200 |
 | 右手武器 | steel-blade | 钢刃 | 10 | ATK 40 | +3 ATK | 600 |
 | 双手武器 | steel-greatsword | 巨型钢剑 | 10 | ATK 72 | +4 ATK | 1000 |
 | 左手盾 | steel-bulwark | 钢盾 | 10 | DEF 16 | +2 DEF | 500 |
 | 铠甲 | steel-cuirass | 钢甲 | 10 | DEF 24 | +2 DEF, +20 HP | 800 |
 | 头盔 | steel-helm | 钢盔 | 10 | DEF 13 | +1 DEF | 400 |
-| 手套 | steel-gauntlets | 钢护手 | 10 | DEF 8 | +1 DEF | 300 |
-| 腰带 | studded-belt | 铆钉腰带 | 10 | DEF 10 | +1 DEF | 360 |
 | 戒指 | amber-ring | 琥珀戒 | 10 | HP 48 | +5 HP | 440 |
-| 鞋子 | steel-greaves | 钢靴 | 10 | DEF 11 | +1 DEF | 400 |
 | 右手武器 | knight-blade | 骑士刃 | 20 | ATK 55 | +3 ATK | 1050 |
 | 双手武器 | knight-warhammer | 骑士战锤 | 20 | ATK 99 | +4 ATK | 1750 |
 | 左手盾 | knight-tower-shield | 骑士塔盾 | 20 | DEF 22 | +2 DEF | 875 |
 | 铠甲 | knight-armor | 骑士甲 | 20 | DEF 33 | +2 DEF, +20 HP | 1400 |
 | 头盔 | knight-helm | 骑士盔 | 20 | DEF 18 | +1 DEF | 700 |
-| 手套 | knight-gauntlets | 骑士护手 | 20 | DEF 11 | +1 DEF | 525 |
-| 腰带 | reinforced-belt | 加固腰带 | 20 | DEF 13 | +1 DEF | 630 |
 | 戒指 | ruby-ring | 红玉戒 | 20 | HP 66 | +5 HP | 770 |
-| 鞋子 | knight-sabatons | 骑士胫甲 | 20 | DEF 15 | +1 DEF | 700 |
 | 右手武器 | mithril-saber | 秘银军刀 | 30 | ATK 78 | +3 ATK | 1800 |
 | 双手武器 | mithril-claymore | 秘银巨剑 | 30 | ATK 140 | +4 ATK | 3000 |
 | 左手盾 | mithril-aegis | 秘银盾 | 30 | DEF 31 | +2 DEF | 1500 |
 | 铠甲 | mithril-hauberk | 秘银甲 | 30 | DEF 46 | +2 DEF, +20 HP | 2400 |
 | 头盔 | mithril-coif | 秘银盔 | 30 | DEF 25 | +1 DEF | 1200 |
-| 手套 | mithril-gloves | 秘银护手 | 30 | DEF 16 | +1 DEF | 900 |
-| 腰带 | silverweave-belt | 银纹腰带 | 30 | DEF 19 | +1 DEF | 1080 |
 | 戒指 | sapphire-ring | 蓝宝石戒 | 30 | HP 93 | +5 HP | 1320 |
-| 鞋子 | mithril-boots | 秘银长靴 | 30 | DEF 22 | +1 DEF | 1200 |
 | 右手武器 | runed-edge | 符文之锋 | 40 | ATK 105 | +3 ATK | 2700 |
 | 双手武器 | runed-greataxe | 符文巨斧 | 40 | ATK 189 | +4 ATK | 4500 |
 | 左手盾 | runed-bulwark | 符文壁垒 | 40 | DEF 42 | +2 DEF | 2250 |
 | 铠甲 | runed-cuirass | 符文甲 | 40 | DEF 63 | +2 DEF, +20 HP | 3600 |
 | 头盔 | runed-helm | 符文头盔 | 40 | DEF 34 | +1 DEF | 1800 |
-| 手套 | runed-gauntlets | 符文护手 | 40 | DEF 21 | +1 DEF | 1350 |
-| 腰带 | glyph-belt | 符纹腰带 | 40 | DEF 25 | +1 DEF | 1620 |
 | 戒指 | topaz-ring | 黄玉戒 | 40 | HP 126 | +5 HP | 1980 |
-| 鞋子 | runed-greaves | 符文胫甲 | 40 | DEF 29 | +1 DEF | 1800 |
 | 右手武器 | dragonbone-fang | 龙骨之牙 | 50 | ATK 130 | +3 ATK | 3900 |
 | 双手武器 | dragonslayer | 屠龙者 | 50 | ATK 234 | +4 ATK | 6500 |
 | 左手盾 | dragonbone-shield | 龙骨盾 | 50 | DEF 52 | +2 DEF | 3250 |
 | 铠甲 | dragonscale-armor | 龙鳞甲 | 50 | DEF 78 | +2 DEF, +20 HP | 5200 |
 | 头盔 | dragonbone-helm | 龙骨盔 | 50 | DEF 42 | +1 DEF | 2600 |
-| 手套 | dragonbone-gauntlets | 龙骨护手 | 50 | DEF 26 | +1 DEF | 1950 |
-| 腰带 | dragonscribed-belt | 龙纹腰带 | 50 | DEF 31 | +1 DEF | 2340 |
 | 戒指 | emerald-ring | 祖母绿戒 | 50 | HP 156 | +5 HP | 2860 |
-| 鞋子 | dragonscale-boots | 龙鳞靴 | 50 | DEF 36 | +1 DEF | 2600 |
 | 右手武器 | radiant-sword | 辟光剑 | 60 | ATK 160 | +3 ATK | 5400 |
 | 双手武器 | starbreaker | 碎星者 | 60 | ATK 288 | +4 ATK | 9000 |
 | 左手盾 | celestial-bulwark | 天穹壁垒 | 60 | DEF 64 | +2 DEF | 4500 |
 | 铠甲 | starlit-plate | 星辉甲 | 60 | DEF 96 | +2 DEF, +20 HP | 7200 |
 | 头盔 | starcrest | 星冕 | 60 | DEF 51 | +1 DEF | 3600 |
-| 手套 | starlit-gauntlets | 星辉护手 | 60 | DEF 32 | +1 DEF | 2700 |
-| 腰带 | starwoven-belt | 星纹腰带 | 60 | DEF 38 | +1 DEF | 3240 |
 | 戒指 | morningstar-ring | 晨星戒 | 60 | HP 192 | +5 HP | 3960 |
-| 鞋子 | starlit-boots | 星辉长靴 | 60 | DEF 45 | +1 DEF | 3600 |
 
-### 怪物详细数据
+### 怪物数据
 
-| ID | 名称 | LV | HP | ATK | DEF | EXP | GOLD | BOSS | 所属地图 |
-|---|---|---:|---:|---:|---:|---:|---:|:---:|---|
-| `slime` | 史莱姆 (Slime) | 1 | 80 | 12 | 2 | 30 | 25 |  | 青苔原 (fringe) |
-| `wolf` | 野狼 (Wolf) | 4 | 130 | 20 | 6 | 45 | 35 |  | 青苔原 (fringe) |
-| `goblin` | 哥布林 (Goblin) | 6 | 180 | 24 | 10 | 65 | 55 |  | 青苔原 (fringe) |
-| `boar` | 巨型野猪 (Boar) | 8 | 260 | 31 | 13 | 90 | 70 |  | 青苔原 (fringe) |
-| `boss-golden-sheep` | 黄金绵羊 (Golden Sheep) | 10 | 1000 | 45 | 28 | 400 | 300 | ✔ | 青苔原 (fringe) |
-| `ice-boli` | 冰玻力 (Ice Boli) | 12 | 460 | 55 | 24 | 160 | 140 |  | 熔冰之脊 (spine-of-frostfire) |
-| `pyro-fox` | 火焰狐 (Pyro Fox) | 14 | 520 | 62 | 20 | 190 | 165 |  | 熔冰之脊 (spine-of-frostfire) |
-| `froststone-colossus` | 寒岩巨像 (Stone Golem) | 17 | 780 | 70 | 35 | 240 | 210 |  | 熔冰之脊 (spine-of-frostfire) |
-| `boss-wind-raptor` | 风暴迅猛龙 (Wind Raptor) | 20 | 1600 | 135 | 46 | 540 | 600 | ✔ | 熔冰之脊 (spine-of-frostfire) |
-| `shade` | 影子刺客 (Shade) | 22 | 980 | 95 | 38 | 360 | 330 |  | 雷隐堡垒 (thunderveil-keep) |
-| `thunder-knight` | 雷霆骑士 (Thunder Knight) | 25 | 1200 | 112 | 43 | 480 | 420 |  | 雷隐堡垒 (thunderveil-keep) |
-| `abyss-witch` | 深渊女巫 (Abyss Witch) | 28 | 1350 | 128 | 46 | 540 | 500 |  | 雷隐堡垒 (thunderveil-keep) |
-| `boss-dragon-whelp` | 幼龙 (Dragon Whelp) | 30 | 2200 | 170 | 72 | 660 | 610 | ✔ | 雷隐堡垒 (thunderveil-keep) |
-| `m-specter` | 沼泽魅影 (Marsh Specter) | 31 | 1622 | 139 | 49 | 441 | 378 |  | 腐沼根海 (bogroot-expanse) |
-| `m-rockback` | 岩背巨兽 (Marsh Rockback) | 32 | 1682 | 143 | 50 | 456 | 391 |  | 腐沼根海 (bogroot-expanse) |
-| `m-raven` | 血鸦 (Marsh Blood Raven) | 34 | 1785 | 151 | 53 | 483 | 415 |  | 腐沼根海 (bogroot-expanse) |
-| `boss-treant` | 腐沼树妖 (Bog Treant) | 35 | 2676 | 182 | 65 | 622 | 535 | ✔ | 腐沼根海 (bogroot-expanse) |
-| `m-nightstalker` | 夜巡狼人 (Nightstalker) | 36 | 1906 | 159 | 55 | 513 | 441 |  | 暮影裂谷 (duskfang-rift) |
-| `m-troll` | 寒霜巨魔 (Frost Troll) | 37 | 1967 | 163 | 57 | 529 | 454 |  | 暮影裂谷 (duskfang-rift) |
-| `m-hound` | 熔岩猎犬 (Lava Hound) | 39 | 2070 | 171 | 59 | 556 | 477 |  | 暮影裂谷 (duskfang-rift) |
-| `boss-priest` | 暗影祭司 (Shadow Priest) | 40 | 3088 | 206 | 74 | 713 | 612 | ✔ | 暮影裂谷 (duskfang-rift) |
-| `m-harvester` | 骨响收割者 (Bone Harvester) | 41 | 2190 | 179 | 62 | 586 | 503 |  | 暗辉法枢 (gloomlit-arcanum) |
-| `m-sentinel` | 符文哨兵 (Rune Sentinel) | 42 | 2233 | 183 | 63 | 598 | 513 |  | 暗辉法枢 (gloomlit-arcanum) |
-| `m-reaver` | 虚空撕裂者 (Void Reaver) | 44 | 2354 | 191 | 66 | 628 | 540 |  | 暗辉法枢 (gloomlit-arcanum) |
-| `boss-archmage` | 堕落大法师 (Fallen Archmage) | 45 | 3500 | 230 | 81 | 803 | 690 | ✔ | 暗辉法枢 (gloomlit-arcanum) |
-| `m-stormcaller` | 风暴召唤者 (Stormcaller) | 46 | 2457 | 199 | 68 | 655 | 563 |  | 黑曜风痕 (obsidian-windscar) |
-| `m-colossus` | 黑曜巨像 (Obsidian Colossus) | 47 | 2517 | 203 | 70 | 670 | 576 |  | 黑曜风痕 (obsidian-windscar) |
-| `m-titan` | 焰生泰坦 (Flameborn Titan) | 49 | 2638 | 211 | 72 | 700 | 602 |  | 黑曜风痕 (obsidian-windscar) |
-| `boss-knight` | 恐惧骑士 (Dread Knight) | 50 | 3887 | 253 | 90 | 891 | 765 | ✔ | 黑曜风痕 (obsidian-windscar) |
-| `m-chimera` | 秘能奇美拉 (Arcane Chimera) | 51 | 2741 | 219 | 75 | 727 | 625 |  | 霜焰裂潮 (frostfire-maelstrom) |
-| `m-wyrm` | 冰霜飞龙 (Frost Wyrm) | 52 | 2801 | 223 | 76 | 742 | 638 |  | 霜焰裂潮 (frostfire-maelstrom) |
-| `m-kraken` | 深海巨妖 (Abyss Kraken) | 54 | 2922 | 231 | 79 | 773 | 664 |  | 霜焰裂潮 (frostfire-maelstrom) |
-| `boss-warlord` | 地狱军阀 (Infernal Warlord) | 55 | 4299 | 277 | 97 | 981 | 842 | ✔ | 霜焰裂潮 (frostfire-maelstrom) |
-| `m-templar` | 天穹圣卫 (Celestial Templar) | 56 | 3025 | 239 | 81 | 800 | 687 |  | 星界王座 (astral-crown) |
-| `m-banshee` | 灰烬魅灵 (Ashen Banshee) | 57 | 3086 | 243 | 82 | 815 | 700 |  | 星界王座 (astral-crown) |
-| `m-hunter` | 苍穹狩魔者 (Skyscour Hunter) | 59 | 3207 | 251 | 85 | 845 | 727 |  | 星界王座 (astral-crown) |
-| `boss-dragon` | 远古龙王 (Ancient Dragon) | 60 | 4600 | 300 | 104 | 1075 | 923 | ✔ | 星界王座 (astral-crown) |
-| `m-faerie`             | 森灵妖精 (Forest Faerie)   | 61 | 3150 | 258 |  86 |  860 |  735 |      | 绿野仙境 (green-elysium) |
-| `m-bloomfiend`         | 绽灵花魔 (Bloomfiend)      | 62 | 3220 | 265 |  88 |  882 |  750 |      | 绿野仙境 (green-elysium) |
-| `m-dreamstag`          | 梦角鹿 (Dream Stag)       | 63 | 3305 | 272 |  90 |  905 |  768 |      | 绿野仙境 (green-elysium) |
-| `m-sylvan-sentinel`    | 森域守卫 (Sylvan Sentinel) | 64 | 3400 | 280 |  92 |  930 |  785 |      | 绿野仙境 (green-elysium) |
-| `boss-queen-of-blooms` | 绽辉女王 (Queen of Blooms) | 65 | 4950 | 325 | 108 | 1150 |  970 |   ✔  | 绿野仙境 (green-elysium) |
+| ID                     | 名称                         | 等阶 | HP   | BP   | 特化       | EXP  | GOLD | BOSS | 所属地图                       |
+|------------------------|------------------------------|------|------|------|------------|------|------|------|--------------------------------|
+| `slime`                | 史莱姆 (Slime)               | 一级 | 80   | 100  | Balanced   | 30   | 25   |      | 青苔原 (fringe)                |
+| `wolf`                 | 野狼 (Wolf)                  | 一级 | 130  | 120  | Skirmisher | 45   | 35   |      | 青苔原 (fringe)                |
+| `goblin`               | 哥布林 (Goblin)              | 一级 | 180  | 140  | Attacker   | 65   | 55   |      | 青苔原 (fringe)                |
+| `boar`                 | 巨型野猪 (Boar)              | 一级 | 260  | 160  | Bruiser    | 90   | 70   |      | 青苔原 (fringe)                |
+| `boss-golden-sheep`    | 黄金绵羊 (Golden Sheep)      | 一级 | 800  | 200  | Defender   | 400  | 300  | ✔    | 青苔原 (fringe)                |
+| `ice-boli`             | 冰玻力 (Ice Boli)            | 二级 | 460  | 240  | Defender   | 160  | 140  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `pyro-fox`             | 火焰狐 (Pyro Fox)            | 二级 | 520  | 300  | Skirmisher | 190  | 165  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `froststone-colossus`  | 寒岩巨像 (Stone Golem)       | 二级 | 780  | 340  | Defender   | 240  | 210  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `boss-wind-raptor`     | 风暴迅猛龙 (Wind Raptor)     | 二级 | 1600 | 400  | Agile      | 540  | 600  | ✔    | 熔冰之脊 (spine-of-frostfire)  |
+| `shade`                | 影子刺客 (Shade)             | 三级 | 980  | 480  | Agile      | 360  | 330  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `thunder-knight`       | 雷霆骑士 (Thunder Knight)    | 三级 | 1200 | 600  | Defender   | 480  | 420  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `abyss-witch`          | 深渊女巫 (Abyss Witch)       | 三级 | 1350 | 680  | Mystic     | 540  | 500  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `boss-dragon-whelp`    | 幼龙 (Dragon Whelp)          | 三级 | 2200 | 800  | Balanced   | 660  | 610  | ✔    | 雷隐堡垒 (thunderveil-keep)    |
+| `m-specter`            | 沼泽魅影 (Marsh Specter)     | 四级 | 1622 | 880  | Crazy      | 441  | 378  |      | 腐沼根海 (bogroot-expanse)     |
+| `m-rockback`           | 岩背巨兽 (Marsh Rockback)    | 四级 | 1682 | 1000 | Bruiser    | 456  | 391  |      | 腐沼根海 (bogroot-expanse)     |
+| `m-raven`              | 血鸦 (Marsh Blood Raven)     | 四级 | 1785 | 1080 | Skirmisher | 483  | 415  |      | 腐沼根海 (bogroot-expanse)     |
+| `boss-treant`          | 腐沼树妖 (Bog Treant)        | 四级 | 2676 | 1200 | Defender   | 622  | 535  | ✔    | 腐沼根海 (bogroot-expanse)     |
+| `m-nightstalker`       | 夜巡狼人 (Nightstalker)      | 四级 | 1906 | 1220 | Agile      | 513  | 441  |      | 暮影裂谷 (duskfang-rift)       |
+| `m-troll`              | 寒霜巨魔 (Frost Troll)       | 四级 | 1967 | 1360 | Bruiser    | 529  | 454  |      | 暮影裂谷 (duskfang-rift)       |
+| `m-hound`              | 熔岩猎犬 (Lava Hound)        | 四级 | 2070 | 1480 | Attacker   | 556  | 477  |      | 暮影裂谷 (duskfang-rift)       |
+| `boss-priest`          | 暗影祭司 (Shadow Priest)     | 四级 | 3088 | 1600 | Mystic   | 713  | 612  | ✔    | 暮影裂谷 (duskfang-rift)       |
+| `m-harvester`          | 骨响收割者 (Bone Harvester)  | 五级 | 2190 | 1760 | Attacker   | 586  | 503  |      | 暗辉法枢 (gloomlit-arcanum)    |
+| `m-sentinel`           | 符文哨兵 (Rune Sentinel)     | 五级 | 2233 | 2000 | Defender   | 598  | 513  |      | 暗辉法枢 (gloomlit-arcanum)    |
+| `m-reaver`             | 虚空撕裂者 (Void Reaver)     | 五级 | 2354 | 2180 | Crazy      | 628  | 540  |      | 暗辉法枢 (gloomlit-arcanum)    |
+| `boss-archmage`        | 堕落大法师 (Fallen Archmage) | 五级 | 3500 | 2400 | Mystic   | 803  | 690  | ✔    | 暗辉法枢 (gloomlit-arcanum)    |
+| `m-stormcaller`        | 风暴召唤者 (Stormcaller)     | 五级 | 2457 | 2580 | Mystic     | 655  | 563  |      | 黑曜风痕 (obsidian-windscar)   |
+| `m-colossus`           | 黑曜巨像 (Obsidian Colossus) | 五级 | 2517 | 2800 | Defender   | 670  | 576  |      | 黑曜风痕 (obsidian-windscar)   |
+| `m-titan`              | 焰生泰坦 (Flameborn Titan)   | 五级 | 2638 | 2980 | Bruiser    | 700  | 602  |      | 黑曜风痕 (obsidian-windscar)   |
+| `boss-knight`          | 恐惧骑士 (Dread Knight)      | 五级 | 3887 | 3200 | Bruiser    | 891  | 765  | ✔    | 黑曜风痕 (obsidian-windscar)   |
+| `m-chimera`            | 秘能奇美拉 (Arcane Chimera)  | 六级 | 2741 | 3600 | Balanced   | 727  | 625  |      | 霜焰裂潮 (frostfire-maelstrom) |
+| `m-wyrm`               | 冰霜飞龙 (Frost Wyrm)        | 六级 | 2801 | 4000 | Attacker   | 742  | 638  |      | 霜焰裂潮 (frostfire-maelstrom) |
+| `m-kraken`             | 深海巨妖 (Abyss Kraken)      | 六级 | 2922 | 4360 | Bruiser    | 773  | 664  |      | 霜焰裂潮 (frostfire-maelstrom) |
+| `boss-warlord`         | 地狱军阀 (Infernal Warlord)  | 六级 | 4299 | 4800 | Bruiser    | 981  | 842  | ✔    | 霜焰裂潮 (frostfire-maelstrom) |
+| `m-templar`            | 天穹圣卫 (Celestial Templar) | 六级 | 3025 | 5140 | Defender   | 800  | 687  |      | 星界王座 (astral-crown)        |
+| `m-banshee`            | 灰烬魅灵 (Ashen Banshee)     | 六级 | 3086 | 5480 | Mystic     | 815  | 700  |      | 星界王座 (astral-crown)        |
+| `m-hunter`             | 苍穹狩魔者 (Skyscour Hunter) | 六级 | 3207 | 6000 | Agile      | 845  | 727  |      | 星界王座 (astral-crown)        |
+| `boss-dragon`          | 远古龙王 (Ancient Dragon)    | 六级 | 4600 | 6400 | Balanced   | 1075 | 923  | ✔    | 星界王座 (astral-crown)        |
+| `m-faerie`             | 森灵妖精 (Forest Faerie)     | 七级 | 3150 | 6640 | Agile      | 860  | 735  |      | 绿野仙境 (green-elysium)       |
+| `m-bloomfiend`         | 绽灵花魔 (Bloomfiend)        | 七级 | 3220 | 7200 | Mystic     | 882  | 750  |      | 绿野仙境 (green-elysium)       |
+| `m-dreamstag`          | 梦角鹿 (Dream Stag)          | 七级 | 3305 | 7920 | Balanced   | 905  | 768  |      | 绿野仙境 (green-elysium)       |
+| `m-sylvan-sentinel`    | 森域守卫 (Sylvan Sentinel)   | 七级 | 3400 | 8760 | Agile      | 930  | 785  |      | 绿野仙境 (green-elysium)       |
+| `boss-queen-of-blooms` | 绽辉女王 (Queen of Blooms)   | 七级 | 4950 | 9600 | Defender   | 1150 | 970  | ✔    | 绿野仙境 (green-elysium)       |
+
+### BOSS列表
+通用规则：
+
+* **tough = 1.5**（可覆写）。
+* **基础出招节奏**：参考普通怪 1.6s/拍；BOSS插入**特技节奏**（短 CD 爆发、多段、蓄力读条等）。
+* 穿透、K 常数与全局伤害管线保持一致（§4）。
+
+#### 黄金绵羊（一级 BOSS）
+
+* **tough**：1.5
+* **节奏**：基础 1.6s 一拍普攻；**20% 概率**触发**二连突刺**：
+  * 两击相隔 **0.25s**，每击 **0.6×** 倍率（按“普攻 1.0”口径的 60%）。
+  * 该二连不与普攻共享内置 CD（抽到就替换当拍动作）。
+
+#### 风暴迅猛龙（二级 BOSS）
+
+* **tough**：1.5
+* **节奏**：1.6s 基础；**每 6–8s**进入**疾风态 2s**：攻击间隔降至 **0.9s**；疾风态内所有击打倍率 **0.8×**。
+
+#### 幼龙（三级 BOSS）
+
+* **tough**：1.5
+* **节奏**：1.6s 基础；**吐息读条 1.0s**（中技能 2.4×，扇形），读条期间可被打断。
+
+#### 腐沼树妖（四级 BOSS）
+
+* **tough**：1.6（更抗）
+* **节奏**：1.8s 基础；**缠根**（小 1.6× + 短禁锢）；**横扫**（大 3.6×，前摇 0.6s）。
+
+#### 暗影祭司（四级 BOSS）
+
+* **tough**：1.5
+* **节奏**：1.6s 基础；**暗影标记**（小 1.6×，被标记者 4s 内受一次额外 0.8× 追击）
+
+#### 堕落大法师（五级 BOSS）
+
+* **tough**：1.5
+* **节奏**：法阵蓄念（中 2.4× 环形爆）、**黑曜矢**（小 1.6× 多段弹），**终招 6.0×** 长读条+大范围。
+
+#### 恐惧骑士（五级 BOSS）
+
+* **tough**：1.6
+* **节奏**：1.5s 基础；**处决**（大 3.6×，对低血目标增伤），**盾反**（成功则对方 0.5s 眩晕）。
+
+#### 地狱军阀（六级 BOSS）
+
+* **tough**：1.6
+* **节奏**：1.6s 基础；**怒潮（8sCD）**：4s 内攻速 ×1.3（倍率 0.9×）；**战吼**：周围敌人 DEF -10%（10s）。
+
+#### 远古龙王（六级 BOSS）
+
+* **tough**：**1.8**
+* **节奏**：1.8s 基础；**龙息**（大 3.6×，直线扫灼）、**龙翼震荡**（中 2.4× + 击退）、**龙尾横扫**（小 1.6×，背后优先）。
+* **BP**：≈ **8000**；终招**星界咆哮**：**6.0×**，长读条，全场压制。
+
+#### 绽辉女王（七级 BOSS）
+
+* **tough**：1.6
+* **节奏**：1.7s 基础；**花雨**（多段小 1.6× DOT）、**花冠护域**（5s 内 DEF +15%），**召唤花仆**（小怪两只）。
+* **特化**：**Mystic/Defender 混合**
+* **BP**：七级中位×2.5 ≈ **9500**
 
 ### 地图列表
 

@@ -7,14 +7,14 @@ import {
   mainEnhanceTier,
   MAX_EQUIP_LEVEL,
 } from './useEnhance'
-import type { Equipment } from '@/types/domain'
+import type { Equipment, EquipSlotKey } from '@/types/domain'
 
 export type EnhanceSource = 'equipped' | 'inventory'
 
 interface ResolvedEquipment {
   source: EnhanceSource
   equipment: Equipment
-  slot?: Equipment['slot']
+  slot?: EquipSlotKey
 }
 
 export interface MainEnhanceFeedback {

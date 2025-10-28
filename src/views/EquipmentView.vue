@@ -16,10 +16,8 @@ const slots = [
   ['weaponR', '右手武器'],
   ['weapon2H', '双手武器'],
   ['armor', '铠甲'],
-  ['gloves', '手套'],
-  ['belt', '腰带'],
-  ['ring', '戒指'],
-  ['boots', '鞋子'],
+  ['ring1', '戒指 1'],
+  ['ring2', '戒指 2'],
 ] as const
 
 const statLabels = {

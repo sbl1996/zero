@@ -2,8 +2,8 @@ from PIL import Image
 from pathlib import Path
 
 cur = Path(__file__).parent.parent
-img_dir = cur / "public" / "raw"
-output_dir = cur / "public"
+img_dir = cur / "src" / "assets" / "raw"
+output_dir = cur / "src" / "assets"
 # 把所有png变成webp
 for img_path in img_dir.glob("*.png"):
     img = Image.open(img_path)

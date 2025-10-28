@@ -2,7 +2,9 @@
 import { computed, ref, watch, onBeforeUnmount } from 'vue'
 import { storeToRefs } from 'pinia'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
+import LevelUpSuccessModal from '@/components/LevelUpSuccessModal.vue'
 import { usePlayerStore } from '@/stores/player'
+import type { LevelUpRewards } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { computeBreakthroughChance, computeEnvironmentMultiplier, PASSIVE_MEDITATION_BP_PER_SECOND } from '@/composables/useLeveling'
 import type { BreakthroughMethod } from '@/types/domain'
@@ -12,12 +14,13 @@ const player = usePlayerStore()
 const inventory = useInventoryStore()
 const { cultivation, res } = storeToRefs(player)
 
-const isMeditating = ref(res.value.recovery.mode === 'meditate')
+const isMeditating = ref(res.value?.recovery?.mode === 'meditate')
 const meditationStartAt = ref<number | null>(isMeditating.value ? Date.now() : null)
 const elapsedSeconds = ref(0)
 const nowTick = ref(Date.now())
 const breakthroughFeedback = ref<string | null>(null)
 const breakthroughFeedbackPositive = ref<boolean | null>(null)
+const levelUpRewards = ref<LevelUpRewards | null>(null)
 
 let elapsedTimer: ReturnType<typeof setInterval> | null = null
 let nowTimer: ReturnType<typeof setInterval> | null = null
@@ -49,15 +52,34 @@ function stopElapsedTimer(reset = false) {
 
 function startMeditation() {
   if (isMeditating.value) return
-  player.setRecoveryMode('meditate')
+
+  // 只有在斗气运转完成后才能开始冥想
+  if (res.value?.operation?.fValue < 1) {
+    breakthroughFeedback.value = '斗气尚未运转完成，无法开始冥想。'
+    breakthroughFeedbackPositive.value = false
+    return
+  }
+
+  // 保留斗气运转状态
+  player.setRecoveryMode('meditate', { preserveOperation: true })
   isMeditating.value = true
   meditationStartAt.value = Date.now()
   startElapsedTimer()
 }
 
+// 计算斗气运转是否完成
+const isQiOperationComplete = computed(() => res.value?.operation?.fValue >= 1)
+
+// 开始冥想按钮的禁用状态和提示
+const canStartMeditation = computed(() => {
+  return !isMeditating.value && isQiOperationComplete.value
+})
+
+
 function stopMeditation() {
   if (!isMeditating.value) return
-  player.setRecoveryMode('idle')
+  // 结束冥想但保留斗气运转状态
+  player.setRecoveryModeKeepOperation('idle')
   isMeditating.value = false
   meditationStartAt.value = null
   stopElapsedTimer(true)
@@ -66,7 +88,7 @@ function stopMeditation() {
 const tickEnvironment = computed(() => (isMeditating.value ? 'meditation' : 'idle'))
 
 watch(
-  () => res.value.recovery.mode,
+  () => res.value?.recovery?.mode,
   (mode) => {
     if (mode === 'meditate' && !isMeditating.value) {
       isMeditating.value = true
@@ -92,8 +114,8 @@ const bpCurrent = computed(() => Math.round(cultivation.value.bp.current))
 const bpRangeMin = computed(() => Math.round(cultivation.value.bp.range.min))
 const bpRangeMax = computed(() => Math.round(cultivation.value.bp.range.max))
 
-const hpPerSecond = computed(() => res.value.recovery.hpPerSecond ?? 0)
-const qiPerSecond = computed(() => res.value.recovery.qiPerSecond ?? 0)
+const hpPerSecond = computed(() => res.value.recovery.hpPerSecond)
+const qiPerSecond = computed(() => res.value.recovery.qiPerSecond)
 
 const meditationBpRate = computed(() => {
   const multiplier = computeEnvironmentMultiplier('meditation')
@@ -169,6 +191,16 @@ function clearBreakthroughFeedback() {
   breakthroughFeedbackPositive.value = null
 }
 
+function closeLevelUpModal() {
+  levelUpRewards.value = null
+}
+
+function handleLevelUpRewardDisplay(rewards?: LevelUpRewards) {
+  if (rewards) {
+    levelUpRewards.value = rewards
+  }
+}
+
 function formatChance(value: number) {
   return `${Math.round(value * 100)}%`
 }
@@ -212,6 +244,7 @@ async function performBreakthrough(method: BreakthroughMethod, options: { consum
 
     const chanceText = formatChance(result.chance)
     if (result.success) {
+      handleLevelUpRewardDisplay(result.rewards)
       setBreakthroughFeedback(`突破成功！借助宝物冲破瓶颈（成功率 ${chanceText}）。`, true)
     } else {
       setBreakthroughFeedback(`突破失败，成功率 ${chanceText}。所有溢出本源被冲散。`, false)
@@ -226,6 +259,7 @@ async function performBreakthrough(method: BreakthroughMethod, options: { consum
   }
   const chanceText = formatChance(result.chance)
   if (result.success) {
+    handleLevelUpRewardDisplay(result.rewards)
     setBreakthroughFeedback(`突破成功！强行冲破瓶颈（成功率 ${chanceText}）。`, true)
   } else {
     setBreakthroughFeedback(`突破失败，成功率 ${chanceText}。所有溢出本源被冲散。`, false)
@@ -255,13 +289,17 @@ onBeforeUnmount(() => {
     nowTimer = null
   }
   if (isMeditating.value) {
-    player.setRecoveryMode('idle')
+    player.setRecoveryModeKeepOperation('idle')
   }
 })
 </script>
 
 <template>
   <div class="meditation-page">
+    <LevelUpSuccessModal
+      :rewards="levelUpRewards"
+      @close="closeLevelUpModal"
+    />
     <section class="meditation-content">
       <header class="meditation-header">
         <h2>冥想修炼</h2>
@@ -279,8 +317,14 @@ onBeforeUnmount(() => {
           </div>
         </div>
         <div class="meditation-info">
-          <button type="button" class="btn meditation-toggle" :class="{ active: isMeditating }" @click="toggleMeditation">
-            {{ isMeditating ? '结束冥想' : '开始冥想' }}
+          <button
+            type="button"
+            class="btn meditation-toggle"
+            :class="{ active: isMeditating }"
+            :disabled="!canStartMeditation && !isMeditating"
+            @click="toggleMeditation"
+          >
+            {{ isMeditating ? '结束冥想' : (isQiOperationComplete ? '开始冥想' : '请先运转斗气') }}
           </button>
           <div class="meditation-stat-grid">
             <div class="stat-item">
@@ -312,9 +356,6 @@ onBeforeUnmount(() => {
           </div>
           <p v-if="isBottlenecked" class="meditation-tip">
             已触及境界瓶颈，持续冥想将把新增斗气存入溢出池（当前 {{ overflowBp }}）。
-          </p>
-          <p v-else class="meditation-tip">
-            保持专注，待预热完成后可随时切换至战斗运转获得更高收益。
           </p>
         </div>
       </div>
@@ -615,6 +656,25 @@ onBeforeUnmount(() => {
 
 .meditation-toggle:hover {
   transform: translateY(-2px);
+}
+
+.meditation-toggle:disabled:not(.active) {
+  background: linear-gradient(135deg, rgba(60, 120, 255, 0.4), rgba(30, 66, 155, 0.5));
+  border-color: rgba(132, 196, 255, 0.25);
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.meditation-toggle:disabled:not(.active):hover {
+  transform: none;
+}
+
+.text-success {
+  color: #4ade80 !important;
+}
+
+.text-warning {
+  color: #fbbf24 !important;
 }
 
 .meditation-stat-grid {

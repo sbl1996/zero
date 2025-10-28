@@ -367,7 +367,7 @@ button {
   font-size: 12px;
 }
 
-.text-lv {
+.text-gold {
   color: #f5d06f;
   font-weight: 600;
 }
@@ -860,10 +860,34 @@ button {
     0 2px 6px rgba(0, 0, 0, 0.8),
     0 0 14px rgba(0, 0, 0, 0.7);
   z-index: 1;
+  --float-scale-start: 1;
+  --float-scale-peak: 1;
+  --float-scale-hold: 1;
+  --float-scale-end: 1;
+  transform-origin: center;
 }
 
 .float-text.hitP {
   color: #ff475f;
+}
+
+.float-text.hitE {
+  color: #8be9fd;
+}
+
+.float-text.weakness {
+  color: #ff8ad4;
+  font-size: 26px;
+  letter-spacing: 0.6px;
+  text-shadow:
+    0 0 2px rgba(255, 228, 255, 0.75),
+    0 0 18px rgba(255, 76, 165, 0.85),
+    0 0 36px rgba(255, 169, 214, 0.65),
+    0 4px 22px rgba(0, 0, 0, 0.75);
+  --float-scale-start: 0.8;
+  --float-scale-peak: 1.45;
+  --float-scale-hold: 1.2;
+  --float-scale-end: 1.05;
 }
 
 .float-text.heal {
@@ -889,18 +913,19 @@ button {
 @keyframes float-up {
   from {
     opacity: 0;
-    transform: translate(-50%, 30%);
+    transform: translate(-50%, 30%) scale(var(--float-scale-start, 1));
   }
   20% {
     opacity: 1;
-    transform: translate(-50%, 0%);
+    transform: translate(-50%, 0%) scale(var(--float-scale-peak, 1));
   }
   70% {
     opacity: 1;
+    transform: translate(-50%, -32%) scale(var(--float-scale-hold, 1));
   }
   to {
     opacity: 0;
-    transform: translate(-50%, -80%);
+    transform: translate(-50%, -80%) scale(var(--float-scale-end, 1));
   }
 }
 

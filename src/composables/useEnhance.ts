@@ -83,10 +83,7 @@ const SLOT_FLAT_CAP: Record<EquipSlot, number> = {
   shieldL: 0.18,
   armor: 0.18,
   helmet: 0.15,
-  gloves: 0.15,
-  belt: 0.15,
   ring: 0.15,
-  boots: 0.15,
 }
 
 export function mainFlatCap(slot: EquipSlot, override?: number) {

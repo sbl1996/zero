@@ -1,12 +1,12 @@
 import { useInventoryStore } from '@/stores/inventory'
 import { usePlayerStore } from '@/stores/player'
-import type { EquipSlot, Equipment } from '@/types/domain'
+import type { EquipSlotKey, Equipment } from '@/types/domain'
 
 export type EquipFailureReason = 'not-found' | 'already-equipped' | 'apply-error'
 
 export interface EquipSuccess {
   ok: true
-  slot: EquipSlot
+  slot: EquipSlotKey
   equipped: Equipment
   unequipped: Equipment[]
 }
@@ -14,7 +14,7 @@ export interface EquipSuccess {
 export interface EquipFailure {
   ok: false
   reason: EquipFailureReason
-  slot?: EquipSlot
+  slot?: EquipSlotKey
   equipment?: Equipment
 }
 
@@ -24,20 +24,20 @@ export type UnequipFailureReason = 'empty-slot'
 
 export interface UnequipSuccess {
   ok: true
-  slot: EquipSlot
+  slot: EquipSlotKey
   equipment: Equipment
 }
 
 export interface UnequipFailure {
   ok: false
   reason: UnequipFailureReason
-  slot: EquipSlot
+  slot: EquipSlotKey
 }
 
 export type UnequipResult = UnequipSuccess | UnequipFailure
 
-function resolveSlotsToClear(slot: EquipSlot, equipment: Equipment): EquipSlot[] {
-  const slots = new Set<EquipSlot>([slot])
+function resolveSlotsToClear(slot: EquipSlotKey, equipment: Equipment): EquipSlotKey[] {
+  const slots = new Set<EquipSlotKey>([slot])
   if (slot === 'weapon2H' || equipment.exclusive === '2H') {
     slots.add('weaponR')
     slots.add('shieldL')
@@ -52,6 +52,15 @@ export function useEquipmentActions() {
   const inventory = useInventoryStore()
   const player = usePlayerStore()
 
+  function resolveTargetSlot(equipment: Equipment): EquipSlotKey | null {
+    if (equipment.slot === 'ring') {
+      if (!player.equips.ring1) return 'ring1'
+      if (!player.equips.ring2) return 'ring2'
+      return 'ring1'
+    }
+    return equipment.slot
+  }
+
   function requestEquip(equipmentId: string): EquipResult {
     const equipment = inventory.getEquipment(equipmentId)
     if (!equipment) {
@@ -64,14 +73,20 @@ export function useEquipmentActions() {
 
     const removedFromInventory = inventory.removeEquipment(equipmentId)
     if (!removedFromInventory) {
-      return { ok: false, reason: 'apply-error', slot: equipment.slot }
+      return { ok: false, reason: 'apply-error' }
     }
 
-    const slotsToClear = resolveSlotsToClear(removedFromInventory.slot, removedFromInventory)
+    const targetSlot = resolveTargetSlot(removedFromInventory)
+    if (!targetSlot) {
+      inventory.addEquipment(removedFromInventory)
+      return { ok: false, reason: 'apply-error' }
+    }
+
+    const slotsToClear = resolveSlotsToClear(targetSlot, removedFromInventory)
     const unequipped: Equipment[] = []
 
     slotsToClear
-      .filter((candidate) => candidate !== removedFromInventory.slot)
+      .filter((candidate) => candidate !== targetSlot)
       .forEach((candidate) => {
         const removed = player.unequip(candidate)
         if (removed) {
@@ -80,25 +95,25 @@ export function useEquipmentActions() {
         }
       })
 
-    const displaced = player.unequip(removedFromInventory.slot)
+    const displaced = player.unequip(targetSlot)
     if (displaced) {
       unequipped.push(displaced)
       inventory.addEquipment(displaced)
     }
 
-    player.equip(removedFromInventory.slot, removedFromInventory)
+    player.equip(targetSlot, removedFromInventory)
 
-    const equippedNow = player.equips[removedFromInventory.slot]
+    const equippedNow = player.equips[targetSlot]
     if (!equippedNow) {
       // extremely unlikely, but revert to avoid losing item
       inventory.addEquipment(removedFromInventory)
-      return { ok: false, reason: 'apply-error', slot: removedFromInventory.slot }
+      return { ok: false, reason: 'apply-error', slot: targetSlot }
     }
 
-    return { ok: true, slot: removedFromInventory.slot, equipped: equippedNow, unequipped }
+    return { ok: true, slot: targetSlot, equipped: equippedNow, unequipped }
   }
 
-  function requestUnequip(slot: EquipSlot): UnequipResult {
+  function requestUnequip(slot: EquipSlotKey): UnequipResult {
     const removed = player.unequip(slot)
     if (!removed) {
       return { ok: false, reason: 'empty-slot', slot }

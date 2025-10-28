@@ -8,8 +8,9 @@ import { resolveMainStatBreakdown } from '@/composables/useEnhance'
 import { ITEMS, consumableIds } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import { resolveItemIcon, textIcon } from '@/utils/itemIcon'
+import { formatRealmTierLabel, realmTierIndex } from '@/utils/realm'
 import type { ItemIcon } from '@/utils/itemIcon'
-import type { EquipSlot, EquipSubStats, Equipment } from '@/types/domain'
+import type { EquipSlot, EquipSlotKey, EquipSubStats, Equipment, RealmTier } from '@/types/domain'
 
 const inventory = useInventoryStore()
 const player = usePlayerStore()
@@ -39,25 +40,40 @@ interface BackpackEquipmentEntry {
   icon: ItemIcon
   level: number
   slot: EquipSlot
+  slotKey?: EquipSlotKey
   slotLabel: string
   mainDetail: string
   subDetails: string[]
-  requiredLevel?: number
+  requiredRealmTier?: RealmTier
   equipment: Equipment
 }
 
 type BackpackEntry = BackpackStackEntry | BackpackEquipmentEntry
 
-const slotLabels: Record<EquipSlot, string> = {
+const slotCategoryLabels: Record<EquipSlot, string> = {
   helmet: '头盔',
   shieldL: '左手盾牌',
   weaponR: '右手武器',
   weapon2H: '双手武器',
   armor: '铠甲',
-  gloves: '手套',
-  belt: '腰带',
   ring: '戒指',
-  boots: '鞋子',
+}
+
+const slotKeyLabels: Record<EquipSlotKey, string> = {
+  helmet: '头盔',
+  shieldL: '左手盾牌',
+  weaponR: '右手武器',
+  weapon2H: '双手武器',
+  armor: '铠甲',
+  ring1: '戒指 1',
+  ring2: '戒指 2',
+}
+
+function resolveSlotLabel(slot: EquipSlot, slotKey?: EquipSlotKey): string {
+  if (slotKey) {
+    return slotKeyLabels[slotKey] ?? slotCategoryLabels[slot] ?? slotKey
+  }
+  return slotCategoryLabels[slot] ?? slot
 }
 
 function iconForStack(id: string): ItemIcon {
@@ -75,11 +91,8 @@ function getEquipmentSubType(slot: EquipSlot): EquipmentSubType {
       return 'weapon'
     case 'helmet':
     case 'armor':
-    case 'gloves':
-    case 'boots':
       return 'armor'
     case 'ring':
-    case 'belt':
       return 'accessory'
     case 'shieldL':
       return 'shield'
@@ -114,14 +127,8 @@ function iconForSlot(slot: EquipSlot): ItemIcon {
       return textIcon('⚔️')
     case 'armor':
       return textIcon('🦺')
-    case 'gloves':
-      return textIcon('🧤')
-    case 'belt':
-      return textIcon('👔')
     case 'ring':
       return textIcon('💍')
-    case 'boots':
-      return textIcon('👢')
     default:
       return textIcon('📦')
   }
@@ -170,7 +177,7 @@ function formatSubs(subs: EquipSubStats): string[] {
   return entries.length > 0 ? entries : ['无']
 }
 
-function getEquipmentRequiredLevel(equipment: Equipment): number | undefined {
+function getEquipmentRequiredRealmTier(equipment: Equipment): RealmTier | undefined {
   // 先尝试直接用装备ID查找模板（适用于起始装备等基础装备）
   let template = BASE_EQUIPMENT_TEMPLATES.find(t => t.id === equipment.id)
 
@@ -192,13 +199,13 @@ function getEquipmentRequiredLevel(equipment: Equipment): number | undefined {
     }
   }
 
-  // 如果仍然找不到模板，返回undefined（这样就不会显示需求等级）
+  // 如果仍然找不到模板，返回undefined（这样就不会显示需求境界）
   if (!template) {
     console.warn(`Equipment template not found for ID: ${equipment.id}`)
     return undefined
   }
 
-  return template.requiredLevel
+  return template.requiredRealmTier
 }
 
 const stackEntries = computed<BackpackStackEntry[]>(() =>
@@ -230,18 +237,18 @@ const equipmentEntries = computed<BackpackEquipmentEntry[]>(() =>
     icon: iconForSlot(equipment.slot),
     level: equipment.level,
     slot: equipment.slot,
-    slotLabel: slotLabels[equipment.slot] ?? equipment.slot,
+    slotLabel: resolveSlotLabel(equipment.slot),
     mainDetail: formatMainStat(equipment),
     subDetails: formatSubs(equipment.subs),
-    requiredLevel: getEquipmentRequiredLevel(equipment),
+    requiredRealmTier: getEquipmentRequiredRealmTier(equipment),
     equipment,
   })),
 )
 
 const equippedEntries = computed<BackpackEquipmentEntry[]>(() =>
-  Object.values(player.equips)
-    .filter((equipment): equipment is Equipment => Boolean(equipment))
-    .map((equipment) => ({
+  Object.entries(player.equips)
+    .filter((entry): entry is [EquipSlotKey, Equipment] => Boolean(entry[1]))
+    .map(([slotKey, equipment]) => ({
       kind: 'equipment' as const,
       type: 'equipment' as const,
       subType: getEquipmentSubType(equipment.slot),
@@ -251,10 +258,11 @@ const equippedEntries = computed<BackpackEquipmentEntry[]>(() =>
       icon: iconForSlot(equipment.slot),
       level: equipment.level,
       slot: equipment.slot,
-      slotLabel: slotLabels[equipment.slot] ?? equipment.slot,
+      slotKey,
+      slotLabel: resolveSlotLabel(equipment.slot, slotKey),
       mainDetail: formatMainStat(equipment),
       subDetails: formatSubs(equipment.subs),
-      requiredLevel: getEquipmentRequiredLevel(equipment),
+      requiredRealmTier: getEquipmentRequiredRealmTier(equipment),
       equipment,
     })),
 )
@@ -274,8 +282,8 @@ function compareBackpackEntries(a: BackpackEntry, b: BackpackEntry): number {
     const sourceDelta = a.source === b.source ? 0 : a.source === 'equipped' ? -1 : 1
     if (sourceDelta !== 0) return sourceDelta
 
-    const requiredA = a.requiredLevel ?? -1
-    const requiredB = b.requiredLevel ?? -1
+    const requiredA = a.requiredRealmTier ? realmTierIndex(a.requiredRealmTier) : -1
+    const requiredB = b.requiredRealmTier ? realmTierIndex(b.requiredRealmTier) : -1
     if (requiredA !== requiredB) return requiredB - requiredA
 
     if (a.level !== b.level) return b.level - a.level
@@ -343,7 +351,8 @@ function showFeedback(message: string, success: boolean) {
 
 function enhanceEntryKey(entry: BackpackEquipmentEntry): string {
   if (entry.source === 'equipped') {
-    return `equipped-${entry.slot}`
+    const slotId = entry.slotKey ?? entry.slot
+    return `equipped-${slotId}`
   }
   const index = inventory.equipment.indexOf(entry.equipment)
   const suffix = index >= 0 ? index : entry.equipment.id
@@ -372,7 +381,7 @@ function handleEquip(equipment: Equipment) {
   })
 }
 
-function handleUnequip(slot: EquipSlot) {
+function handleUnequip(slot: EquipSlotKey) {
   withActionLock(() => {
     const result = requestUnequip(slot)
     if (result.ok) {
@@ -396,9 +405,17 @@ function handleDiscard(equipment: Equipment) {
   }
 }
 
-function currentEquipmentName(slot: EquipSlot) {
+function describeEquipped(slot: EquipSlotKey): string {
   const equipped = player.equips[slot]
   return equipped ? `${equipped.name}（+${equipped.level}）` : '未装备'
+}
+
+function currentEquipmentName(slot: EquipSlot) {
+  if (slot === 'ring') {
+    const ringSlots: EquipSlotKey[] = ['ring1', 'ring2']
+    return ringSlots.map((key) => `${slotKeyLabels[key]}：${describeEquipped(key)}`).join(' / ')
+  }
+  return describeEquipped(slot as EquipSlotKey)
 }
 
 function handleUseItem(itemId: string, itemName: string) {
@@ -534,8 +551,8 @@ function entryTypeLabel(type: BackpackEntryType): string {
           <template v-else>
             <div class="inventory-card__body">
               <div class="text-small">部位：{{ entry.slotLabel }}</div>
-              <div v-if="entry.requiredLevel && entry.requiredLevel > 0" class="text-small text-muted">
-                推荐等级：{{ entry.requiredLevel }}
+              <div v-if="entry.requiredRealmTier" class="text-small text-muted">
+                需求境界：{{ formatRealmTierLabel(entry.requiredRealmTier) }}
               </div>
               <div class="text-small">等级：+{{ entry.level }}</div>
               <div class="text-small" style="margin-top: 6px;" :title="getMainStatTooltip(entry.equipment)">
@@ -573,7 +590,7 @@ function entryTypeLabel(type: BackpackEntryType): string {
                     class="unequip-button"
                     type="button"
                     :disabled="actionLocked"
-                    @click="handleUnequip(entry.slot)"
+                    @click="handleUnequip(entry.slotKey!)"
                   >卸下</button>
                 </template>
               </div>

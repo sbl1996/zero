@@ -1,20 +1,29 @@
-import type { RealmStage, RealmTier } from '@/types/domain'
+import type { RealmPhase, RealmStage, RealmTier } from '@/types/domain'
 
 export interface DamageOptions {
   penFlat?: number
   penPct?: number
   defenderTough?: number
-  // Preferred: absolute DEF_ref constant from target realm (see getDefRefForRealm)
+  // Absolute DEF_ref constant from target realm (see getDefRefForRealm)
   defRef?: number
-  // Back-compat fallback when DEF_ref is unavailable
-  contentLevel?: number
-  defRefFactor?: number
-  desiredRetention?: number
 }
 
 export interface DamageResult {
   damage: number
   coreDamage: number
+}
+
+export interface WeaknessResolution {
+  damage: number
+  triggered: boolean
+  chance: number
+}
+
+function clamp01(value: number) {
+  if (!Number.isFinite(value)) return 0
+  if (value <= 0) return 0
+  if (value >= 1) return 1
+  return value
 }
 
 function toRollMultiplier(input: number) {
@@ -26,25 +35,22 @@ function clampPenPct(value = 0) {
   return Math.min(Math.max(value, 0), 0.6)
 }
 
-function clamp01(x: number) {
-  return Math.min(Math.max(x, 0), 1)
-}
-
 // DEF_ref lookup per BATTLE.md §5.1
-export function getDefRefForRealm(realm?: RealmStage | null): number {
+export function getDefRefForRealm(realm?: RealmStage | RealmTier): number {
   if (!realm) return 0
-  const tier = realm.tier
-  const phase = realm.phase
+  const { tier, phase } = typeof realm === 'number' || realm === 'sanctuary'
+    ? { tier: realm, phase: 'none' as RealmPhase }
+    : realm
 
   // Base at major tier start (1..9, sanctuary)
   const baseByTier: Record<Exclude<RealmTier, 'sanctuary'>, number> = {
-    1: 60,
-    2: 120,
-    3: 240,
-    4: 480,
-    5: 960,
-    6: 1920,
-    7: 3840,
+    1: 25,
+    2: 45,
+    3: 75,
+    4: 127,
+    5: 224,
+    6: 405,
+    7: 750,
     8: 7680,
     9: 15360,
   }
@@ -96,9 +102,6 @@ function computeDamage(
     penPct = 0,
     defenderTough = 1,
     defRef,
-    contentLevel = 0,
-    defRefFactor = 1.7,
-    desiredRetention = 0.5,
   } = options
 
   const raw = atk * mult * rollMultiplier
@@ -106,9 +109,9 @@ function computeDamage(
   let effectiveDef = Math.max(0, def - penFlat) * (1 - clampPenPct(penPct)) * Math.max(defenderTough, 0)
 
   let mitigation = 1
-  const retention = clamp01(desiredRetention)
-  const defRefConstant = Math.max(0, defRef ?? defRefFactor * Math.max(contentLevel, 0))
-  if (defRefConstant > 0 && retention > 0 && retention < 1) {
+  const defRefConstant = Math.max(0, defRef ?? 0)
+  const retention = 0.5
+  if (defRefConstant > 0) {
     const armorConstant = (retention / (1 - retention)) * defRefConstant
     const denominator = armorConstant + effectiveDef
     mitigation = denominator > 0 ? armorConstant / denominator : 1
@@ -142,4 +145,29 @@ export function dmgCustom(
   options?: DamageOptions,
 ): DamageResult {
   return computeDamage(ATK, DEF, multiplier, toRollMultiplier(roll), options)
+}
+
+export function resolveWeaknessDamage(
+  baseDamage: number,
+  attackerAgi: number,
+  defenderAgi: number,
+  roll: number,
+): WeaknessResolution {
+  const safeBase = Math.max(0, Math.round(baseDamage))
+  const att = Math.max(0, Number.isFinite(attackerAgi) ? attackerAgi : 0)
+  const def = Math.max(0, Number.isFinite(defenderAgi) ? defenderAgi : 0)
+  let chance = 0.05
+  if (att > 0) {
+    const ratio = def / att
+    const gap = clamp01(1 - ratio)
+    chance = clamp01(0.05 + 0.75 * Math.pow(gap, 1.3))
+  }
+  const rollValue = clamp01(roll)
+  const triggered = rollValue < chance
+  const finalDamage = triggered ? Math.round(safeBase * 1.5) : safeBase
+  return {
+    damage: finalDamage,
+    triggered,
+    chance,
+  }
 }

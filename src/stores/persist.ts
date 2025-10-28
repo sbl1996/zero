@@ -2,7 +2,7 @@ import { watch } from 'vue'
 import { setActivePinia } from 'pinia'
 import type { Pinia } from 'pinia'
 import { SAVE_VERSION } from '@/data/constants'
-import type { LegacySaveDataV1, SaveData } from '@/types/domain'
+import type { SaveData } from '@/types/domain'
 import { load, save } from '@/utils/persist'
 import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
@@ -42,7 +42,7 @@ export function setupPersistence(pinia: Pinia) {
   const inventory = useInventoryStore()
   const progress = useProgressStore()
 
-  const saved = load<SaveData | LegacySaveDataV1 | null>(null)
+  const saved = load<SaveData | null>(null)
 
   if (saved) {
     if (saved.version === SAVE_VERSION) {
@@ -104,14 +104,6 @@ export function setupPersistence(pinia: Pinia) {
 
   watch(
     () => player.cultivation,
-    () => {
-      flushSave()
-    },
-    { deep: true },
-  )
-
-  watch(
-    () => player.mastery,
     () => {
       flushSave()
     },

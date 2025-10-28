@@ -1,13 +1,13 @@
-export type EquipSlot =
+export type EquipSlot = 'helmet' | 'shieldL' | 'weaponR' | 'weapon2H' | 'armor' | 'ring'
+
+export type EquipSlotKey =
   | 'helmet'
   | 'shieldL'
   | 'weaponR'
   | 'weapon2H'
   | 'armor'
-  | 'gloves'
-  | 'belt'
-  | 'ring'
-  | 'boots'
+  | 'ring1'
+  | 'ring2'
 
 export type AttributeKey = 'ATK' | 'DEF' | 'AGI' | 'REC'
 export type CombatAttributeKey = AttributeKey
@@ -166,22 +166,13 @@ export interface PlayerCultivationState {
   delta: DeltaBpState
 }
 
-export interface SkillMasteryBonus {
-  multiplier: number
-  costReduction: number
-  dodge: number
-}
-
-export interface SkillMastery {
+export interface SkillProgress {
   skillId: string
-  value: number
-  rank: number
+  level: number
+  xp: number
+  atCap: boolean
+  btStack: number
   lastUsedAt: number | null
-  bonus: SkillMasteryBonus
-}
-
-export interface ProficiencyState {
-  entries: Record<string, SkillMastery>
 }
 
 export interface EquipSubStats {
@@ -201,6 +192,7 @@ export interface Equipment {
   name: string
   slot: EquipSlot
   level: number
+  requiredRealmTier?: RealmTier
   mainStat: {
     HP?: number
     QiMax?: number
@@ -211,7 +203,6 @@ export interface Equipment {
   }
   subs: EquipSubStats
   exclusive?: '2H' | '1H+Shield'
-  requiredLevel?: number
   flatCapMultiplier?: number
 }
 
@@ -219,6 +210,7 @@ export interface EquipmentTemplate {
   id: string
   name: string
   slot: EquipSlot
+  requiredRealmTier?: RealmTier
   baseMain: {
     HP?: number
     QiMax?: number
@@ -229,7 +221,6 @@ export interface EquipmentTemplate {
   }
   baseSubs: EquipSubStats
   exclusive?: '2H' | '1H+Shield'
-  requiredLevel?: number
   flatCapMultiplier?: number
 }
 
@@ -241,6 +232,7 @@ export interface InventorySave {
 export interface SkillSlots {
   known: string[]
   loadout: Array<string | null>
+  progress: Record<string, SkillProgress>
 }
 
 export interface Player {
@@ -249,55 +241,58 @@ export interface Player {
   gold: number
   baseBodyHp: number
   baseStats: AttributeAllocation
-  equips: Partial<Record<EquipSlot, Equipment>>
+  equips: Partial<Record<EquipSlotKey, Equipment>>
   stats: Stats
   res: Resources
   cultivation: PlayerCultivationState
-  mastery: ProficiencyState
   skills: SkillSlots
 }
 
 export type MonsterRank = 'normal' | 'elite' | 'boss'
+
+export type MonsterSpecialization =
+  | 'balanced'   // 均衡
+  | 'attacker'   // 攻击
+  | 'defender'   // 防御
+  | 'agile'      // 敏捷
+  | 'bruiser'    // 重装
+  | 'skirmisher' // 游击
+  | 'mystic'     // 奥术
+  | 'crazy'      // 疯狂
+
+export interface MonsterBattleStats {
+  ATK: number
+  DEF: number
+  AGI: number
+}
 
 export interface PenetrationProfile {
   flat: number
   pct: number
 }
 
-export interface MonsterResources {
-  hp: number
-  hpMax: number
-  qi: number
-  qiMax: number
-}
-
 export interface MonsterRewards {
-  deltaBp: number
+  deltaBp?: number
   gold: number
+  exp?: number
   lootTableId?: string
 }
 
 export interface Monster {
   id: string
   name: string
-  realm?: RealmStage
-  rank?: MonsterRank
-  bp?: BasePowerState
-  attributes?: Stats
-  resources?: MonsterResources
+  realmTier: RealmTier
+  rank: MonsterRank
+  bp: number
+  specialization: MonsterSpecialization
+  hp: number
+  stats: MonsterBattleStats
+  rewards: MonsterRewards
+  toughness: number
+  attackInterval: number
+  isBoss: boolean
   penetration?: PenetrationProfile
-  toughness?: number
-  agi?: number
-  rewards?: MonsterRewards
-  unlocks?: string[]
-  tags?: string[]
-  lv?: number
-  hpMax?: number
-  atk?: number
-  def?: number
-  rewardGold?: number
-  isBoss?: boolean
-  tough?: number
+  portraits?: string[]
 }
 
 export interface ItemStack {
@@ -341,8 +336,19 @@ export interface SkillResult {
   gainQi?: number
   spendQi?: number
   deltaBp?: number
-  masteryGain?: number
   message?: string
+  weaknessTriggered?: boolean
+  hit?: boolean
+  cooldownBonus?: {
+    targetSkillId: string
+    reductionPercent: number
+    durationMs: number
+  }
+  applyVulnerability?: {
+    percent: number
+    durationMs: number
+  }
+  superArmorMs?: number
 }
 
 export interface SkillContext {
@@ -351,7 +357,7 @@ export interface SkillContext {
   rng: () => number
   resources: Resources
   cultivation: PlayerCultivationState
-  mastery?: SkillMastery
+  progress?: SkillProgress
 }
 
 export type FlashEffectKind = 'attack' | 'skill' | 'ult'
@@ -363,8 +369,15 @@ export interface SkillDefinition {
   cost: SkillCost
   flash: FlashEffectKind
   cooldown?: number
+  chargeTime?: number
+  aftercastTime?: number
   tags?: string[]
   icon?: string
+  maxLevel?: number
+  getCooldown?: (level: number) => number
+  getChargeTime?: (level: number) => number
+  getAftercastTime?: (level: number) => number
+  getCostMultiplier?: (level: number) => number
   execute: (context: SkillContext) => SkillResult
 }
 
@@ -374,6 +387,7 @@ export interface FloatText {
   y: number
   value: string
   kind: 'hitP' | 'hitE' | 'heal' | 'miss' | 'loot'
+  variant?: 'weakness'
 }
 
 export interface FlashEffect {
@@ -383,8 +397,30 @@ export interface FlashEffect {
 
 export interface PendingDodgeState {
   attemptedAt: number
+  invincibleUntil: number
   refundAmount: number
   consumedQi: number
+  refundGranted: boolean
+}
+
+export interface PendingSkillCastState {
+  skillId: string
+  resolveAt: number
+  qiCost: number
+  silent: boolean
+}
+
+export type MonsterFollowupSource = 'golden_sheep_double_strike'
+
+export type MonsterFollowupStage = 'telegraph' | 'active'
+
+export interface MonsterFollowupState {
+  source: MonsterFollowupSource
+  stage: MonsterFollowupStage
+  timer: number
+  delay: number
+  damageMultiplier: number
+  label: string
 }
 
 export type BattleResolution = 'idle' | 'victory' | 'defeat'
@@ -417,6 +453,8 @@ export interface BattleState {
   itemCooldowns: Record<string, number>
   actionLockUntil: number | null
   pendingDodge: PendingDodgeState | null
+  pendingSkillCast: PendingSkillCastState | null
+  monsterFollowup: MonsterFollowupState | null
   playerQi: number
   playerQiMax: number
   qiOperation: QiOperationState
@@ -425,20 +463,19 @@ export interface BattleState {
     extraQiRestored: number
     actions: Record<string, number>
   }
+  skillChain: {
+    lastSkillId: string | null
+    targetId: string | null
+    streak: number
+  }
+  skillRealmNotified: Record<string, boolean>
+  skillCooldownBonuses: Record<string, { expiresAt: number; reductionPercent: number }>
+  monsterVulnerability: { percent: number; expiresAt: number } | null
 }
 
 export interface UnlockState {
   clearedMonsters: Record<string, boolean>
   unlockedMaps: Record<string, boolean>
-}
-
-export interface LegacySaveDataV1 {
-  version: 1
-  player: Player
-  inventory: Record<string, number>
-  equipment: Equipment[]
-  unlocks: UnlockState
-  quickSlots?: Array<string | null>
 }
 
 export interface SaveData {

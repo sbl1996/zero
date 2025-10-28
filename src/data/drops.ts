@@ -1,4 +1,5 @@
 import type { Monster } from '@/types/domain'
+import type { NumericRealmTier } from '@/utils/realm'
 
 export type EquipmentTier =
   | 'iron'
@@ -42,9 +43,9 @@ interface GoldWeight {
   weight: number
 }
 
-interface LevelBand {
-  min: number
-  max: number
+interface RealmBand {
+  tiers?: NumericRealmTier[]
+  bossIds?: string[]
   currentTier: EquipmentTier
   nextTier: EquipmentTier | null
   normal: {
@@ -63,10 +64,9 @@ const BOSS_SLOT_WEIGHTS = {
   gold: 20,
 } as const
 
-const LEVEL_BANDS: LevelBand[] = [
+const REALM_BANDS: RealmBand[] = [
   {
-    min: 1,
-    max: 10,
+    tiers: [1],
     currentTier: 'iron',
     nextTier: 'steel',
     normal: {
@@ -82,8 +82,7 @@ const LEVEL_BANDS: LevelBand[] = [
     },
   },
   {
-    min: 11,
-    max: 20,
+    tiers: [2],
     currentTier: 'steel',
     nextTier: 'knight',
     normal: {
@@ -99,8 +98,7 @@ const LEVEL_BANDS: LevelBand[] = [
     },
   },
   {
-    min: 21,
-    max: 30,
+    tiers: [3],
     currentTier: 'knight',
     nextTier: 'mithril',
     normal: {
@@ -116,8 +114,7 @@ const LEVEL_BANDS: LevelBand[] = [
     },
   },
   {
-    min: 31,
-    max: 40,
+    tiers: [4],
     currentTier: 'mithril',
     nextTier: 'rune',
     normal: {
@@ -133,8 +130,7 @@ const LEVEL_BANDS: LevelBand[] = [
     },
   },
   {
-    min: 41,
-    max: 50,
+    tiers: [5],
     currentTier: 'rune',
     nextTier: 'dragon',
     normal: {
@@ -150,8 +146,7 @@ const LEVEL_BANDS: LevelBand[] = [
     },
   },
   {
-    min: 51,
-    max: 59,
+    tiers: [6],
     currentTier: 'dragon',
     nextTier: 'celestial',
     normal: {
@@ -167,8 +162,7 @@ const LEVEL_BANDS: LevelBand[] = [
     },
   },
   {
-    min: 60,
-    max: 60,
+    bossIds: ['boss-dragon'],
     currentTier: 'celestial',
     nextTier: null,
     normal: {
@@ -184,8 +178,7 @@ const LEVEL_BANDS: LevelBand[] = [
     },
   },
   {
-    min: 61,
-    max: 65,
+    tiers: [7],
     currentTier: 'dragon',
     nextTier: null,
     normal: {
@@ -202,14 +195,23 @@ const LEVEL_BANDS: LevelBand[] = [
   },
 ]
 
-function findLevelBand(level: number): LevelBand | null {
-  for (const band of LEVEL_BANDS) {
-    if (level >= band.min && level <= band.max) {
+function matchesBand(monster: Monster, band: RealmBand): boolean {
+  if (band.bossIds && band.bossIds.includes(monster.id)) return true
+  if (band.tiers && band.tiers.length > 0) {
+    const tier = typeof monster.realmTier === 'number' ? monster.realmTier : null
+    if (tier !== null) return band.tiers.includes(tier)
+  }
+  return false
+}
+
+function findRealmBand(monster: Monster): RealmBand | null {
+  for (const band of REALM_BANDS) {
+    if (matchesBand(monster, band)) {
       return band
     }
   }
-  if (LEVEL_BANDS.length === 0) return null
-  return LEVEL_BANDS[LEVEL_BANDS.length - 1] ?? null
+  if (REALM_BANDS.length === 0) return null
+  return REALM_BANDS[REALM_BANDS.length - 1] ?? null
 }
 
 function normalizePotionEntries(
@@ -249,7 +251,7 @@ function normalizeGoldEntries(weights: GoldWeight[], totalWeight: number): GoldD
 }
 
 export function getDropEntries(monster: Monster): DropEntry[] {
-  const band = findLevelBand(monster.lv ?? 1)
+  const band = findRealmBand(monster)
   if (!band) return []
 
   if (!monster.isBoss) {

@@ -60,7 +60,7 @@
           <header class="wild-header">
             <div class="wild-header__info">
               <h3 class="map-name">{{ currentMap.name }}</h3>
-              <p v-if="levelRange" class="wild-level">推荐等级 {{ levelRange.min }}~{{ levelRange.max }}</p>
+              <p v-if="realmRangeLabel" class="wild-level">推荐境界 {{ realmRangeLabel }}</p>
             </div>
             <button type="button" class="return-button" @click="returnToCity">
               返回翡冷翠
@@ -90,23 +90,36 @@
               <h4 class="monster-name" :class="{ 'boss-name': focusedMonster.isBoss }">
                 {{ focusedMonster.name }}
                 <span v-if="focusedMonster.isBoss" class="monster-badge">BOSS</span>
+                <span v-else
+                  class="monster-badge specialization-badge"
+                  :style="{
+                    background: getSpecializationColor(focusedMonster.specialization).bg,
+                    color: getSpecializationColor(focusedMonster.specialization).text,
+                    borderColor: getSpecializationColor(focusedMonster.specialization).border
+                  }">
+                  {{ getSpecializationLabel(focusedMonster.specialization) }}
+                </span>
               </h4>
               <div class="monster-stats">
                 <div class="stat-group">
-                  <span class="stat-label">等级</span>
-                  <span class="stat-value">{{ focusedMonster.lv }}</span>
+                  <span class="stat-label">境界</span>
+                  <span class="stat-value">{{ describeMonsterRealm(focusedMonster) }}</span>
                 </div>
                 <div class="stat-group">
                   <span class="stat-label">生命</span>
-                  <span class="stat-value">{{ focusedMonster.hpMax }}</span>
+                  <span class="stat-value">{{ focusedMonster.hp }}</span>
                 </div>
                 <div class="stat-group">
                   <span class="stat-label">攻击</span>
-                  <span class="stat-value">{{ focusedMonster.atk }}</span>
+                  <span class="stat-value">{{ focusedMonster.stats.ATK }}</span>
                 </div>
                 <div class="stat-group">
                   <span class="stat-label">防御</span>
-                  <span class="stat-value">{{ focusedMonster.def }}</span>
+                  <span class="stat-value">{{ focusedMonster.stats.DEF }}</span>
+                </div>
+                <div class="stat-group">
+                  <span class="stat-label">敏捷</span>
+                  <span class="stat-value">{{ focusedMonster.stats.AGI }}</span>
                 </div>
                 <div class="stat-group reward">
                   <span class="stat-label">奖励</span>
@@ -138,8 +151,10 @@ import { defaultMapId, maps as mapDefinitions, getMonsterPosition } from '@/data
 import { getMonsterMap, MONSTERS } from '@/data/monsters'
 import { useBattleStore } from '@/stores/battle'
 import { useProgressStore } from '@/stores/progress'
+import { formatRealmTierLabel } from '@/utils/realm'
+import type { NumericRealmTier } from '@/utils/realm'
 import type { GameMap, MapLocation } from '@/types/map'
-import type { Monster } from '@/types/domain'
+import type { Monster, MonsterSpecialization } from '@/types/domain'
 
 const route = useRoute()
 const router = useRouter()
@@ -150,12 +165,48 @@ const progress = useProgressStore()
 function formatMonsterRewards(monster: Monster | null | undefined): string {
   if (!monster) return ''
   const rewards = monster.rewards
-  const gold = rewards?.gold ?? monster.rewardGold ?? 0
-  const deltaBp = rewards?.deltaBp
-  if (typeof deltaBp === 'number') {
-    return `ΔBP ${deltaBp} ・ GOLD ${gold}`
+  const parts: string[] = []
+  if (typeof rewards.exp === 'number') {
+    parts.push(`EXP ${rewards.exp}`)
   }
-  return `GOLD ${gold}`
+  if (typeof rewards.deltaBp === 'number') {
+    parts.push(`ΔBP ${rewards.deltaBp}`)
+  }
+  parts.push(`GOLD ${rewards.gold}`)
+  return parts.join(' ・ ')
+}
+
+function describeMonsterRealm(monster: Monster | null | undefined): string {
+  if (!monster?.realmTier) return '未知'
+  return formatRealmTierLabel(monster.realmTier)
+}
+
+function getSpecializationLabel(specialization: MonsterSpecialization): string {
+  const labels: Record<MonsterSpecialization, string> = {
+    balanced: '均衡',
+    attacker: '攻击',
+    defender: '防御',
+    agile: '敏捷',
+    bruiser: '重装',
+    skirmisher: '游击',
+    mystic: '奥术',
+    crazy: '疯狂'
+  }
+  return labels[specialization] || '未知'
+}
+
+function getSpecializationColor(specialization: MonsterSpecialization): { bg: string; text: string; border: string } {
+  const colors: Record<MonsterSpecialization, { bg: string; text: string; border: string }> = {
+    balanced: { bg: 'rgba(156, 163, 175, 0.7)', text: '#f3f4f6', border: 'rgba(156, 163, 175, 0.9)' },    // 灰色 - 平衡
+    attacker: { bg: 'rgba(239, 68, 68, 0.7)', text: '#fef2f2', border: 'rgba(239, 68, 68, 0.9)' },        // 红色 - 攻击
+    defender: { bg: 'rgba(59, 130, 246, 0.7)', text: '#eff6ff', border: 'rgba(59, 130, 246, 0.9)' },       // 蓝色 - 防御
+    agile: { bg: 'rgba(34, 197, 94, 0.7)', text: '#f0fdf4', border: 'rgba(34, 197, 94, 0.9)' },          // 绿色 - 敏捷
+    bruiser: { bg: 'rgba(168, 85, 247, 0.7)', text: '#faf5ff', border: 'rgba(168, 85, 247, 0.9)' },        // 紫色 - 重装
+    skirmisher: { bg: 'rgba(251, 146, 60, 0.7)', text: '#fff7ed', border: 'rgba(251, 146, 60, 0.9)' },     // 橙色 - 游击
+    mystic: { bg: 'rgba(139, 92, 246, 0.7)', text: '#f5f3ff', border: 'rgba(139, 92, 246, 0.9)' },        // 深紫色 - 奥术
+    crazy: { bg: 'rgba(217, 70, 239, 0.7)', text: '#fdf4ff', border: 'rgba(217, 70, 239, 0.9)' }          // 粉色 - 疯狂
+  }
+  return colors[specialization] || { bg: 'rgba(107, 114, 128, 0.7)', text: '#f9fafb', border: 'rgba(107, 114, 128, 0.9)' }
 }
 
 
@@ -236,13 +287,23 @@ const monstersOnMap = computed(() => {
   return MONSTERS.filter(monster => getMonsterMap(monster.id) === currentMap.value?.id)
 })
 
-const levelRange = computed(() => {
-  if (monstersOnMap.value.length === 0) return null
-  const levels = monstersOnMap.value.map((m) => m.lv ?? 1)
+const realmRange = computed(() => {
+  const tiers = monstersOnMap.value
+    .map((monster) => (typeof monster.realmTier === 'number' ? monster.realmTier : null))
+    .filter((tier): tier is NumericRealmTier => tier !== null)
+  if (!tiers.length) return null
   return {
-    min: Math.min(...levels),
-    max: Math.max(...levels)
+    min: Math.min(...tiers) as NumericRealmTier,
+    max: Math.max(...tiers) as NumericRealmTier,
   }
+})
+
+const realmRangeLabel = computed(() => {
+  const range = realmRange.value
+  if (!range) return ''
+  const minLabel = formatRealmTierLabel(range.min)
+  const maxLabel = formatRealmTierLabel(range.max)
+  return range.min === range.max ? minLabel : `${minLabel}~${maxLabel}`
 })
 
 const currentMapLocked = computed(() => {
@@ -656,6 +717,10 @@ watch(
   font-weight: 700;
   color: #ffe1e6;
   background: rgba(255, 80, 120, 0.6);
+}
+
+.monster-badge.specialization-badge {
+  border: 1px solid;
 }
 
 .monster-detail {

@@ -4,6 +4,7 @@ import type { QiFocusProfile, SkillCost } from '@/types/domain'
 import { usePlayerStore } from '@/stores/player'
 import { getSkillDefinition } from '@/data/skills'
 import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
+import { createDefaultSkillProgress, getRealmSkillLevelCap, getSkillMaxLevel, getSkillXpCap } from '@/composables/useSkills'
 
 const player = usePlayerStore()
 
@@ -25,6 +26,12 @@ function buildFocusLines(focus: QiFocusProfile): string[] {
     }
     return lines
   }, [])
+}
+
+function formatXpValue(value: number): string {
+  if (!Number.isFinite(value)) return '0'
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : rounded.toFixed(1)
 }
 
 const cultivationMethods = computed(() => {
@@ -57,13 +64,48 @@ const loadoutSlots = computed(() =>
   }),
 )
 
-const knownSkills = computed(() =>
+const knownSkillDefs = computed(() =>
   player.skills.known
     .map(id => getSkillDefinition(id))
     .filter((skill): skill is NonNullable<ReturnType<typeof getSkillDefinition>> => skill !== null),
 )
 
-const skillOptions = computed(() => [{ id: '', name: '空槽' }, ...knownSkills.value.map(skill => ({ id: skill.id, name: skill.name }))])
+const realmSkillCap = computed(() => getRealmSkillLevelCap(player.cultivation.realm))
+
+const knownSkillDetails = computed(() =>
+  knownSkillDefs.value.map((definition) => {
+    const progress = player.skills.progress[definition.id] ?? createDefaultSkillProgress(definition.id)
+    const level = Math.max(progress.level, 1)
+    const xpCap = getSkillXpCap(level)
+    const xp = progress.xp ?? 0
+    const xpPercent = xpCap > 0 ? Math.max(0, Math.min(1, xp / xpCap)) : 0
+    const skillMax = getSkillMaxLevel(definition)
+    const realmCap = realmSkillCap.value
+    const allowedMax = Math.min(skillMax, Math.max(realmCap, 1))
+    const blockedByRealm = level >= allowedMax && skillMax > realmCap
+    return {
+      definition,
+      progress,
+      level,
+      xp,
+      xpCap,
+      xpPercent,
+      xpLabel: formatXpValue(xp),
+      xpCapLabel: formatXpValue(xpCap),
+      skillMax,
+      allowedMax,
+      blockedByRealm,
+    }
+  }),
+)
+
+const skillOptions = computed(() => [
+  { id: '', name: '空槽' },
+  ...knownSkillDetails.value.map((entry) => ({
+    id: entry.definition.id,
+    name: `${entry.definition.name} Lv.${entry.level}`,
+  })),
+])
 
 function formatSkillCost(cost: SkillCost | undefined) {
   if (!cost || cost.type === 'none') return '无消耗'
@@ -102,7 +144,7 @@ function equipToFirstEmpty(skillId: string) {
     <h2 class="section-title">技能配置</h2>
     <p class="text-muted text-small">在此管理角色掌握的技能，并为战斗界面四个技能槽位进行装备。</p>
 
-    <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
+  <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
       <h3 class="section-title" style="font-size: 16px;">斗气功法</h3>
       <div v-if="cultivationMethods.length === 0" class="text-small text-muted">暂未掌握任何斗气功法。</div>
       <div v-else class="method-list">
@@ -156,32 +198,47 @@ function equipToFirstEmpty(skillId: string) {
 
     <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
       <h3 class="section-title" style="font-size: 16px;">已掌握技能</h3>
-      <div v-if="knownSkills.length === 0" class="text-small text-muted">暂未掌握任何技能。</div>
+      <div v-if="knownSkillDetails.length === 0" class="text-small text-muted">暂未掌握任何技能。</div>
       <div v-else class="skill-list">
         <article
-          v-for="skill in knownSkills"
-          :key="skill.id"
+          v-for="skill in knownSkillDetails"
+          :key="skill.definition.id"
           class="panel"
           style="margin: 0; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08);"
         >
           <header class="flex flex-between flex-center skill-card-header">
             <div class="skill-card-heading">
               <img
-                v-if="skill.icon"
-                :src="skill.icon"
-                :alt="skill.name"
+                v-if="skill.definition.icon"
+                :src="skill.definition.icon"
+                :alt="skill.definition.name"
                 class="skill-card-icon"
               >
               <div class="skill-card-heading-text">
-                <h4 class="skill-card-title">{{ skill.name }}</h4>
-                <span class="text-small text-muted">消耗：{{ formatSkillCost(skill.cost) }}</span>
+                <h4 class="skill-card-title">
+                  {{ skill.definition.name }}
+                  <span class="text-small text-muted">Lv.{{ skill.level }}/{{ skill.allowedMax }}</span>
+                </h4>
+                <span class="text-small text-muted">消耗：{{ formatSkillCost(skill.definition.cost) }}</span>
               </div>
             </div>
-            <button class="btn" type="button" @click="equipToFirstEmpty(skill.id)">
+            <button class="btn" type="button" @click="equipToFirstEmpty(skill.definition.id)">
               装备到空槽
             </button>
           </header>
-          <p class="text-small" style="margin: 0; line-height: 1.6;">{{ skill.description }}</p>
+          <p class="text-small" style="margin: 0; line-height: 1.6;">{{ skill.definition.description }}</p>
+          <div class="skill-progress-wrapper">
+            <div class="skill-progress-bar">
+              <div
+                class="skill-progress-bar-value"
+                :style="{ width: `${Math.round(skill.xpPercent * 100)}%` }"
+              />
+            </div>
+            <div class="skill-progress-meta">
+              <span class="text-small text-muted">熟练度 {{ skill.xpLabel }} / {{ skill.xpCapLabel }}</span>
+              <span v-if="skill.blockedByRealm" class="text-small text-warning">境界不足，无法突破</span>
+            </div>
+          </div>
         </article>
       </div>
     </div>
@@ -335,6 +392,42 @@ function equipToFirstEmpty(skillId: string) {
   object-fit: cover;
   background: rgba(255, 255, 255, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.skill-progress-wrapper {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.skill-progress-bar {
+  position: relative;
+  width: 100%;
+  height: 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.skill-progress-bar-value {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(148, 197, 255, 0.85), rgba(64, 124, 255, 0.95));
+  transition: width 0.2s ease-out;
+}
+
+.skill-progress-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.text-warning {
+  color: #ffb74d;
 }
 
 @media (max-width: 640px) {

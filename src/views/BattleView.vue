@@ -9,6 +9,9 @@ import { useInventoryStore } from '@/stores/inventory'
 import { getSkillDefinition } from '@/data/skills'
 import { quickConsumableIds } from '@/data/items'
 import { getMonsterMap } from '@/data/monsters'
+import { getAutoMonsterPortraits } from '@/utils/monsterPortraits'
+import { resolveAssetUrl } from '@/utils/assetUrls'
+import { formatRealmTierLabel } from '@/utils/realm'
 import type { FloatText, LootResult, Monster } from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import QuickItemBar from '@/components/QuickItemBar.vue'
@@ -29,7 +32,7 @@ const lootList = computed(() => battle.loot)
 const hpRate = computed(() => {
   const current = monster.value
   if (!current) return 0
-  const maxHp = current.resources?.hpMax ?? current.hpMax ?? 0
+  const maxHp = current.hp
   if (maxHp <= 0) return 0
   return Math.max(0, battle.monsterHp) / maxHp
 })
@@ -39,8 +42,51 @@ const canClickRematch = computed(() => {
     (!autoRematchAfterVictory.value || monster.value.isBoss)
 })
 const monsterAttackProgress = computed(() => {
-  if (!battle.monster || !isMonsterAttackActive.value) return 0
-  return Math.max(0, Math.min(1, battle.monsterTimer / 1.6)) // 1.6是攻击间隔
+  const activeMonster = battle.monster
+  if (!activeMonster || !isMonsterAttackActive.value) return 0
+  const interval = activeMonster.attackInterval > 0 ? activeMonster.attackInterval : 1.6
+  if (interval <= 0) return 0
+  return Math.max(0, Math.min(1, battle.monsterTimer / interval))
+})
+
+// 计算破绽率
+const breakChance = computed(() => {
+  const playerAgi = playerStore.finalStats.totals.AGI ?? 0
+  const monsterAgi = monster.value?.stats.AGI ?? 0
+
+  if (playerAgi <= 0) return 0
+
+  // 使用破绽伤害计算函数中的破绽率计算逻辑
+  const ratio = monsterAgi / playerAgi
+  const gap = Math.max(0, Math.min(1, 1 - ratio))
+  const chance = Math.max(0, Math.min(1, 0.05 + 0.75 * Math.pow(gap, 1.3)))
+
+  return chance
+})
+
+// 格式化破绽率显示
+const breakChanceText = computed(() => {
+  const chance = breakChance.value
+  return `${Math.round(chance * 100)}%`
+})
+
+// 根据破绽率获取颜色
+function getBreakChanceColor(chance: number): string {
+  if (chance >= 0.5) return '#ff6b7a' // 高破绽率：红色
+  if (chance >= 0.3) return '#ffd166' // 中等破绽率：黄色
+  if (chance >= 0.1) return '#4ecdc4' // 低破绽率：青色
+  return '#94a3b8' // 极低破绽率：灰色
+}
+const monsterFollowupHint = computed(() => {
+  if (!isMonsterAttackActive.value) return null
+  const followup = battle.monsterFollowup
+  if (!followup) return null
+  return {
+    time: Math.max(0, followup.timer),
+    label: followup.label,
+    phase: followup.stage,
+    delay: followup.delay,
+  }
 })
 
 const showBattleDuration = computed(() => {
@@ -74,12 +120,20 @@ const itemHotkeyMap = new Map<string, number>(ITEM_HOTKEYS.map((code, index) => 
 function formatMonsterRewards(monster: Monster | null | undefined): string {
   if (!monster) return ''
   const rewards = monster.rewards
-  const gold = rewards?.gold ?? monster.rewardGold ?? 0
-  const deltaBp = rewards?.deltaBp
-  if (typeof deltaBp === 'number') {
-    return `ΔBP ${deltaBp} ・ GOLD ${gold}`
+  const parts: string[] = []
+  if (typeof rewards.exp === 'number') {
+    parts.push(`EXP ${rewards.exp}`)
   }
-  return `GOLD ${gold}`
+  if (typeof rewards.deltaBp === 'number') {
+    parts.push(`ΔBP ${rewards.deltaBp}`)
+  }
+  parts.push(`GOLD ${rewards.gold}`)
+  return parts.join(' ・ ')
+}
+
+function describeMonsterRealm(monster: Monster | null | undefined): string {
+  if (!monster?.realmTier) return '未知'
+  return formatRealmTierLabel(monster.realmTier)
 }
 
 function formatBattleDuration(durationMs: number): string {
@@ -204,8 +258,8 @@ const skillSlots = computed(() => {
     }
   })
 })
-const defaultPlayerPortrait = '/main.webp'
-const attackPlayerPortrait = '/main_attack.webp'
+const defaultPlayerPortrait = resolveAssetUrl('main.webp')
+const attackPlayerPortrait = resolveAssetUrl('main_attack.webp')
 const playerPortraitSrc = ref(defaultPlayerPortrait)
 let portraitTimer: ReturnType<typeof setTimeout> | null = null
 
@@ -222,34 +276,76 @@ function showAttackPortrait(duration = 800) {
 }
 const monsterPortraitSrc = ref('')
 const monsterPortraitError = ref(false)
+const monsterPortraitCandidates = ref<string[]>([])
 
-const updateMonsterPortrait = (monster: any) => {
+const normalizePortraitPath = (path: string) => resolveAssetUrl(path)
+
+const updateMonsterPortrait = (monster: Monster | null | undefined) => {
   if (!monster) {
     monsterPortraitSrc.value = ''
     monsterPortraitError.value = false
+    monsterPortraitCandidates.value = []
     return
   }
 
-  // First try gif, then fallback to webp
-  const portrait = `${monster.id}.gif`
-  const src = portrait.startsWith('/') ? portrait : `/${portrait}`
+  const explicitPortraits = (monster.portraits ?? [])
+    .map((portrait) => (typeof portrait === 'string' ? portrait.trim() : ''))
+    .filter((portrait) => portrait.length > 0)
+    .map(normalizePortraitPath)
 
-  // Store both gif and webp attempts for proper fallback handling
-  monsterPortraitSrc.value = src
+  const autoPortraits = getAutoMonsterPortraits(monster.id)
+    .map(normalizePortraitPath)
+
+  const allPortraitsSet = new Set<string>()
+  for (const portrait of explicitPortraits) {
+    if (portrait) {
+      allPortraitsSet.add(portrait)
+    }
+  }
+  for (const portrait of autoPortraits) {
+    if (portrait) {
+      allPortraitsSet.add(portrait)
+    }
+  }
+  const allPortraits = Array.from(allPortraitsSet)
+
+  if (allPortraits.length > 0) {
+    const randomIndex = Math.floor(Math.random() * allPortraits.length)
+    const selectedPortrait = allPortraits[randomIndex]
+    if (selectedPortrait) {
+      monsterPortraitCandidates.value = [
+        selectedPortrait,
+        ...allPortraits.filter((_, index) => index !== randomIndex),
+      ]
+    } else {
+      monsterPortraitCandidates.value = allPortraits
+    }
+  } else {
+    const gifCandidate = normalizePortraitPath(`${monster.id}.gif`)
+    const webpCandidate = normalizePortraitPath(`${monster.id}.webp`)
+    monsterPortraitCandidates.value = [gifCandidate, webpCandidate]
+  }
+
+  monsterPortraitSrc.value = monsterPortraitCandidates.value[0] ?? ''
   monsterPortraitError.value = false
 }
 
 const onMonsterPortraitError = () => {
   if (!monster.value || monsterPortraitError.value) return
 
-  // If current image failed, try the alternative format
-  if (monsterPortraitSrc.value.endsWith('.gif')) {
-    const webpSrc = monsterPortraitSrc.value.replace(/\.gif$/, '.webp')
-    monsterPortraitSrc.value = webpSrc
-  } else if (monsterPortraitSrc.value.endsWith('.webp')) {
-    // If both gif and webp failed, mark as error
-    monsterPortraitError.value = true
+  const candidates = monsterPortraitCandidates.value
+  const currentIndex = candidates.indexOf(monsterPortraitSrc.value)
+  const nextIndex = currentIndex >= 0 ? currentIndex + 1 : 0
+
+  if (nextIndex < candidates.length) {
+    const nextPortrait = candidates[nextIndex]
+    if (nextPortrait !== undefined) {
+      monsterPortraitSrc.value = nextPortrait
+      return
+    }
   }
+
+  monsterPortraitError.value = true
 }
 
 // Watch for monster changes
@@ -905,6 +1001,28 @@ onBeforeUnmount(() => {
   25% { transform: translateX(-2px) rotate(-1deg); }
   75% { transform: translateX(2px) rotate(1deg); }
 }
+
+/* 破绽率显示样式 */
+.break-chance-display {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+}
+
+.break-chance-label {
+  color: rgba(255, 255, 255, 0.7);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+}
+
+.break-chance-value {
+  font-weight: 700;
+  text-shadow: 0 0 8px currentColor, 0 1px 2px rgba(0, 0, 0, 0.5);
+  transition: color 0.3s ease, text-shadow 0.3s ease;
+}
 </style>
 
 <template>
@@ -926,14 +1044,18 @@ onBeforeUnmount(() => {
       <header class="flex flex-between" style="align-items: flex-start;">
         <div>
           <h2 class="section-title" style="margin: 0 0 4px;">{{ monster.name }}</h2>
-          <div class="text-muted text-small">LV {{ monster.lv }} ｜ 攻击 {{ monster.atk }} ｜ 防御 {{ monster.def }}</div>
+          <div class="text-muted text-small">境界 {{ describeMonsterRealm(monster) }} ｜ 攻击 {{ monster.stats.ATK }} ｜ 防御 {{ monster.stats.DEF }}</div>
           <div class="text-small text-muted" style="margin-top: 6px;">奖励：{{ formatMonsterRewards(monster) }}</div>
         </div>
         <div class="text-right" style="margin-top: 10px;">
           <div class="resource-bar" style="width: 200px;">
             <span class="resource-hp" :style="{ width: `${Math.floor(hpRate * 100)}%` }" />
           </div>
-          <div class="text-small text-muted" style="margin-top: 4px;">HP {{ battle.monsterHp }} / {{ monster.resources?.hpMax ?? monster.hpMax ?? '—' }}</div>
+          <div class="text-small text-muted" style="margin-top: 4px;">HP {{ battle.monsterHp }} / {{ monster.hp ?? '—' }}</div>
+          <div class="break-chance-display" style="margin-top: 6px;">
+            <span class="break-chance-label">破绽率</span>
+            <span class="break-chance-value" :style="{ color: getBreakChanceColor(breakChance) }">{{ breakChanceText }}</span>
+          </div>
         </div>
       </header>
       <div class="float-area">
@@ -990,7 +1112,7 @@ onBeforeUnmount(() => {
           v-for="text in battle.floatTexts"
           :key="text.id"
           class="float-text"
-          :class="text.kind"
+          :class="[text.kind, text.variant]"
           :style="floatTextStyle(text)"
         >
           {{ text.value }}
@@ -1007,7 +1129,7 @@ onBeforeUnmount(() => {
             :class="getGoldBonus(lootList) ? 'loot-gold-bonus' : ''"
             style="margin-top: 6px;"
           >
-            + GOLD {{ getTotalGold(lootList) ?? monster?.rewardGold ?? 0 }}
+            + GOLD {{ getTotalGold(lootList) ?? monster?.rewards.gold ?? 0 }}
           </div>
           <div v-if="getFilteredLootList(lootList).length" class="text-small" style="margin-top: 8px;">
             <div style="font-weight: 600;">掉落</div>
@@ -1038,6 +1160,7 @@ onBeforeUnmount(() => {
         :time-to-attack="isMonsterAttackActive ? battle.monsterTimer : null"
         :pending-dodge="battle.pendingDodge"
         :action-lock-until="battle.actionLockUntil"
+        :followup="monsterFollowupHint"
       />
 
       <div class="battle-action-row">

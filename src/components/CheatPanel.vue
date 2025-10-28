@@ -71,6 +71,10 @@ async function advanceRealmDirectly() {
     upgradingRealm.value = false
   }
 }
+
+function fillBasePower() {
+  playerStore.cheatFillBasePower()
+}
 </script>
 
 <template>
@@ -87,6 +91,7 @@ async function advanceRealmDirectly() {
         <div class="cheat-actions">
           <button class="btn" type="button" @click="restoreFull">回复全满</button>
           <button class="btn" type="button" @click="unlockAllMonsters">解锁全部地图</button>
+          <button class="btn" type="button" @click="fillBasePower">斗气本源拉满</button>
           <button
             class="btn"
             type="button"

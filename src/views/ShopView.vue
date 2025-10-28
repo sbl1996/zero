@@ -5,7 +5,7 @@
 
     <div class="flex flex-between flex-center" style="margin-top: 16px;">
       <p class="text-muted text-small" style="margin: 0;">当前持有</p>
-      <div class="text-lv" style="font-size: 16px;">{{ player.gold }} G</div>
+      <div class="text-gold" style="font-size: 16px;">{{ player.gold }} G</div>
     </div>
 
     <div class="tab-strip" style="margin-top: 16px;">
@@ -35,7 +35,13 @@
           <div class="flex-1">
             <h3 style="margin: 0 0 8px 0; font-size: 16px;">{{ item.name }}</h3>
             <div class="text-small text-muted" style="margin-bottom: 8px;">{{ getItemDescription(item) }}</div>
-            <div v-if="getItemRequiredLevel(item) !== null" class="text-small" style="color: #ffc107; margin-bottom: 8px;">需求等级：{{ getItemRequiredLevel(item) }}</div>
+            <div
+              v-if="getItemRequiredRealmLabel(item)"
+              class="text-small"
+              style="color: #ffc107; margin-bottom: 8px;"
+            >
+              需求境界：{{ getItemRequiredRealmLabel(item) }}
+            </div>
             <div class="text-small" style="color: #ffc107; margin-bottom: 8px;">单价：{{ getItemPrice(item) }} G</div>
             <div class="quantity-row">
               <label class="quantity-label" :for="`quantity-${item.id}`">数量</label>
@@ -81,6 +87,7 @@ import { useProgressStore } from '@/stores/progress'
 import { ITEMS, consumableIds } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES, EQUIPMENT_PRICES } from '@/data/equipment'
 import { MONSTERS } from '@/data/monsters'
+import { formatRealmTierLabel, realmTierIndex } from '@/utils/realm'
 import type { ItemDefinition, EquipmentTemplate, EquipSlot } from '@/types/domain'
 
 const playerStore = usePlayerStore()
@@ -102,11 +109,8 @@ function getEquipmentSubType(slot: EquipSlot): 'weapon' | 'armor' | 'accessory' 
       return 'weapon'
     case 'helmet':
     case 'armor':
-    case 'gloves':
-    case 'boots':
       return 'armor'
     case 'ring':
-    case 'belt':
       return 'accessory'
     case 'shieldL':
       return 'shield'
@@ -117,15 +121,18 @@ function getEquipmentSubType(slot: EquipSlot): 'weapon' | 'armor' | 'accessory' 
 
 const allowedEquipmentTemplates = computed(() =>
   BASE_EQUIPMENT_TEMPLATES.filter((template) => {
-    const required = template.requiredLevel ?? 0
-    return required <= 10
+    const requiredTier = realmTierIndex(template.requiredRealmTier)
+    return requiredTier <= 2
   }),
 )
 
 const bossMonsters = MONSTERS.filter((monster) => monster.isBoss)
 
-function hasClearedBossAtOrAbove(level: number) {
-  return bossMonsters.some((monster) => (monster.lv ?? 0) >= level && progressStore.isMonsterCleared(monster.id))
+function hasClearedBossAtOrAboveTier(tier: number) {
+  return bossMonsters.some((monster) => {
+    const monsterTier = realmTierIndex(monster.realmTier)
+    return monsterTier >= tier && progressStore.isMonsterCleared(monster.id)
+  })
 }
 
 const gemItems = computed(() => {
@@ -134,12 +141,12 @@ const gemItems = computed(() => {
   const bless = itemsById.get('blessGem')
   if (bless) result.push(bless)
 
-  if (hasClearedBossAtOrAbove(30)) {
+  if (hasClearedBossAtOrAboveTier(3)) {
     const soul = itemsById.get('soulGem')
     if (soul) result.push(soul)
   }
 
-  if (hasClearedBossAtOrAbove(60)) {
+  if (hasClearedBossAtOrAboveTier(6)) {
     const miracle = itemsById.get('miracleGem')
     if (miracle) result.push(miracle)
   }
@@ -205,10 +212,7 @@ const getItemIcon = (item: ItemDefinition | EquipmentTemplate) => {
     if (item.slot === 'shieldL') return '🛡️'
     if (item.slot === 'weaponR' || item.slot === 'weapon2H') return '⚔️'
     if (item.slot === 'armor') return '🦺'
-    if (item.slot === 'gloves') return '🧤'
-    if (item.slot === 'belt') return '👔'
     if (item.slot === 'ring') return '💍'
-    if (item.slot === 'boots') return '👢'
   }
   return '📦'
 }
@@ -241,11 +245,11 @@ const getItemPrice = (item: ItemDefinition | EquipmentTemplate) => {
   return 'price' in item ? item.price : EQUIPMENT_PRICES[item.id as keyof typeof EQUIPMENT_PRICES]
 }
 
-const getItemRequiredLevel = (item: ItemDefinition | EquipmentTemplate) => {
-  if ('slot' in item && item.requiredLevel !== undefined) {
-    return item.requiredLevel
+const getItemRequiredRealmLabel = (item: ItemDefinition | EquipmentTemplate) => {
+  if ('slot' in item && item.requiredRealmTier !== undefined) {
+    return formatRealmTierLabel(item.requiredRealmTier)
   }
-  return null
+  return ''
 }
 
 const resolveQuantity = (id: string) => {
@@ -299,7 +303,7 @@ const buyItem = (item: ItemDefinition | EquipmentTemplate, rawQuantity?: number)
         subs: { ...item.baseSubs },
         exclusive: item.exclusive,
         flatCapMultiplier: item.flatCapMultiplier,
-        requiredLevel: item.requiredLevel,
+        requiredRealmTier: item.requiredRealmTier,
       }
       inventoryStore.addEquipment(equipment)
     }

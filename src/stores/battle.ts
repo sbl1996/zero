@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
-import { dmgAttack, getDefRefForRealm } from '@/composables/useDamage'
+import { dmgAttack, getDefRefForRealm, resolveWeaknessDamage } from '@/composables/useDamage'
 import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS, applyDeltaBp } from '@/composables/useLeveling'
+import { resolveSkillAftercast, resolveSkillChargeTime, resolveSkillCooldown, resolveQiCost } from '@/composables/useSkills'
 import { makeRng, randRange } from '@/composables/useRng'
 import { bossUnlockMap } from '@/data/monsters'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
@@ -9,11 +10,13 @@ import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
 import { getSkillDefinition } from '@/data/skills'
 import { MAX_EQUIP_LEVEL } from '@/composables/useEnhance'
+import { realmTierContentLevel } from '@/utils/realm'
+import type { NumericRealmTier } from '@/utils/realm'
 import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
 import { useUiStore } from './ui'
-import { DODGE_LOCK_DURATION_MS, DODGE_WINDOW_MS } from '@/constants/dodge'
+import { DODGE_WINDOW_MS } from '@/constants/dodge'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
 import type {
   BattleState,
@@ -24,6 +27,8 @@ import type {
   LootResult,
   ItemLootResult,
   QiOperationState,
+  SkillDefinition,
+  FloatText,
 } from '@/types/domain'
 
 const ITEM_MAP = new Map(ITEMS.map((item) => [item.id, item]))
@@ -46,7 +51,7 @@ function createEmptyCultivationMetrics(): CultivationFrameMetrics {
 
 const TICK_INTERVAL_MS = 1000 / 15
 const MAX_FRAME_TIME = 0.25
-const MONSTER_ATTACK_INTERVAL = 1.6
+const DEFAULT_MONSTER_ATTACK_INTERVAL = 1.6
 const FALLBACK_SKILL_COOLDOWN = 2
 export const ITEM_COOLDOWN = 10
 const SKILL_SLOT_COUNT = 4
@@ -54,23 +59,28 @@ const AUTO_REMATCH_BASE_DELAY = 800
 const AUTO_REMATCH_MIN_INTERVAL = 5000
 const DODGE_SKILL_ID = 'qi_dodge'
 const DODGE_REFUND_PERCENT = 0.04
+const GOLDEN_SHEEP_ID = 'boss-golden-sheep'
+const GOLDEN_SHEEP_DOUBLE_STRIKE_CHANCE = 0.20
+const GOLDEN_SHEEP_DOUBLE_STRIKE_INTERVAL = 0.25
+const GOLDEN_SHEEP_DOUBLE_STRIKE_MULTIPLIER = 0.60
+const GOLDEN_SHEEP_FOLLOWUP_LABEL = '×2'
 
-const EQUIPMENT_TIER_LEVEL: Record<EquipmentTier, number> = {
+const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
   iron: 1,
-  steel: 10,
-  knight: 20,
-  mithril: 30,
-  rune: 40,
-  dragon: 50,
-  celestial: 60,
+  steel: 2,
+  knight: 3,
+  mithril: 4,
+  rune: 5,
+  dragon: 6,
+  celestial: 7,
 }
 
 type EquipmentTemplateDef = (typeof BASE_EQUIPMENT_TEMPLATES)[number]
 type TierSlotTemplates = Partial<Record<EquipSlot, EquipmentTemplateDef[]>>
 
-const EQUIPMENT_TEMPLATES_BY_TIER: Record<EquipmentTier, TierSlotTemplates> = Object.entries(EQUIPMENT_TIER_LEVEL).reduce(
-  (acc, [tier, requiredLevel]) => {
-    const tierTemplates = BASE_EQUIPMENT_TEMPLATES.filter((template) => (template.requiredLevel ?? 0) === requiredLevel)
+const EQUIPMENT_TEMPLATES_BY_TIER: Record<EquipmentTier, TierSlotTemplates> = Object.entries(EQUIPMENT_TIER_REALM).reduce(
+  (acc, [tier, requiredRealmTier]) => {
+    const tierTemplates = BASE_EQUIPMENT_TEMPLATES.filter((template) => template.requiredRealmTier === requiredRealmTier)
     const grouped: TierSlotTemplates = {}
     for (const template of tierTemplates) {
       const slot = template.slot
@@ -103,7 +113,7 @@ function createEquipmentFromTemplate(
     subs: { ...template.baseSubs },
     exclusive: template.exclusive,
     flatCapMultiplier: template.flatCapMultiplier,
-    requiredLevel: template.requiredLevel,
+    requiredRealmTier: template.requiredRealmTier,
   }
 }
 
@@ -178,41 +188,34 @@ function cloneQiOperationState(operation: QiOperationState): QiOperationState {
   }
 }
 
-function resolveMonsterHpMax(monster: Monster): number {
-  if (monster.resources?.hpMax) return monster.resources.hpMax
-  if (monster.attributes?.caps.hpMax) return monster.attributes.caps.hpMax
-  if (typeof monster.hpMax === 'number') return monster.hpMax
-  return 0
+function resolveMonsterHp(monster: Monster): number {
+  return Math.max(0, monster.hp)
 }
 
-function resolveMonsterQi(monster: Monster): number {
-  if (monster.resources?.qi) return monster.resources.qi
-  if (monster.resources?.qiMax) return monster.resources.qiMax
+function resolveMonsterQi(_monster: Monster) {
   return 0
 }
 
 function resolveMonsterAtk(monster: Monster): number {
-  if (monster.attributes?.totals.ATK !== undefined) return monster.attributes.totals.ATK
-  if (typeof monster.atk === 'number') return monster.atk
-  return 0
+  return monster.stats.ATK
 }
 
 function resolveMonsterAgi(monster: Monster): number {
-  if (monster.attributes?.totals.AGI !== undefined) return monster.attributes.totals.AGI
-  if (typeof monster.agi === 'number') return monster.agi
-  const level = monster.lv ?? 1
-  return 10 + level * 2
+  return monster.stats.AGI
+}
+
+function resolveMonsterAttackInterval(monster: Monster | null | undefined): number {
+  if (!monster) return DEFAULT_MONSTER_ATTACK_INTERVAL
+  return monster.attackInterval > 0 ? monster.attackInterval : DEFAULT_MONSTER_ATTACK_INTERVAL
+}
+
+function resolveMonsterRealmPower(monster: Monster): number {
+  return realmTierContentLevel(monster.realmTier)
 }
 
 function resolveMonsterPenetration(monster: Monster) {
-  const fallbackLevel = monster.lv ?? 1
-  if (monster.penetration) {
-    return {
-      flat: monster.penetration.flat ?? 0,
-      pct: monster.penetration.pct ?? Math.min(Math.max(0.1 + 0.012 * fallbackLevel, 0), 0.6),
-    }
-  }
-  return {
+  const fallbackLevel = resolveMonsterRealmPower(monster)
+  return monster.penetration || {
     flat: 0,
     pct: Math.min(Math.max(0.1 + 0.012 * fallbackLevel, 0), 0.6),
   }
@@ -235,15 +238,25 @@ function initialState(): BattleState {
     lastTickAt: 0,
     battleStartedAt: null,
     battleEndedAt: null,
-    monsterTimer: MONSTER_ATTACK_INTERVAL,
+    monsterTimer: DEFAULT_MONSTER_ATTACK_INTERVAL,
     skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
     itemCooldowns: {},
     actionLockUntil: null,
     pendingDodge: null,
+    pendingSkillCast: null,
+    monsterFollowup: null,
     playerQi: 0,
     playerQiMax: 0,
     qiOperation: defaultQiOperationState(),
     cultivationFrame: createEmptyCultivationMetrics(),
+    skillChain: {
+      lastSkillId: null,
+      targetId: null,
+      streak: 0,
+    },
+    skillRealmNotified: {},
+    skillCooldownBonuses: {},
+    monsterVulnerability: null,
   }
 }
 
@@ -300,7 +313,9 @@ export const useBattleStore = defineStore('battle', {
       this.itemCooldowns = {}
       this.actionLockUntil = null
       this.pendingDodge = null
-      this.monsterTimer = MONSTER_ATTACK_INTERVAL
+      this.pendingSkillCast = null
+      this.monsterFollowup = null
+      this.monsterTimer = DEFAULT_MONSTER_ATTACK_INTERVAL
       this.lastTickAt = 0
       this.battleStartedAt = null
       this.battleEndedAt = null
@@ -310,6 +325,14 @@ export const useBattleStore = defineStore('battle', {
       this.resetCultivationMetrics()
       const player = usePlayerStore()
       player.setRecoveryMode('idle')
+      this.skillChain = {
+        lastSkillId: null,
+        targetId: null,
+        streak: 0,
+      }
+      this.skillRealmNotified = {}
+      this.skillCooldownBonuses = {}
+      this.monsterVulnerability = null
       // 保留lastOutcome和loot以便在结算页面显示
       // this.lastOutcome = null
       // this.loot = []
@@ -318,7 +341,7 @@ export const useBattleStore = defineStore('battle', {
       this.clearRematchTimer()
       this.stopLoop()
       this.monster = monster
-      this.monsterHp = resolveMonsterHpMax(monster)
+      this.monsterHp = resolveMonsterHp(monster)
       this.monsterQi = resolveMonsterQi(monster)
       this.concluded = 'idle'
       this.floatTexts = []
@@ -339,8 +362,19 @@ export const useBattleStore = defineStore('battle', {
       this.itemCooldowns = {}
       this.actionLockUntil = null
       this.pendingDodge = null
-      this.monsterTimer = MONSTER_ATTACK_INTERVAL
+      this.pendingSkillCast = null
+      this.monsterFollowup = null
+      this.monsterTimer = resolveMonsterAttackInterval(monster)
       this.lastTickAt = getNow()
+      this.skillChain = {
+        lastSkillId: null,
+        targetId: monster.id ?? null,
+        streak: 0,
+      }
+      this.skillRealmNotified = {}
+      this.skillCooldownBonuses = {}
+      this.monsterVulnerability = null
+      this.scheduleGoldenSheepFollowupTelegraph()
       this.startLoop()
     },
     clearRematchTimer() {
@@ -354,6 +388,24 @@ export const useBattleStore = defineStore('battle', {
       this.loopHandle = setInterval(() => {
         this.tick()
       }, TICK_INTERVAL_MS)
+    },
+    scheduleGoldenSheepFollowupTelegraph() {
+      if (!this.monster || this.concluded !== 'idle') return
+      if (this.monster.id !== GOLDEN_SHEEP_ID) return
+      if (this.monsterFollowup) return
+      const timeToNextAttack = Math.max(0, this.monsterTimer)
+      const rng = makeRng(this.rngSeed ^ 0x3c6ef372)
+      this.rngSeed = (this.rngSeed + 0xa4093822) >>> 0
+      const roll = randRange(rng, 0, 1)
+      if (roll > GOLDEN_SHEEP_DOUBLE_STRIKE_CHANCE) return
+      this.monsterFollowup = {
+        source: 'golden_sheep_double_strike',
+        stage: 'telegraph',
+        timer: timeToNextAttack + GOLDEN_SHEEP_DOUBLE_STRIKE_INTERVAL,
+        delay: GOLDEN_SHEEP_DOUBLE_STRIKE_INTERVAL,
+        damageMultiplier: GOLDEN_SHEEP_DOUBLE_STRIKE_MULTIPLIER,
+        label: GOLDEN_SHEEP_FOLLOWUP_LABEL,
+      }
     },
     stopLoop() {
       if (this.loopHandle !== null) {
@@ -376,6 +428,14 @@ export const useBattleStore = defineStore('battle', {
       if (!Number.isFinite(value) || value <= 0) return
       const current = this.cultivationFrame.actions[action] ?? 0
       this.cultivationFrame.actions[action] = current + value
+    },
+    cleanupSkillCooldownBonuses(nowMs: number) {
+      Object.keys(this.skillCooldownBonuses).forEach((skillId) => {
+        const bonus = this.skillCooldownBonuses[skillId]
+        if (!bonus || bonus.expiresAt <= nowMs) {
+          delete this.skillCooldownBonuses[skillId]
+        }
+      })
     },
     applyCultivationTick(deltaSeconds: number) {
       if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return
@@ -422,6 +482,9 @@ export const useBattleStore = defineStore('battle', {
 
       if (delta <= 0) return
 
+      this.resolvePendingSkillCast(now)
+      if (!this.monster || this.concluded !== 'idle') return
+
       for (let index = 0; index < this.skillCooldowns.length; index += 1) {
         const remaining = this.skillCooldowns[index] ?? 0
         if (remaining > 0) {
@@ -444,9 +507,24 @@ export const useBattleStore = defineStore('battle', {
       }
 
       this.monsterTimer -= delta
+      let attacksResolved = 0
       while (this.monsterTimer <= 0 && this.concluded === 'idle' && this.monster) {
+        const interval = resolveMonsterAttackInterval(this.monster)
         this.monsterAttack()
-        this.monsterTimer += MONSTER_ATTACK_INTERVAL
+        this.monsterTimer += interval
+        attacksResolved += 1
+      }
+
+      if (attacksResolved > 0) {
+        this.scheduleGoldenSheepFollowupTelegraph()
+      }
+
+      const followup = this.monsterFollowup
+      if (followup && this.concluded === 'idle' && this.monster) {
+        followup.timer -= delta
+        if (followup.stage === 'active' && followup.timer <= 0) {
+          this.resolveMonsterFollowupAttack()
+        }
       }
 
       this.applyCultivationTick(delta)
@@ -460,7 +538,7 @@ export const useBattleStore = defineStore('battle', {
     getItemCooldown(itemId: string) {
       return this.itemCooldowns[itemId] ?? 0
     },
-    pushFloat(value: string, kind: 'hitP' | 'hitE' | 'heal' | 'miss' | 'loot') {
+    pushFloat(value: string, kind: FloatText['kind'], variant?: FloatText['variant']) {
       const id = floatId++
       let x = 0.5
       let y = 0.5
@@ -479,7 +557,7 @@ export const useBattleStore = defineStore('battle', {
         y = randomInRange(0.18, 0.32)
       }
 
-      this.floatTexts.push({ id, x, y, value, kind })
+      this.floatTexts.push({ id, x, y, value, kind, variant })
       if (this.floatTexts.length > 12) this.floatTexts.shift()
 
       const lifespan = kind === 'miss' ? 900 : 1400
@@ -525,7 +603,7 @@ export const useBattleStore = defineStore('battle', {
       const equipmentDrops: LootResult[] = []
       let extraGold = 0
       let hasExtraGold = false
-      const baseRewardGold = monster.rewardGold ?? 0
+      const baseRewardGold = monster.rewards.gold
 
       for (let index = 0; index < dropCount; index += 1) {
         const choice = weightedPick(entries, lootRng)
@@ -604,10 +682,12 @@ export const useBattleStore = defineStore('battle', {
       this.monsterHp = 0
       this.skillCooldowns = Array(this.skillCooldowns.length || SKILL_SLOT_COUNT).fill(0)
       this.itemCooldowns = {}
-      this.monsterTimer = MONSTER_ATTACK_INTERVAL
+      this.monsterTimer = DEFAULT_MONSTER_ATTACK_INTERVAL
       this.lastTickAt = 0
       this.actionLockUntil = null
       this.pendingDodge = null
+      this.pendingSkillCast = null
+      this.monsterFollowup = null
       const player = usePlayerStore()
       player.setRecoveryMode('idle')
       if (result === 'victory') {
@@ -667,20 +747,78 @@ export const useBattleStore = defineStore('battle', {
         return false
       }
 
+      const progress = player.ensureSkillProgress(skillId)
+      const level = Math.max(progress.level, 1)
+      const nowReal = Date.now()
+      this.cleanupSkillCooldownBonuses(nowReal)
+
       let qiCost = 0
       if (skill.cost.type === 'qi') {
-        const percent = Math.max(skill.cost.percentOfQiMax ?? 0, 0)
-        const base = Math.max(skill.cost.amount ?? 0, 0)
-        const mastery = player.mastery.entries[skillId]
-        const reduction = Math.min(Math.max(mastery?.bonus.costReduction ?? 0, 0), 0.9)
-        qiCost = (base + percent * player.res.qiMax) * (1 - reduction)
+        qiCost = resolveQiCost(skill, level, player.res.qiMax)
         if (qiCost > 0 && !player.spendQi(qiCost)) {
           if (!silent) this.pushFloat('斗气不足', 'miss')
           return false
         }
         if (qiCost > 0) this.recordQiSpent(qiCost)
       }
+      const chargeTime = resolveSkillChargeTime(skill, level)
+      const aftercastTime = resolveSkillAftercast(skill, level)
+      const totalLockMs = (chargeTime + aftercastTime) * 1000
+      if (totalLockMs > 0) {
+        const unlockAt = now + totalLockMs
+        this.actionLockUntil = this.actionLockUntil === null ? unlockAt : Math.max(this.actionLockUntil, unlockAt)
+      }
 
+      let skillCooldown = resolveSkillCooldown(skill, level, FALLBACK_SKILL_COOLDOWN)
+      const bonus = this.skillCooldownBonuses[skillId]
+      if (bonus) {
+        if (nowReal <= bonus.expiresAt) {
+          const reduction = Math.min(Math.max(bonus.reductionPercent, 0), 0.9)
+          skillCooldown *= Math.max(0, 1 - reduction)
+        }
+        delete this.skillCooldownBonuses[skillId]
+      }
+      for (let index = 0; index < loadout.length; index += 1) {
+        if (loadout[index] === skillId) {
+          this.skillCooldowns[index] = skillCooldown
+        }
+      }
+      if (chargeTime > 0) {
+        this.pendingSkillCast = {
+          skillId,
+          resolveAt: now + chargeTime * 1000,
+          qiCost,
+          silent,
+        }
+        return true
+      }
+
+      return this.executeSkillEffect(skill, skillId, qiCost, silent)
+    },
+    resolvePendingSkillCast(nowMs: number) {
+      const pending = this.pendingSkillCast
+      if (!pending) return
+      if (pending.resolveAt > nowMs) return
+      const skill = getSkillDefinition(pending.skillId)
+      this.pendingSkillCast = null
+      if (!skill) return
+      this.executeSkillEffect(skill, pending.skillId, pending.qiCost, pending.silent)
+    },
+    executeSkillEffect(skill: SkillDefinition, skillId: string, qiCost: number, silent: boolean): boolean {
+      if (!this.monster || this.concluded !== 'idle') return false
+
+      const player = usePlayerStore()
+      const targetId = this.monster?.id ?? null
+      if (this.skillChain.lastSkillId === skillId && this.skillChain.targetId === targetId) {
+        this.skillChain.streak += 1
+      } else {
+        this.skillChain = {
+          lastSkillId: skillId,
+          targetId,
+          streak: 1,
+        }
+      }
+      const streak = this.skillChain.streak
       const stats = player.finalStats
       const rng = makeRng(this.rngSeed)
       this.rngSeed = (this.rngSeed + 0x9e3779b9) >>> 0
@@ -691,14 +829,31 @@ export const useBattleStore = defineStore('battle', {
         rng,
         resources: player.res,
         cultivation: player.cultivation,
-        mastery: player.mastery.entries[skillId] ?? undefined,
+        progress: player.skills.progress[skillId] ?? undefined,
       })
 
-      const dmg = Math.max(0, Math.round(result.damage ?? 0))
+      const nowMs = Date.now()
+      const activeVulnerability = this.monsterVulnerability
+      let dmg = Math.max(0, Math.round(result.damage ?? 0))
+      const weaknessTriggered = Boolean(result.weaknessTriggered)
+      if (activeVulnerability) {
+        if (nowMs > activeVulnerability.expiresAt) {
+          this.monsterVulnerability = null
+        } else if (dmg > 0 && activeVulnerability.percent > 0) {
+          const multiplier = 1 + Math.max(activeVulnerability.percent, 0)
+          dmg = Math.round(dmg * multiplier)
+          if (typeof result.coreDamage === 'number') {
+            result.coreDamage = Math.round(Math.max(result.coreDamage, 0) * multiplier)
+          }
+        }
+      }
+
+      const hit = result.hit ?? dmg > 0
+
       if (dmg > 0) {
-        this.applyPlayerDamage(dmg, skill.flash)
+        this.applyPlayerDamage(dmg, skill.flash, { weakness: weaknessTriggered })
         this.recordCultivationAction('attackHit', 1)
-        if (skillId === 'destiny_slash') {
+        if (skillId === 'star_realm_dragon_blood_break') {
           this.recordCultivationAction('finisherHit', 1)
         }
       } else {
@@ -732,6 +887,46 @@ export const useBattleStore = defineStore('battle', {
         this.pushFloat(result.message, 'miss')
       }
 
+      if (result.cooldownBonus && result.cooldownBonus.targetSkillId && result.cooldownBonus.durationMs > 0) {
+        const reduction = Math.min(Math.max(result.cooldownBonus.reductionPercent, 0), 0.9)
+        if (reduction > 0) {
+          this.skillCooldownBonuses[result.cooldownBonus.targetSkillId] = {
+            reductionPercent: reduction,
+            expiresAt: nowMs + result.cooldownBonus.durationMs,
+          }
+        }
+      }
+
+      if (result.applyVulnerability && result.applyVulnerability.percent > 0 && hit) {
+        this.monsterVulnerability = {
+          percent: Math.max(result.applyVulnerability.percent, 0),
+          expiresAt: nowMs + Math.max(result.applyVulnerability.durationMs, 0),
+        }
+        this.pushFloat('目标易伤', 'miss')
+      }
+
+      if (result.superArmorMs && result.superArmorMs > 0) {
+        this.pushFloat('霸体', 'miss')
+      }
+
+      const usage = player.recordSkillUsage(skill, {
+        rng,
+        baseCooldown: skill.cooldown ?? FALLBACK_SKILL_COOLDOWN,
+        hit,
+        streak,
+        timestamp: nowMs,
+      })
+      if (usage) {
+        if (usage.blockedByRealm && !this.skillRealmNotified[skillId]) {
+          this.pushFloat('已达当前上限', 'miss')
+          this.skillRealmNotified[skillId] = true
+        }
+        if (usage.leveledUp) {
+          this.pushFloat(`${skill.name} Lv.${usage.progress.level}`, 'loot')
+          this.skillRealmNotified[skillId] = false
+        }
+      }
+
       this.playerQi = player.res.qi
       this.playerQiMax = player.res.qiMax
       this.qiOperation = cloneQiOperationState(player.res.operation)
@@ -742,55 +937,52 @@ export const useBattleStore = defineStore('battle', {
         const refund = Math.min(refundTarget, Math.max(qiCost, 0))
         this.pendingDodge = {
           attemptedAt: attemptTime,
+          invincibleUntil: attemptTime + DODGE_WINDOW_MS,
           refundAmount: refund,
           consumedQi: qiCost,
-        }
-        this.actionLockUntil = attemptTime + DODGE_LOCK_DURATION_MS
-      }
-
-      const skillCooldown = skill.cooldown ?? FALLBACK_SKILL_COOLDOWN
-      for (let index = 0; index < loadout.length; index += 1) {
-        if (loadout[index] === skillId) {
-          this.skillCooldowns[index] = skillCooldown
+          refundGranted: false,
         }
       }
 
       if (this.concluded !== 'idle') return true
 
       if (this.monsterHp <= 0 && this.monster) {
-        player.gainGold(this.monster.rewardGold ?? 0)
-
-        const progress = useProgressStore()
-        progress.markMonsterCleared(this.monster.id)
-
-        if (this.monster.isBoss) {
-          const nextMapId = bossUnlockMap[this.monster.id]
-          if (nextMapId) {
-            progress.unlockMap(nextMapId)
-          }
-        }
-
-        const loot = this.applyVictoryLoot(this.monster, player)
-
-        // 战斗产出 ΔBP 与战后结算（含溢出/瓶颈提示）
-        const now = Date.now()
-        const strength = Math.max(1, (this.monster.lv ?? 1))
-        const rewardDelta = this.monster.rewards?.deltaBp
-        const baseDelta = typeof rewardDelta === 'number' ? Math.max(rewardDelta, 0) : 0.0025 * strength
-        const deltaResult = applyDeltaBp(player.cultivation, baseDelta, now)
-        if (deltaResult.applied > 0 || deltaResult.overflow > 0) {
-          if (deltaResult.applied > 0) this.pushFloat(`ΔBP+${deltaResult.applied.toFixed(2)}`, 'loot')
-          if (deltaResult.overflow > 0 || player.cultivation.realm.bottleneck) {
-            this.pushFloat('储能溢出/瓶颈', 'miss')
-          }
-          player.refreshDerived()
-        }
-
-        this.conclude('victory', loot)
-        return true
+        this.handleMonsterDefeat(player)
       }
 
       return true
+    },
+    handleMonsterDefeat(player: ReturnType<typeof usePlayerStore>) {
+      if (!this.monster) return
+
+      player.gainGold(this.monster.rewards.gold)
+
+      const progress = useProgressStore()
+      progress.markMonsterCleared(this.monster.id)
+
+      if (this.monster.isBoss) {
+        const nextMapId = bossUnlockMap[this.monster.id]
+        if (nextMapId) {
+          progress.unlockMap(nextMapId)
+        }
+      }
+
+      const loot = this.applyVictoryLoot(this.monster, player)
+
+      const now = Date.now()
+      const strength = Math.max(1, resolveMonsterRealmPower(this.monster))
+      const rewardDelta = this.monster.rewards.deltaBp
+      const baseDelta = typeof rewardDelta === 'number' ? Math.max(rewardDelta, 0) : 0.0025 * strength
+      const deltaResult = applyDeltaBp(player.cultivation, baseDelta, now)
+      if (deltaResult.applied > 0 || deltaResult.overflow > 0) {
+        if (deltaResult.applied > 0) this.pushFloat(`ΔBP+${deltaResult.applied.toFixed(2)}`, 'loot')
+        if (deltaResult.overflow > 0 || player.cultivation.realm.bottleneck) {
+          this.pushFloat('储能溢出/瓶颈', 'miss')
+        }
+        player.refreshDerived()
+      }
+
+      this.conclude('victory', loot)
     },
     async useItem(itemId: string, options?: { silent?: boolean }): Promise<boolean> {
       if (!this.monster || this.concluded !== 'idle') return false
@@ -854,36 +1046,42 @@ export const useBattleStore = defineStore('battle', {
       this.qiOperation = cloneQiOperationState(player.res.operation)
       return true
     },
-    applyPlayerDamage(dmg: number, source: 'attack' | 'skill' | 'ult') {
+    applyPlayerDamage(
+      dmg: number,
+      source: 'attack' | 'skill' | 'ult',
+      options?: { weakness?: boolean },
+    ) {
       this.monsterHp = Math.max(0, this.monsterHp - dmg)
-      this.pushFloat(`-${dmg}`, 'hitE')
+      const variant: FloatText['variant'] = options?.weakness ? 'weakness' : undefined
+      this.pushFloat(`-${dmg}`, 'hitE', variant)
       this.triggerFlash(source)
     },
     monsterAttack() {
       if (!this.monster || this.concluded !== 'idle') return
-      const player = usePlayerStore()
-      const stats = player.finalStats
+      if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
+        this.monsterFollowup.stage = 'active'
+        this.monsterFollowup.timer = this.monsterFollowup.delay
+      }
       const rng = makeRng(this.rngSeed ^ 0x517cc1b7)
       this.rngSeed = (this.rngSeed + 0x7f4a7c15) >>> 0
+
+      this.resolveMonsterAttackWithRng(rng, 1)
+    },
+    resolveMonsterAttackWithRng(rng: () => number, damageMultiplier = 1) {
+      if (!this.monster || this.concluded !== 'idle') return
+      const player = usePlayerStore()
+      const stats = player.finalStats
       const now = getNow()
 
       let dodged = false
       const dodgeAttempt = this.pendingDodge
       if (dodgeAttempt) {
-        const elapsedMs = now - dodgeAttempt.attemptedAt
-        const windowMs = DODGE_WINDOW_MS
-        if (elapsedMs >= 0 && elapsedMs <= windowMs) {
-          const playerAgi = stats.totals.AGI
-          const enemyAgi = resolveMonsterAgi(this.monster)
-          let chance = 0.1 + 0.005 * (playerAgi - enemyAgi)
-          const masteryBonus = player.mastery.entries[DODGE_SKILL_ID]?.bonus?.dodge ?? 0
-          chance += masteryBonus
-          if (chance < 0) chance = 0
-          if (chance > 1) chance = 1
-          const roll = rng()
-          if (roll < chance) {
-            dodged = true
-            this.pushFloat('闪避!', 'miss')
+        const windowStart = dodgeAttempt.attemptedAt
+        const windowEnd = dodgeAttempt.invincibleUntil
+        if (now >= windowStart && now <= windowEnd) {
+          dodged = true
+          this.pushFloat('闪避!', 'miss')
+          if (!dodgeAttempt.refundGranted) {
             const refund = Math.max(dodgeAttempt.refundAmount, 0)
             if (refund > 0) {
               const beforeQi = player.res.qi
@@ -895,9 +1093,14 @@ export const useBattleStore = defineStore('battle', {
               }
             }
             this.recordCultivationAction('perfectDodge', 1)
+            dodgeAttempt.refundGranted = true
           }
         }
-        this.pendingDodge = null
+        if (now >= windowEnd) {
+          this.pendingDodge = null
+        } else {
+          this.pendingDodge = dodgeAttempt
+        }
       }
 
       if (dodged) {
@@ -906,18 +1109,24 @@ export const useBattleStore = defineStore('battle', {
         this.qiOperation = cloneQiOperationState(player.res.operation)
         return
       }
-      const monsterLevel = this.monster.lv ?? 1
+
       const penetration = resolveMonsterPenetration(this.monster)
-      const defRef = getDefRefForRealm(player.cultivation?.realm)
+      const defRef = getDefRefForRealm(player.cultivation.realm)
       const damageResult = dmgAttack(resolveMonsterAtk(this.monster), stats.totals.DEF, randRange(rng, 0, 1), {
         penPct: penetration.pct,
         penFlat: penetration.flat,
-        defRef: defRef || undefined,
-        contentLevel: defRef ? 0 : monsterLevel,
+        defRef,
         defenderTough: 1,
       })
+      const agiAttacker = resolveMonsterAgi(this.monster)
+      const agiDefender = stats.totals.AGI ?? 0
+      const weakness = resolveWeaknessDamage(damageResult.damage, agiAttacker, agiDefender, randRange(rng, 0, 1))
 
-      let incoming = Math.max(0, damageResult.damage)
+      const multiplier = Math.max(damageMultiplier, 0)
+      let incoming = Math.max(0, weakness.damage)
+      if (multiplier !== 1) {
+        incoming *= multiplier
+      }
       // Qi Shielding (BATTLE.md §4.3)
       const f = Math.max(0, Math.min(1, player.res.operation.fValue || 0))
       if ((player.res.operation.mode !== 'idle') && f > 0 && incoming > 0) {
@@ -951,7 +1160,18 @@ export const useBattleStore = defineStore('battle', {
       if (player.res.hp <= 0) {
         this.applyDeathPenalty()
         this.conclude('defeat')
-        return
+      }
+    },
+    resolveMonsterFollowupAttack() {
+      const followup = this.monsterFollowup
+      this.monsterFollowup = null
+      if (!followup) return
+      if (!this.monster || this.concluded !== 'idle') return
+      const rng = makeRng(this.rngSeed ^ 0xd2511f53)
+      this.rngSeed = (this.rngSeed + 0x94d049bb) >>> 0
+      this.resolveMonsterAttackWithRng(rng, followup.damageMultiplier)
+      if (this.concluded === 'idle') {
+        this.scheduleGoldenSheepFollowupTelegraph()
       }
     },
     applyDeathPenalty() {

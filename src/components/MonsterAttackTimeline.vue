@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { DODGE_LOCK_DURATION_MS, DODGE_WINDOW_MS } from '@/constants/dodge'
-import type { PendingDodgeState } from '@/types/domain'
+import type { MonsterFollowupStage, PendingDodgeState } from '@/types/domain'
 
 const HALF_SPAN_SECONDS = 3
 const TOTAL_SPAN_SECONDS = HALF_SPAN_SECONDS * 2
@@ -15,6 +15,7 @@ const props = defineProps<{
   timeToAttack: number | null
   pendingDodge: PendingDodgeState | null
   actionLockUntil: number | null
+  followup: { time: number, label?: string, phase?: MonsterFollowupStage, delay?: number } | null
 }>()
 
 const getNowMs = () => (typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -140,6 +141,32 @@ const attackMarkerStyle = computed(() => {
   }
 })
 
+const followupMarkerStyle = computed(() => {
+  if (!props.active) return null
+  const hint = props.followup
+  if (!hint) return null
+  const time = hint.time
+  if (!Number.isFinite(time) || time <= 0) return null
+  const positionPercent = timeToPercent(time)
+  return {
+    left: `${positionPercent}%`,
+  }
+})
+
+const followupLabel = computed(() => props.followup?.label ?? '追击')
+
+const followupPhase = computed<MonsterFollowupStage | null>(() => props.followup?.phase ?? null)
+
+const followupAttackClasses = computed(() => {
+  const phase = followupPhase.value
+  return {
+    'timeline-rail__attack': true,
+    'timeline-rail__attack--followup': true,
+    'is-telegraph': phase === 'telegraph',
+    'is-active': phase === 'active',
+  }
+})
+
 const attackSeverityClass = computed(() => {
   if (!props.active || props.timeToAttack === null) return 'is-idle'
   if (props.timeToAttack <= 0.3) return 'is-danger'
@@ -147,13 +174,17 @@ const attackSeverityClass = computed(() => {
   return 'is-ready'
 })
 
+const isDodgeLockActive = computed(() => props.pendingDodge !== null)
+
 const dodgeStartMs = computed(() => {
+  if (!isDodgeLockActive.value) return null
   if (props.actionLockUntil === null) return null
   const start = props.actionLockUntil - DODGE_TOTAL_SECONDS * 1000
   return start
 })
 
 const dodgeSegmentStyle = computed(() => {
+  if (!isDodgeLockActive.value) return null
   if (props.actionLockUntil === null) return null
   const now = nowMs.value
   const startMs = dodgeStartMs.value ?? now
@@ -236,6 +267,14 @@ const timelineClasses = computed(() => ({
         :class="attackSeverityClass"
         :style="attackMarkerStyle"
       >
+        <span class="timeline-rail__attack-glow" />
+      </div>
+      <div
+        v-if="followupMarkerStyle"
+        :class="followupAttackClasses"
+        :style="followupMarkerStyle"
+      >
+        <span class="timeline-rail__attack-label">{{ followupLabel }}</span>
         <span class="timeline-rail__attack-glow" />
       </div>
       <div
@@ -424,6 +463,16 @@ const timelineClasses = computed(() => ({
   z-index: 3;
 }
 
+.timeline-rail__attack-label {
+  position: absolute;
+  top: -16px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 224, 151, 0.95);
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.65);
+  white-space: nowrap;
+}
+
 .timeline-rail__attack-glow {
   display: block;
   width: 3px;
@@ -451,6 +500,27 @@ const timelineClasses = computed(() => ({
 .timeline-rail__attack.is-idle .timeline-rail__attack-glow {
   opacity: 0.4;
   box-shadow: none;
+}
+
+.timeline-rail__attack--followup {
+  z-index: 4;
+}
+
+.timeline-rail__attack--followup .timeline-rail__attack-glow {
+  background: linear-gradient(180deg, rgba(255, 227, 150, 0.95), rgba(255, 181, 70, 0.55));
+  box-shadow:
+    0 0 18px rgba(255, 186, 90, 0.7),
+    -4px 0 12px rgba(255, 225, 170, 0.45),
+    4px 0 12px rgba(255, 185, 120, 0.35);
+  position: relative;
+}
+
+.timeline-rail__attack--followup.is-active .timeline-rail__attack-glow {
+  background: linear-gradient(180deg, rgba(255, 120, 120, 0.98), rgba(255, 80, 80, 0.6));
+  box-shadow:
+    0 0 20px rgba(255, 106, 106, 0.75),
+    -4px 0 14px rgba(255, 180, 180, 0.5),
+    4px 0 14px rgba(255, 142, 142, 0.4);
 }
 
 .timeline-rail__attack--past .timeline-rail__attack-glow {

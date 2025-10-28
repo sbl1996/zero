@@ -30,12 +30,6 @@ const COURSE_CONFIGS: GuildCourseConfig[] = [
     requiredTier: 2,
     unlockMessage: '你习得了《斗气闪避》。',
   },
-  {
-    skillId: 'destiny_slash',
-    price: 10000,
-    requiredTier: 3,
-    unlockMessage: '你习得了《命运斩击》。',
-  },
 ]
 
 const playerStore = usePlayerStore()
@@ -232,6 +226,10 @@ function attemptPurchase(course: GuildCourseViewModel) {
         </article>
 
         <p class="text-small text-muted">
+          提示：陨龙击会在晋升至二级战士后自动习得，星界龙血破会在晋升至三级战士后自动习得，无需在此购买。
+        </p>
+
+        <p class="text-small text-muted">
           公会公告：后续将逐步开放更高等的战技课程，敬请期待。
         </p>
       </section>
@@ -245,7 +243,7 @@ function attemptPurchase(course: GuildCourseViewModel) {
   min-height: 100%;
   padding: 24px;
   box-sizing: border-box;
-  background: url('/scene-warrior-guild.webp') center / cover no-repeat;
+  background: url('@/assets/scene-warrior-guild.webp') center / cover no-repeat;
 }
 
 .guild-overlay {
