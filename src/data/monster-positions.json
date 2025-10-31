@@ -1,0 +1,64 @@
+{
+  "fringe": {
+    "m-slime": { "x": 30, "y": 40 },
+    "m-wolf": { "x": 60, "y": 23 },
+    "m-goblin": { "x": 50, "y": 50 },
+    "m-boar": { "x": 90, "y": 50 },
+    "boss-golden-sheep": { "x": 65, "y": 70 }
+  },
+  "spine-of-frostfire": {
+    "m-ice-boli": { "x": 25, "y": 43 },
+    "m-pyro-fox": { "x": 60, "y": 52 },
+    "m-froststone-colossus": { "x": 26, "y": 70 },
+    "m-boss-wind-raptor": { "x": 70, "y": 82 }
+  },
+  "thunderveil-keep": {
+    "m-shade": { "x": 52, "y": 45 },
+    "m-thunder-knight": { "x": 73, "y": 82 },
+    "m-abyss-witch": { "x": 22, "y": 80 },
+    "boss-dragon-whelp": { "x": 42, "y": 16 }
+  },
+  "bogroot-expanse": {
+    "m-specter": { "x": 35, "y": 30 },
+    "m-rockback": { "x": 15, "y": 45 },
+    "m-raven": { "x": 80, "y": 40 },
+    "boss-treant": { "x": 50, "y": 70 }
+  },
+  "duskfang-rift": {
+    "m-nightstalker": { "x": 20, "y": 26 },
+    "m-troll": { "x": 75, "y": 35 },
+    "m-hound": { "x": 25, "y": 75 },
+    "boss-priest": { "x": 50, "y": 50 }
+  },
+  "gloomlit-arcanum": {
+    "m-harvester": { "x": 80, "y": 20 },
+    "m-sentinel": { "x": 30, "y": 28 },
+    "m-reaver": { "x": 76, "y": 62 },
+    "boss-archmage": { "x": 50, "y": 45 }
+  },
+  "obsidian-windscar": {
+    "m-stormcaller": { "x": 35, "y": 33 },
+    "m-colossus": { "x": 25, "y": 60 },
+    "m-titan": { "x": 85, "y": 50 },
+    "boss-knight": { "x": 70, "y": 25 }
+  },
+  "frostfire-maelstrom": {
+    "m-chimera": { "x": 40, "y": 50 },
+    "m-wyrm": { "x": 76, "y": 21 },
+    "m-kraken": { "x": 75, "y": 80 },
+    "boss-warlord": { "x": 25, "y": 25 }
+  },
+  "astral-crown": {
+    "m-templar": { "x": 50, "y": 75 },
+    "m-banshee": { "x": 20, "y": 53 },
+    "m-hunter": { "x": 73, "y": 15 },
+    "boss-dragon": { "x": 50, "y": 45 }
+  },
+  "green-elysium": {
+    "m-faerie": { "x": 14, "y": 55 },
+    "m-bloomfiend": { "x": 80, "y": 52 },
+    "m-dreamstag": { "x": 29, "y": 25 },
+    "m-sylvan-sentinel": { "x": 25, "y": 82 },
+    "boss-queen-of-blooms": { "x": 51, "y": 35 }
+  }
+}

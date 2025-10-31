@@ -2,6 +2,23 @@ import { dmgAttack, dmgSkill, dmgUlt, getDefRefForRealm, resolveWeaknessDamage }
 import { randRange } from '@/composables/useRng'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import type { Monster, SkillDefinition, SkillResult } from '@/types/domain'
+import skillMetadata from './skill-metadata.json'
+
+type SkillMetadata = {
+  id: string
+  name: string
+  description: string
+}
+
+const SKILL_METADATA = new Map((skillMetadata as SkillMetadata[]).map(meta => [meta.id, meta]))
+
+function getSkillMeta(id: string): SkillMetadata {
+  const meta = SKILL_METADATA.get(id)
+  if (!meta) {
+    throw new Error(`Missing skill metadata for ${id}`)
+  }
+  return meta
+}
 
 function resolveMonsterDef(monster: Monster): number {
   return monster.stats.DEF
@@ -19,16 +36,25 @@ function resolveMonsterAgi(monster: Monster): number {
   return monster.stats.AGI
 }
 
+function resolveSkillIcon(skillId: string): string {
+  return resolveAssetUrl(`skill-${skillId.replace(/_/g, '-')}.webp`)
+}
+
+const META_DRAGON_BREATH = getSkillMeta('dragon_breath_slash')
+const META_FALLEN_DRAGON = getSkillMeta('fallen_dragon_smash')
+const META_STAR_REALM = getSkillMeta('star_realm_dragon_blood_break')
+const META_QI_DODGE = getSkillMeta('qi_dodge')
+
 export const SKILLS: SkillDefinition[] = [
   {
-    id: 'dragon_breath_slash',
-    name: '龙息斩',
-    description: '基础单体斩击（倍率 100%），释放后 0.2s 硬直。',
+    id: META_DRAGON_BREATH.id,
+    name: META_DRAGON_BREATH.name,
+    description: META_DRAGON_BREATH.description,
     cost: { type: 'qi', percentOfQiMax: 0.02 },
     flash: 'attack',
     cooldown: 2,
     aftercastTime: 0.2,
-    icon: resolveAssetUrl('skill-basic-strike.webp'),
+    icon: resolveSkillIcon(META_DRAGON_BREATH.id),
     maxLevel: 10,
     getCooldown: (level) => {
       const l = Math.max(level, 1)
@@ -72,15 +98,15 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: 'fallen_dragon_smash',
-    name: '陨龙击',
-    description: '蓄力 0.2s 后施放的重击（倍率 160%），包含 0.2s 后摇。',
+    id: META_FALLEN_DRAGON.id,
+    name: META_FALLEN_DRAGON.name,
+    description: META_FALLEN_DRAGON.description,
     cost: { type: 'qi', percentOfQiMax: 0.04 },
     flash: 'skill',
     cooldown: 5,
     chargeTime: 0.2,
     aftercastTime: 0.2,
-    icon: resolveAssetUrl('skill-charged-cleave.webp'),
+    icon: resolveSkillIcon(META_FALLEN_DRAGON.id),
     maxLevel: 10,
     getCooldown: (level) => {
       const l = Math.max(level, 1)
@@ -117,15 +143,15 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: 'star_realm_dragon_blood_break',
-    name: '星界龙血破',
-    description: '蓄力 0.5s 的终极爆发斩击（倍率 350%），附带 0.2s 后摇。',
+    id: META_STAR_REALM.id,
+    name: META_STAR_REALM.name,
+    description: META_STAR_REALM.description,
     cost: { type: 'qi', percentOfQiMax: 0.1 },
     flash: 'ult',
     cooldown: 20,
     chargeTime: 0.5,
     aftercastTime: 0.2,
-    icon: resolveAssetUrl('skill-destiny-slash.webp'),
+    icon: resolveSkillIcon(META_STAR_REALM.id),
     maxLevel: 10,
     getCooldown: (level) => {
       const l = Math.max(level, 1)
@@ -173,14 +199,14 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: 'qi_dodge',
-    name: '斗气闪避',
-    description: '进入斗气闪避姿态，命中前 0.4s 判定闪避，成功则免疫伤害并返还4%斗气上限；发动后 0.3s 内不可使用技能与道具。',
+    id: META_QI_DODGE.id,
+    name: META_QI_DODGE.name,
+    description: META_QI_DODGE.description,
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
     cooldown: 0.7,
     aftercastTime: 0.3,
-    icon: resolveAssetUrl('skill-qi-dodge.webp'),
+    icon: resolveSkillIcon(META_QI_DODGE.id),
     tags: ['utility'],
     maxLevel: 1,
     execute: () => ({ hit: false }),
