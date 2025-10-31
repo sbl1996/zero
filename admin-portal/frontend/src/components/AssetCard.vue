@@ -9,6 +9,9 @@
           v-if="asset.latest_revision?.download_url"
           :src="asset.latest_revision.download_url"
           :alt="asset.title ?? asset.id"
+          :preview-src-list="[asset.latest_revision.download_url]"
+          :initial-index="0"
+          preview-teleported
           fit="cover"
           lazy
         >

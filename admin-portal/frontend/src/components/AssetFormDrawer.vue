@@ -58,7 +58,16 @@
         <el-input v-model="form.description" type="textarea" :rows="3" placeholder="简介、命名规则说明等" />
       </el-form-item>
       <el-form-item label="标签">
-        <el-select v-model="form.tags" multiple filterable allow-create default-first-option placeholder="如 boss / seasonal">
+        <el-select
+          ref="tagsSelectRef"
+          v-model="form.tags"
+          multiple
+          filterable
+          allow-create
+          default-first-option
+          placeholder="如 boss / seasonal"
+          @change="handleTagsChange"
+        >
           <el-option v-for="tag in form.tags" :key="tag" :label="tag" :value="tag" />
         </el-select>
       </el-form-item>
@@ -116,7 +125,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, nextTick } from 'vue'
 import type { Asset, AssetType, CatalogItem } from '@/types/assets'
 import dayjs from 'dayjs'
 import { UploadFilled, Loading, CircleCheck, CircleClose } from '@element-plus/icons-vue'
@@ -140,6 +149,9 @@ const emit = defineEmits<{
 }>()
 
 const assetStore = useAssetStore()
+
+// 标签选择器引用
+const tagsSelectRef = ref()
 
 // 简单的debounce实现
 function debounce<T extends (...args: any[]) => any>(fn: T, delay: number): T {
@@ -390,6 +402,51 @@ function prettySize(size: number) {
 
 function formatDate(value: string) {
   return dayjs(value).format('YYYY-MM-DD HH:mm')
+}
+
+// 标签变化处理方法
+function handleTagsChange(newTags: string[]) {
+  // 延迟清空输入框，确保组件状态完全更新
+  setTimeout(() => {
+    clearTagInput()
+  }, 50)
+}
+
+// 清空标签输入框
+function clearTagInput() {
+  const selectComponent = tagsSelectRef.value
+  if (!selectComponent) return
+
+  // 尝试找到所有可能的输入框并清空
+  const inputSelectors = [
+    '.el-select__input input',
+    '.el-select__wrapper input',
+    '.el-select__selection input',
+    'input[type="text"]'
+  ]
+
+  let cleared = false
+  inputSelectors.forEach(selector => {
+    const inputElement = selectComponent.$el.querySelector(selector)
+    if (inputElement && inputElement.value) {
+      console.log('清空输入框:', selector, inputElement.value)
+      inputElement.value = ''
+      inputElement.dispatchEvent(new Event('input', { bubbles: true }))
+      inputElement.dispatchEvent(new Event('change', { bubbles: true }))
+      cleared = true
+    }
+  })
+
+  // 尝试使用组件的内部属性清空
+  if (selectComponent.query !== undefined) {
+    selectComponent.query = ''
+    cleared = true
+  }
+
+  // 如果清空了输入，强制更新组件
+  if (cleared) {
+    selectComponent.$forceUpdate?.()
+  }
 }
 </script>
 
