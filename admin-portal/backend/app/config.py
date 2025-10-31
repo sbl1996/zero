@@ -8,7 +8,12 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_prefix="ADMIN_PORTAL_", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="ADMIN_PORTAL_",
+        extra="ignore",
+        env_file=".env",
+        env_file_encoding="utf-8"
+    )
 
     database_url: str = Field(default="sqlite:///./var/admin_portal.db", description="SQLAlchemy database URL.")
     raw_assets_dir: Path = Field(

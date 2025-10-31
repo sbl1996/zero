@@ -86,3 +86,5 @@ export async function updateAsset(id: string, payload: AssetFormPayload): Promis
   const response = await client.patch<Asset>(`/api/assets/${id}`, form)
   return response.data
 }
+
+export { client }

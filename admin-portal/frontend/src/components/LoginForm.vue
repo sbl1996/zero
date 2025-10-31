@@ -20,16 +20,6 @@
           登录
         </el-button>
       </el-form-item>
-      <el-alert
-        v-if="auth.apiError"
-        :closable="false"
-        type="error"
-        show-icon
-        title="认证失败"
-        class="login-card__error"
-      >
-        {{ auth.apiError }}
-      </el-alert>
     </el-form>
   </el-card>
 </template>
@@ -38,12 +28,14 @@
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
-import { fetchAssets } from '@/services/api'
+import axios from 'axios'
 import { ElMessage } from 'element-plus'
 
 const router = useRouter()
 const auth = useAuthStore()
 const loading = ref(false)
+
+const apiBaseUrl = import.meta.env.VITE_API_BASE_URL
 
 const form = reactive({
   apiKey: auth.apiKey ?? '',
@@ -58,37 +50,47 @@ async function handleSubmit() {
   auth.setError(null)
 
   try {
-    // 临时设置API Key用于验证
-    auth.setApiKey(form.apiKey)
-
-    // 尝试一个PATCH请求来验证API Key是否有效
-    // 使用一个不存在的资产ID，这样应该返回404（认证成功）或401（认证失败）
-    const testResponse = await fetch('/api/assets/non-existent-asset-for-auth-test', {
-      method: 'PATCH',
+    // 创建临时的API客户端实例进行验证，不保存到store中
+    const tempClient = axios.create({
+      baseURL: apiBaseUrl && apiBaseUrl.length > 0 ? apiBaseUrl : undefined,
+      timeout: 20000,
       headers: {
-        'X-API-Key': form.apiKey,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ title: 'test' }),
+        'X-API-Key': form.apiKey
+      }
     })
 
-    if (testResponse.status === 401) {
-      throw new Error('API Key无效')
-    }
+    // 使用临时客户端尝试一个简单的请求来验证API Key是否有效
+    // 我们尝试获取资产列表，如果API key无效，后端会返回401
+    const response = await tempClient.get('/api/assets?page=1&page_size=1')
 
-    // 如果返回404或其他4xx错误（除了401），说明认证成功了
-    if (testResponse.status >= 400 && testResponse.status !== 401) {
+    // 如果能成功获取响应，说明API Key有效
+    if (response.status === 200) {
+      // 验证成功，现在才设置API Key到store中
+      auth.setApiKey(form.apiKey)
+
       // 认证成功，继续登录
+      const redirect = router.currentRoute.value.query.redirect as string | undefined
+      router.push(redirect ?? { name: 'assets' })
+    } else {
+      throw new Error('API Key 验证失败')
+    }
+  } catch (error: any) {
+    // 验证失败，不保存API Key并显示错误
+
+    // 根据不同的错误类型显示不同的消息
+    let errorMessage = 'API Key 验证失败'
+    if (error?.response?.status === 401) {
+      errorMessage = 'API Key 无效或已过期'
+    } else if (error?.response?.status === 403) {
+      errorMessage = '访问被拒绝，权限不足'
+    } else if (error?.response?.data?.detail) {
+      errorMessage = error.response.data.detail
+    } else if (error?.message) {
+      errorMessage = error.message
     }
 
-    const redirect = router.currentRoute.value.query.redirect as string | undefined
-    router.push(redirect ?? { name: 'assets' })
-  } catch (error: any) {
-    // 验证失败，清除API Key并显示错误
-    auth.setApiKey('')
-    const message = error?.response?.data?.detail ?? error?.message ?? 'API Key 验证失败'
-    auth.setError(message)
-    ElMessage.error('API Key 无效，请检查后端配置')
+    auth.setError(errorMessage)
+    ElMessage.error(errorMessage)
   } finally {
     loading.value = false
   }

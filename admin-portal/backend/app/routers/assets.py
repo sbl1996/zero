@@ -121,6 +121,7 @@ def list_assets(
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=None, ge=1),
     db: Session = Depends(get_db),
+    _: str = Depends(get_api_key),
 ):
     page_size = page_size or settings.pagination_default_limit
     page_size = min(page_size, settings.pagination_max_limit)
@@ -174,7 +175,7 @@ def list_assets(
 
 
 @router.get("/{asset_id}", response_model=schemas.AssetOut)
-def get_asset(asset_id: str, request: Request, db: Session = Depends(get_db)):
+def get_asset(asset_id: str, request: Request, db: Session = Depends(get_db), _: str = Depends(get_api_key)):
     asset = db.query(models.Asset).filter(models.Asset.asset_key == asset_id).first()
     if not asset:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Asset not found.")

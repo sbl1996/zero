@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/backups", tags=["backups"])
 
 
 @router.get("/{asset_key}.{extension}", response_model=BackupListResponse)
-def list_asset_backups(asset_key: str, extension: str):
+def list_asset_backups(asset_key: str, extension: str, _: str = Depends(get_api_key)):
     """List all backup files for a given asset."""
     # Ensure extension starts with dot
     if not extension.startswith('.'):
