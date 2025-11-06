@@ -6,6 +6,7 @@ export const useUiStore = defineStore('ui', {
     showEquipment: false,
     showCheatPanel: false,
     autoRematchAfterVictory: false,
+    enableHoldAutoCast: false,
   }),
   actions: {
     toggleAttributes(value?: boolean) {

@@ -34,7 +34,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
       },
     ],
     rewards: {
-      gold: 80,
+      gold: 100,
       items: [
         { itemId: 'potionHP', quantity: 1 },
         { itemId: 'potionQi', quantity: 1 },
@@ -60,14 +60,14 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
         type: 'killCollect',
         monsterIds: ['m-wolf'],
         itemId: 'quest-wolf-fang',
-        dropRate: 0.6,
+        dropRate: 0.5,
         maxPerKill: 1,
         amount: 5,
         description: '击败野狼并收集 5 个野狼利齿。',
       },
     ],
     rewards: {
-      gold: 120,
+      gold: 200,
       items: [{ itemId: 'potionQi', quantity: 2 }],
       skillUnlocks: [],
       notes: '完成后铁匠罗恩会对你另眼相看。',
@@ -102,7 +102,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
       },
     ],
     rewards: {
-      gold: 260,
+      gold: 500,
       items: [{ itemId: 'potionQiPlus', quantity: 1 }],
       notes: '碎核可为学术研究提供珍贵样本。',
     },

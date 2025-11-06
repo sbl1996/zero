@@ -77,6 +77,12 @@ export interface RecoveryState {
   updatedAt: number | null
 }
 
+export interface CoreBoost {
+  tier: number
+  bonusPerSecond: number
+  expiresAt: number
+}
+
 export interface Resources {
   hp: number
   hpMax: number
@@ -86,6 +92,7 @@ export interface Resources {
   qiOverflow: number
   operation: QiOperationState
   recovery: RecoveryState
+  activeCoreBoost: CoreBoost | null
 }
 
 export type RealmTier = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 'sanctuary'
@@ -272,10 +279,10 @@ export interface PenetrationProfile {
 }
 
 export interface MonsterRewards {
-  deltaBp?: number
   gold: number
   exp?: number
   lootTableId?: string
+  coreDrop?: { tier: number }
 }
 
 export interface MonsterSkillHit {
@@ -329,6 +336,11 @@ export interface ItemStack {
   quantity: number
 }
 
+export interface MeditationBoost {
+  bonusPerSecond: number
+  durationMs: number
+}
+
 export interface ConsumableDefinition {
   id: string
   name: string
@@ -338,6 +350,9 @@ export interface ConsumableDefinition {
   gainDeltaBp?: number
   price: number
   breakthroughMethod?: BreakthroughMethod
+  // Optional fields for meditation core shard items
+  coreShardTier?: number
+  meditationBoost?: MeditationBoost
 }
 
 export interface MaterialDefinition {
@@ -406,6 +421,8 @@ export interface SkillDefinition {
   getChargeTime?: (level: number) => number
   getAftercastTime?: (level: number) => number
   getCostMultiplier?: (level: number) => number
+  getDamageMultiplier?: (level: number) => number
+  getDescription?: (level: number) => string
   execute: (context: SkillContext) => SkillResult
 }
 
@@ -516,6 +533,7 @@ export interface SaveData {
   inventory: InventorySave
   unlocks: UnlockState
   quickSlots: Array<string | null>
+  quests: QuestSaveState
 }
 
 export type LootKind = 'item' | 'equipment' | 'gold'
@@ -542,3 +560,114 @@ export interface GoldLootResult {
 }
 
 export type LootResult = ItemLootResult | EquipmentLootResult | GoldLootResult
+
+// Quest system types
+export type QuestObjectiveType = 'kill' | 'killCollect' | 'collect'
+
+export interface QuestObjectiveBase {
+  id: string
+  type: QuestObjectiveType
+  description?: string
+  amount: number
+  mapIds?: string[]
+}
+
+export interface QuestObjectiveKill extends QuestObjectiveBase {
+  type: 'kill'
+  monsterIds: string[]
+}
+
+export interface QuestObjectiveKillCollect extends QuestObjectiveBase {
+  type: 'killCollect'
+  monsterIds: string[]
+  itemId: string
+  dropRate: number
+  maxPerKill?: number
+}
+
+export interface QuestObjectiveCollect extends QuestObjectiveBase {
+  type: 'collect'
+  itemId: string
+}
+
+export type QuestObjective = QuestObjectiveKill | QuestObjectiveKillCollect | QuestObjectiveCollect
+
+export interface QuestRewardItem {
+  itemId: string
+  quantity: number
+}
+
+export interface QuestRewardEquipmentTemplate {
+  templateId: string
+  initialLevel?: number
+}
+
+export interface QuestReward {
+  gold?: number
+  items?: QuestRewardItem[]
+  equipmentTemplates?: QuestRewardEquipmentTemplate[]
+  skillUnlocks?: string[]
+  notes?: string
+}
+
+export interface QuestPrerequisites {
+  minRealmTier?: number
+  requiredQuestIds?: string[]
+  requiredMonsterIds?: string[]
+  requiredFlags?: string[]
+}
+
+export type QuestRuntimeStatus = 'locked' | 'available' | 'active' | 'readyToTurnIn' | 'completed'
+
+export interface QuestDefinition {
+  id: string
+  name: string
+  giver: string
+  location: string
+  description: string
+  summary?: string
+  recommendedRealmTier?: RealmTier
+  difficultyLabel?: string
+  prerequisites?: QuestPrerequisites
+  objectives: QuestObjective[]
+  rewards: QuestReward
+  allowAbandon?: boolean
+  repeatable?: boolean
+  tags?: string[]
+}
+
+export interface QuestObjectiveProgress {
+  objectiveId: string
+  current: number
+  completed: boolean
+}
+
+export interface QuestProgressEntry {
+  questId: string
+  status: Exclude<QuestRuntimeStatus, 'locked' | 'available'>
+  acceptedAt: number
+  completedAt: number | null
+  objectives: Record<string, QuestObjectiveProgress>
+}
+
+export interface QuestCompletionLogEntry {
+  questId: string
+  lastSubmittedAt: number
+  repeatCount: number
+  lastRewards: QuestReward
+}
+
+export interface QuestSaveState {
+  active: string[]
+  readyToTurnIn: string[]
+  completed: string[]
+  questItems: Record<string, number>
+  completionLog: QuestCompletionLogEntry[]
+  progress: Record<string, QuestProgressEntry>
+}
+
+export interface QuestItemDefinition {
+  id: string
+  name: string
+  description?: string
+}

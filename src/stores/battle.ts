@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { dmgAttack, getDefRefForRealm, resolveWeaknessDamage } from '@/composables/useDamage'
-import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS, applyDeltaBp } from '@/composables/useLeveling'
+import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS } from '@/composables/useLeveling'
 import { resolveSkillAftercast, resolveSkillChargeTime, resolveSkillCooldown, resolveQiCost } from '@/composables/useSkills'
 import { makeRng, randRange } from '@/composables/useRng'
 import { bossUnlockMap } from '@/data/monsters'
@@ -17,6 +17,7 @@ import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
 import { useUiStore } from './ui'
+import { useQuestStore } from './quests'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
 import type {
@@ -1006,20 +1007,24 @@ export const useBattleStore = defineStore('battle', {
         }
       }
 
-      const loot = this.applyVictoryLoot(this.monster, player)
-
-      const now = Date.now()
-      const strength = Math.max(1, resolveMonsterRealmPower(this.monster))
-      const rewardDelta = this.monster.rewards.deltaBp
-      const baseDelta = typeof rewardDelta === 'number' ? Math.max(rewardDelta, 0) : 0.0025 * strength
-      const deltaResult = applyDeltaBp(player.cultivation, baseDelta, now)
-      if (deltaResult.applied > 0 || deltaResult.overflow > 0) {
-        if (deltaResult.applied > 0) this.pushFloat(`ΔBP+${deltaResult.applied.toFixed(2)}`, 'loot')
-        if (deltaResult.overflow > 0 || player.cultivation.realm.bottleneck) {
-          this.pushFloat('储能溢出/瓶颈', 'miss')
-        }
-        player.refreshDerived()
+      // Update quest progress and drops
+      const questStore = useQuestStore()
+      const questRng = makeRng(this.rngSeed ^ 0x1b873593)
+      this.rngSeed = (this.rngSeed + 0x85ebca6b) >>> 0
+      const questResult = questStore.handleMonsterDefeat(this.monster.id, { rng: questRng, mapId: progress.currentMapId })
+      // Show quest item drop notices
+      for (const drop of questResult.drops) {
+        this.pushFloat(`获得 ${drop.name} x${drop.quantity}`, 'loot')
       }
+      // Show quest completion/turn-in notices
+      if (questResult.prepared && questResult.prepared.length) {
+        for (const questId of questResult.prepared) {
+          const qName = questStore.definitionMap[questId]?.name ?? questId
+          this.pushFloat(`可交付「${qName}」`, 'loot')
+        }
+      }
+
+      const loot = this.applyVictoryLoot(this.monster, player)
 
       this.conclude('victory', loot)
     },

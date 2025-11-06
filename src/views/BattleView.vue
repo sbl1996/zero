@@ -16,6 +16,7 @@ import type { FloatText, LootResult, Monster } from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import QuickItemBar from '@/components/QuickItemBar.vue'
 import MonsterAttackTimeline from '@/components/MonsterAttackTimeline.vue'
+import { formatMonsterRewards } from '@/utils/monsterUtils'
 
 const router = useRouter()
 const battle = useBattleStore()
@@ -116,20 +117,6 @@ const hotkeyLabels = ['Z', 'X', 'C', 'V']
 const ITEM_HOTKEYS = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'] as const
 const itemHotkeyLabels = ['NUM1', 'NUM2', 'NUM3', 'NUM4']
 const itemHotkeyMap = new Map<string, number>(ITEM_HOTKEYS.map((code, index) => [code, index]))
-
-function formatMonsterRewards(monster: Monster | null | undefined): string {
-  if (!monster) return ''
-  const rewards = monster.rewards
-  const parts: string[] = []
-  if (typeof rewards.exp === 'number') {
-    parts.push(`EXP ${rewards.exp}`)
-  }
-  if (typeof rewards.deltaBp === 'number') {
-    parts.push(`ΔBP ${rewards.deltaBp}`)
-  }
-  parts.push(`GOLD ${rewards.gold}`)
-  return parts.join(' ・ ')
-}
 
 function describeMonsterRealm(monster: Monster | null | undefined): string {
   if (!monster?.realmTier) return '未知'
@@ -1123,7 +1110,7 @@ onBeforeUnmount(() => {
           style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; text-align: center; pointer-events: none;"
         >
           <div>胜利</div>
-          <div class="text-small" style="margin-top: 6px;">奖励：{{ formatMonsterRewards(monster ?? null) }}</div>
+          <div class="text-small" style="margin-top: 6px;">奖励：</div>
           <div
             class="text-small"
             :class="getGoldBonus(lootList) ? 'loot-gold-bonus' : ''"
