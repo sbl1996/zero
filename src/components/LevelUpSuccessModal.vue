@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
 import type { LevelUpRewards, AttributeChange } from '@/stores/player'
-import { getSkillDefinition } from '@/data/skills'
+import { getSkillDefinition, getSkillDescription } from '@/data/skills'
 
 const props = defineProps<{
   rewards: LevelUpRewards | null
@@ -60,6 +60,10 @@ const unlockedSkills = computed(() => {
   return props.rewards.unlockedSkills
     .map(id => getSkillDefinition(id))
     .filter((skill): skill is NonNullable<ReturnType<typeof getSkillDefinition>> => skill !== null)
+    .map((skill) => ({
+      ...skill,
+      description: getSkillDescription(skill, 1),
+    }))
 })
 
 const hasUnlockedSkills = computed(() => unlockedSkills.value.length > 0)

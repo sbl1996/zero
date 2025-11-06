@@ -5,9 +5,9 @@ export type ItemIcon =
   | { type: 'text'; text: string }
 
 const IMAGE_ICON_MAP: Record<string, { src: string; alt: string }> = {
-  potionHP: { src: resolveAssetUrl('potion-hp-1.webp'), alt: '生命药水' },
-  potionQi: { src: resolveAssetUrl('potion-sp-1.webp'), alt: '斗气药水' },
-  potionQiPlus: { src: resolveAssetUrl('potion-xp-1.webp'), alt: '精制斗气药水' },
+  potionHP: { src: resolveAssetUrl('potion-hp-1.webp'), alt: '生命药水Ⅰ' },
+  potionQi: { src: resolveAssetUrl('potion-sp-1.webp'), alt: '斗气药水Ⅰ' },
+  potionQiPlus: { src: resolveAssetUrl('potion-xp-1.webp'), alt: '斗气药水Ⅱ' },
 }
 
 const TEXT_ICON_MAP: Record<string, string> = {

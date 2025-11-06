@@ -8,6 +8,7 @@
         <RouterLink to="/skills" class="nav-link" active-class="active">功法</RouterLink>
         <RouterLink to="/equipment" class="nav-link" active-class="active">装备</RouterLink>
         <RouterLink to="/backpack" class="nav-link" active-class="active">背包</RouterLink>
+        <RouterLink to="/quests" class="nav-link" active-class="active">任务</RouterLink>
       </nav>
     </header>
     <main class="app-main">

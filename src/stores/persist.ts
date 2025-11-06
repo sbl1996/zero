@@ -1,13 +1,14 @@
 import { watch } from 'vue'
 import { setActivePinia } from 'pinia'
 import type { Pinia } from 'pinia'
-import { SAVE_VERSION } from '@/data/constants'
 import type { SaveData } from '@/types/domain'
 import { load, save } from '@/utils/persist'
 import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
+import { useQuestStore } from './quests'
 
+const SAVE_VERSION = 3
 const SAVE_INTERVAL_MS = 60_000
 
 class SaveScheduler {
@@ -41,6 +42,7 @@ export function setupPersistence(pinia: Pinia) {
   const player = usePlayerStore()
   const inventory = useInventoryStore()
   const progress = useProgressStore()
+  const quests = useQuestStore()
 
   const saved = load<SaveData | null>(null)
 
@@ -50,8 +52,12 @@ export function setupPersistence(pinia: Pinia) {
       if (saved.inventory) inventory.hydrate(saved.inventory)
       if (saved.quickSlots) inventory.hydrateQuickSlots(saved.quickSlots)
       if (saved.unlocks) progress.hydrate(saved.unlocks)
+      if (saved.quests) quests.hydrate(saved.quests)
     }
   }
+
+  quests.initWatchers()
+  quests.refreshAvailability()
 
   const scheduler = new SaveScheduler()
 
@@ -61,6 +67,7 @@ export function setupPersistence(pinia: Pinia) {
     inventory: inventory.snapshot,
     quickSlots: [...inventory.quickSlots],
     unlocks: progress.data,
+    quests: quests.serialize(),
   })
 
   const queueSave = (payload: SaveData) => {
@@ -128,6 +135,30 @@ export function setupPersistence(pinia: Pinia) {
 
   watch(
     () => progress.data,
+    () => {
+      flushSave()
+    },
+    { deep: true },
+  )
+
+  watch(
+    () => quests.serialize(),
+    () => {
+      queueSave(collectSaveData())
+    },
+    { deep: true },
+  )
+
+  watch(
+    () => ({ active: [...quests.active], ready: [...quests.readyToTurnIn], completed: [...quests.completed] }),
+    () => {
+      flushSave()
+    },
+    { deep: true },
+  )
+
+  watch(
+    () => quests.questItems,
     () => {
       flushSave()
     },

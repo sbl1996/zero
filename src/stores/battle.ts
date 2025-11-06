@@ -9,6 +9,7 @@ import { ITEMS } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
 import { getSkillDefinition } from '@/data/skills'
+import { MONSTER_SKILL_IDS, resolveMonsterSkillProfile, resolveMonsterSkillSelector } from '@/data/monsterSkills'
 import { MAX_EQUIP_LEVEL } from '@/composables/useEnhance'
 import { realmTierContentLevel } from '@/utils/realm'
 import type { NumericRealmTier } from '@/utils/realm'
@@ -60,9 +61,6 @@ const AUTO_REMATCH_MIN_INTERVAL = 5000
 const DODGE_SKILL_ID = 'qi_dodge'
 const DODGE_REFUND_PERCENT = 0.04
 const GOLDEN_SHEEP_ID = 'boss-golden-sheep'
-const GOLDEN_SHEEP_DOUBLE_STRIKE_CHANCE = 0.20
-const GOLDEN_SHEEP_DOUBLE_STRIKE_INTERVAL = 0.25
-const GOLDEN_SHEEP_DOUBLE_STRIKE_MULTIPLIER = 0.60
 const GOLDEN_SHEEP_FOLLOWUP_LABEL = '×2'
 
 const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
@@ -239,6 +237,7 @@ function initialState(): BattleState {
     battleStartedAt: null,
     battleEndedAt: null,
     monsterTimer: DEFAULT_MONSTER_ATTACK_INTERVAL,
+    monsterSkillCooldowns: {},
     skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
     itemCooldowns: {},
     actionLockUntil: null,
@@ -311,6 +310,7 @@ export const useBattleStore = defineStore('battle', {
       this.rematchTimer = null
       this.skillCooldowns = Array(this.skillCooldowns.length || SKILL_SLOT_COUNT).fill(0)
       this.itemCooldowns = {}
+      this.monsterSkillCooldowns = {}
       this.actionLockUntil = null
       this.pendingDodge = null
       this.pendingSkillCast = null
@@ -360,6 +360,11 @@ export const useBattleStore = defineStore('battle', {
       const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
       this.skillCooldowns = Array(slotCount).fill(0)
       this.itemCooldowns = {}
+      this.monsterSkillCooldowns = {}
+      const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
+      profile.extras.forEach((skill) => {
+        this.monsterSkillCooldowns[skill.id] = 0
+      })
       this.actionLockUntil = null
       this.pendingDodge = null
       this.pendingSkillCast = null
@@ -390,20 +395,43 @@ export const useBattleStore = defineStore('battle', {
       }, TICK_INTERVAL_MS)
     },
     scheduleGoldenSheepFollowupTelegraph() {
-      if (!this.monster || this.concluded !== 'idle') return
-      if (this.monster.id !== GOLDEN_SHEEP_ID) return
+      if (this.concluded !== 'idle') return
+      const monster = this.monster
+      if (!monster) return
+      if (monster.id !== GOLDEN_SHEEP_ID) return
       if (this.monsterFollowup) return
+      const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
+      const doubleSkill = profile.extras.find((skill) => skill.id === MONSTER_SKILL_IDS.GOLDEN_SHEEP_DOUBLE_STAB)
+      if (!doubleSkill) return
+      const doubleSkillId = doubleSkill.id
       const timeToNextAttack = Math.max(0, this.monsterTimer)
+      const remaining = this.monsterSkillCooldowns[doubleSkillId] ?? 0
+      const selector = resolveMonsterSkillSelector(monster)
+      const doubleSkillState = Math.max(remaining - timeToNextAttack, 0)
+      const skillStates: Record<string, number> = {
+        [profile.basic.id]: 0,
+        [doubleSkillId]: doubleSkillState,
+      }
+      if (doubleSkillState > 0) return
       const rng = makeRng(this.rngSeed ^ 0x3c6ef372)
       this.rngSeed = (this.rngSeed + 0xa4093822) >>> 0
-      const roll = randRange(rng, 0, 1)
-      if (roll > GOLDEN_SHEEP_DOUBLE_STRIKE_CHANCE) return
+      const choice = selector({ monster, skillStates, rng })
+      if (choice !== doubleSkillId) return
+      this.monsterSkillCooldowns[doubleSkillId] = doubleSkill.cooldown
+      const hits = doubleSkill.hits ?? []
+      if (hits.length === 0) return
+      const baseHit = hits[0]!
+      const extraHits = hits.slice(1)
+      const firstExtraDelay = extraHits.length > 0 ? extraHits[0]!.delay : 0
       this.monsterFollowup = {
         source: 'golden_sheep_double_strike',
         stage: 'telegraph',
-        timer: timeToNextAttack + GOLDEN_SHEEP_DOUBLE_STRIKE_INTERVAL,
-        delay: GOLDEN_SHEEP_DOUBLE_STRIKE_INTERVAL,
-        damageMultiplier: GOLDEN_SHEEP_DOUBLE_STRIKE_MULTIPLIER,
+        timer: timeToNextAttack + firstExtraDelay,
+        delay: firstExtraDelay,
+        baseMultiplier: baseHit.multiplier,
+        hits: extraHits,
+        nextHitIndex: 0,
+        lastHitDelay: baseHit.delay,
         label: GOLDEN_SHEEP_FOLLOWUP_LABEL,
       }
     },
@@ -503,6 +531,17 @@ export const useBattleStore = defineStore('battle', {
           } else {
             this.itemCooldowns[itemId] = next
           }
+        }
+      }
+
+      const monsterSkillIds = Object.keys(this.monsterSkillCooldowns)
+      if (monsterSkillIds.length > 0) {
+        for (let index = 0; index < monsterSkillIds.length; index += 1) {
+          const skillId = monsterSkillIds[index]
+          if (!skillId) continue
+          const remaining = this.monsterSkillCooldowns[skillId] ?? 0
+          const next = remaining - delta
+          this.monsterSkillCooldowns[skillId] = next > 0 ? next : 0
         }
       }
 
@@ -1058,14 +1097,23 @@ export const useBattleStore = defineStore('battle', {
     },
     monsterAttack() {
       if (!this.monster || this.concluded !== 'idle') return
+      let baseMultiplier = 1
       if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
         this.monsterFollowup.stage = 'active'
-        this.monsterFollowup.timer = this.monsterFollowup.delay
+        this.monsterFollowup.nextHitIndex = 0
+        const baseDelay = this.monsterFollowup.lastHitDelay ?? 0
+        const nextHit = this.monsterFollowup.hits[this.monsterFollowup.nextHitIndex]
+        this.monsterFollowup.timer = nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0
+        baseMultiplier = this.monsterFollowup.baseMultiplier ?? 1
       }
       const rng = makeRng(this.rngSeed ^ 0x517cc1b7)
       this.rngSeed = (this.rngSeed + 0x7f4a7c15) >>> 0
 
-      this.resolveMonsterAttackWithRng(rng, 1)
+      this.resolveMonsterAttackWithRng(rng, baseMultiplier)
+      if (this.monsterFollowup && this.monsterFollowup.stage === 'active' && this.monsterFollowup.hits.length === 0) {
+        this.monsterFollowup = null
+        this.scheduleGoldenSheepFollowupTelegraph()
+      }
     },
     resolveMonsterAttackWithRng(rng: () => number, damageMultiplier = 1) {
       if (!this.monster || this.concluded !== 'idle') return
@@ -1164,14 +1212,34 @@ export const useBattleStore = defineStore('battle', {
     },
     resolveMonsterFollowupAttack() {
       const followup = this.monsterFollowup
-      this.monsterFollowup = null
       if (!followup) return
-      if (!this.monster || this.concluded !== 'idle') return
+      if (!this.monster || this.concluded !== 'idle') {
+        this.monsterFollowup = null
+        return
+      }
+      const hit = followup.hits[followup.nextHitIndex]
+      if (!hit) {
+        this.monsterFollowup = null
+        if (this.concluded === 'idle') {
+          this.scheduleGoldenSheepFollowupTelegraph()
+        }
+        return
+      }
       const rng = makeRng(this.rngSeed ^ 0xd2511f53)
       this.rngSeed = (this.rngSeed + 0x94d049bb) >>> 0
-      this.resolveMonsterAttackWithRng(rng, followup.damageMultiplier)
-      if (this.concluded === 'idle') {
-        this.scheduleGoldenSheepFollowupTelegraph()
+      this.resolveMonsterAttackWithRng(rng, hit.multiplier)
+      followup.nextHitIndex += 1
+      followup.lastHitDelay = hit.delay
+      if (followup.nextHitIndex < followup.hits.length) {
+        const nextHit = followup.hits[followup.nextHitIndex]!
+        const deltaDelay = Math.max(nextHit.delay - followup.lastHitDelay, 0)
+        followup.timer = deltaDelay
+        this.monsterFollowup = followup
+      } else {
+        this.monsterFollowup = null
+        if (this.concluded === 'idle') {
+          this.scheduleGoldenSheepFollowupTelegraph()
+        }
       }
     },
     applyDeathPenalty() {

@@ -1,5 +1,6 @@
 import type { Monster, MonsterRank, MonsterSpecialization } from '@/types/domain'
 import { monsterPositions } from '@/data/maps'
+import { resolveMonsterSkillProfile, resolveMonsterSkillSelector } from '@/data/monsterSkills'
 import monsterBlueprintsRaw from './monster-blueprints.json'
 
 // 怪物到地图的映射
@@ -52,8 +53,8 @@ interface MonsterBlueprint {
   bp: number
   specialization: MonsterSpecialization
   rewards: {
-    exp: number
     gold: number
+    coreDropChance?: number
   }
   rank?: MonsterRank
   toughness?: number
@@ -62,6 +63,11 @@ interface MonsterBlueprint {
 }
 
 const MONSTER_BLUEPRINTS = monsterBlueprintsRaw as MonsterBlueprint[]
+const CORE_DROP_CHANCE_BY_RANK: Record<MonsterRank, number> = {
+  normal: 0.2,
+  elite: 0.45,
+  boss: 0.9,
+}
 
 function computeDerivedStats(bp: number, specialization: MonsterSpecialization) {
   const unit = bp / K_MONSTER_BP_TO_UNIT
@@ -72,22 +78,27 @@ function computeDerivedStats(bp: number, specialization: MonsterSpecialization) 
   return { ATK, DEF, AGI }
 }
 
-function deriveDeltaBp(exp: number): number {
-  return Math.round((exp / 50) * 10) / 10
-}
-
 function buildMonster(blueprint: MonsterBlueprint): Monster {
   const rank: MonsterRank = blueprint.rank ?? 'normal'
   const isBoss = rank === 'boss'
   const stats = computeDerivedStats(blueprint.bp, blueprint.specialization)
   const attackInterval = blueprint.attackInterval ?? 1.6
   const toughness = blueprint.toughness ?? (isBoss ? 1.2 : 1.0)
+  const coreDropTier = typeof blueprint.realmTier === 'number' ? blueprint.realmTier : 9
+  const baseChance = CORE_DROP_CHANCE_BY_RANK[rank] ?? CORE_DROP_CHANCE_BY_RANK.normal
+  const coreDropChance =
+    typeof blueprint.rewards.coreDropChance === 'number'
+      ? blueprint.rewards.coreDropChance
+      : baseChance
+  const clampedChance = Math.max(0, Math.min(coreDropChance, 1))
   const rewards = {
     gold: blueprint.rewards.gold,
-    exp: blueprint.rewards.exp,
-    deltaBp: deriveDeltaBp(blueprint.rewards.exp),
+    coreDrop: {
+      tier: coreDropTier,
+      chance: clampedChance,
+    },
   }
-  return {
+  const monster: Monster = {
     id: blueprint.id,
     name: blueprint.name,
     realmTier: blueprint.realmTier,
@@ -103,6 +114,9 @@ function buildMonster(blueprint: MonsterBlueprint): Monster {
     penetration: undefined,
     portraits: blueprint.portraits,
   }
+  monster.skillProfile = resolveMonsterSkillProfile(monster)
+  monster.skillSelector = resolveMonsterSkillSelector(monster)
+  return monster
 }
 
 export const MONSTERS: Monster[] = MONSTER_BLUEPRINTS.map(buildMonster)

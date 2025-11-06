@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import { usePlayerStore } from '@/stores/player'
-import { getSkillDefinition } from '@/data/skills'
+import { getSkillDefinition, getSkillDescription } from '@/data/skills'
 import type { SkillCost, SkillDefinition } from '@/types/domain'
 
 interface GuildCourseConfig {
@@ -21,6 +21,7 @@ interface GuildCourseViewModel extends GuildCourseConfig {
   canAfford: boolean
   purchaseDisabled: boolean
   requiredTierLabel: string
+  description: string | null
 }
 
 const COURSE_CONFIGS: GuildCourseConfig[] = [
@@ -69,6 +70,7 @@ const guildCourses = computed<GuildCourseViewModel[]>(() => {
     const skillDefinition = getSkillDefinition(config.skillId)
     const cooldown = skillDefinition?.cooldown
     const cooldownText = typeof cooldown === 'number' ? `${cooldown.toFixed(1)} s` : '无冷却'
+    const description = skillDefinition ? getSkillDescription(skillDefinition, 1) : null
     const alreadyKnown = knownSkills.value.includes(config.skillId)
     const meetsRequirement = currentTier >= config.requiredTier
     const canAfford = gold.value >= config.price
@@ -82,6 +84,7 @@ const guildCourses = computed<GuildCourseViewModel[]>(() => {
       canAfford,
       purchaseDisabled: alreadyKnown || !meetsRequirement || !canAfford,
       requiredTierLabel,
+      description,
     }
   })
 })
@@ -147,7 +150,7 @@ function attemptPurchase(course: GuildCourseViewModel) {
           <div>
             <h2 class="section-title">战士公会</h2>
             <p class="text-muted text-small">
-              帝国骑士团在此传授正统战技。投入足够的金币与资历，便可习得新的战斗技巧。
+              帝国骑士团在此传授正统战技。满足境界要求并花费金币，便可习得新的战斗技巧。
             </p>
           </div>
           <div class="guild-balance">
@@ -173,7 +176,7 @@ function attemptPurchase(course: GuildCourseViewModel) {
             <div>
               <h3 class="guild-course__title">{{ course.skillDefinition?.name ?? '未知战技' }}</h3>
               <p class="guild-course__subtitle text-small text-muted">
-                {{ course.skillDefinition?.description ?? '战士公会提供的进阶战技课程。' }}
+                {{ course.description ?? '战士公会提供的进阶战技课程。' }}
               </p>
             </div>
           </header>
@@ -224,11 +227,6 @@ function attemptPurchase(course: GuildCourseViewModel) {
             {{ feedback.message }}
           </p>
         </article>
-
-        <p class="text-small text-muted">
-          提示：陨龙击会在晋升至二级战士后自动习得，星界龙血破会在晋升至三级战士后自动习得，无需在此购买。
-        </p>
-
         <p class="text-small text-muted">
           公会公告：后续将逐步开放更高等的战技课程，敬请期待。
         </p>

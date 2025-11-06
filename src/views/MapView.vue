@@ -149,37 +149,22 @@ import { useRoute, useRouter } from 'vue-router'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import { defaultMapId, maps as mapDefinitions, getMonsterPosition } from '@/data/maps'
 import { getMonsterMap, MONSTERS } from '@/data/monsters'
+import { formatMonsterRewards, describeMonsterRealm } from '@/utils/monsterUtils'
 import { useBattleStore } from '@/stores/battle'
+import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'
 import { formatRealmTierLabel } from '@/utils/realm'
 import type { NumericRealmTier } from '@/utils/realm'
 import type { GameMap, MapLocation } from '@/types/map'
-import type { Monster, MonsterSpecialization } from '@/types/domain'
+import type { MonsterSpecialization } from '@/types/domain'
 
 const route = useRoute()
 const router = useRouter()
 
 const battle = useBattleStore()
 const progress = useProgressStore()
+const player = usePlayerStore()
 
-function formatMonsterRewards(monster: Monster | null | undefined): string {
-  if (!monster) return ''
-  const rewards = monster.rewards
-  const parts: string[] = []
-  if (typeof rewards.exp === 'number') {
-    parts.push(`EXP ${rewards.exp}`)
-  }
-  if (typeof rewards.deltaBp === 'number') {
-    parts.push(`ΔBP ${rewards.deltaBp}`)
-  }
-  parts.push(`GOLD ${rewards.gold}`)
-  return parts.join(' ・ ')
-}
-
-function describeMonsterRealm(monster: Monster | null | undefined): string {
-  if (!monster?.realmTier) return '未知'
-  return formatRealmTierLabel(monster.realmTier)
-}
 
 function getSpecializationLabel(specialization: MonsterSpecialization): string {
   const labels: Record<MonsterSpecialization, string> = {
@@ -408,6 +393,11 @@ function selectMonster(monsterId: string) {
   if (currentMapLocked.value) return
   const monster = monstersOnMap.value.find((m) => m.id === monsterId)
   if (!monster) return
+  if (player.res.operation.mode === 'idle') {
+    const confirmed = typeof window === 'undefined' ||
+      window.confirm('检测到你尚未运转斗气，确定要开始战斗吗？')
+    if (!confirmed) return
+  }
   battle.start(monster)
   router.push('/battle')
 }

@@ -45,11 +45,62 @@ const META_FALLEN_DRAGON = getSkillMeta('fallen_dragon_smash')
 const META_STAR_REALM = getSkillMeta('star_realm_dragon_blood_break')
 const META_QI_DODGE = getSkillMeta('qi_dodge')
 
+const DRAGON_BREATH_BASE_MULTIPLIER = 1
+const DRAGON_BREATH_PER_LEVEL = 0.02
+const FALLEN_DRAGON_BASE_MULTIPLIER = 1.6
+const FALLEN_DRAGON_PER_LEVEL = 0.04
+const STAR_REALM_BASE_MULTIPLIER = 3.5
+const STAR_REALM_PER_LEVEL = 0.08
+
+function resolveDamageMultiplier(base: number, perLevelIncrease: number, level: number): number {
+  const lvl = Math.max(level, 1)
+  return base * (1 + perLevelIncrease * (lvl - 1))
+}
+
+function formatMultiplier(multiplier: number): string {
+  const percent = multiplier * 100
+  const rounded = Math.round(percent * 10) / 10
+  return Number.isInteger(rounded) ? `${Math.round(rounded)}%` : `${rounded.toFixed(1)}%`
+}
+
+function describeDragonBreath(level: number): string {
+  const multiplier = formatMultiplier(resolveDamageMultiplier(DRAGON_BREATH_BASE_MULTIPLIER, DRAGON_BREATH_PER_LEVEL, level))
+  const segments = [`基础单体斩击（倍率 ${multiplier}），包含 0.2s 后摇。`]
+  if (level >= 3) {
+    segments.push('弱点击破时额外造成 5% 总伤害。')
+  }
+  if (level >= 10) {
+    segments.push('Lv.10：命中后使《陨龙击》冷却缩短 25%，持续 2 秒。')
+  }
+  return segments.join(' ')
+}
+
+function describeFallenDragon(level: number): string {
+  const multiplier = formatMultiplier(resolveDamageMultiplier(FALLEN_DRAGON_BASE_MULTIPLIER, FALLEN_DRAGON_PER_LEVEL, level))
+  const segments = [`蓄力 0.2s 后施放的重击（倍率 ${multiplier}），包含 0.2s 后摇。`]
+  if (level >= 3) {
+    segments.push('弱点击破时额外造成 10% 总伤害。')
+  }
+  return segments.join(' ')
+}
+
+function describeStarRealm(level: number): string {
+  const multiplier = formatMultiplier(resolveDamageMultiplier(STAR_REALM_BASE_MULTIPLIER, STAR_REALM_PER_LEVEL, level))
+  const segments = [`蓄力 0.5s 的终极爆发斩击（倍率 ${multiplier}），包含 0.2s 后摇。`]
+  if (level >= 3) {
+    segments.push('Lv.3：施放时获得 0.5s 霸体（免疫伤害）。')
+  }
+  if (level >= 10) {
+    segments.push('Lv.10：命中时有 50% 几率使目标受到 10% 易伤，持续 10 秒。')
+  }
+  return segments.join(' ')
+}
+
 export const SKILLS: SkillDefinition[] = [
   {
     id: META_DRAGON_BREATH.id,
     name: META_DRAGON_BREATH.name,
-    description: META_DRAGON_BREATH.description,
+    description: describeDragonBreath(1),
     cost: { type: 'qi', percentOfQiMax: 0.02 },
     flash: 'attack',
     cooldown: 2,
@@ -63,9 +114,17 @@ export const SKILLS: SkillDefinition[] = [
       return Math.max(0.5, 2 * multiplier)
     },
     getCostMultiplier: (level) => (level >= 6 ? 0.8 : 1),
+    getDamageMultiplier: (level) =>
+      resolveDamageMultiplier(DRAGON_BREATH_BASE_MULTIPLIER, DRAGON_BREATH_PER_LEVEL, level),
+    getDescription: describeDragonBreath,
     execute: ({ stats, monster, rng, progress }) => {
       const level = Math.max(progress?.level ?? 1, 1)
-      const damageScale = 1 + 0.02 * (level - 1)
+      const damageMultiplier = resolveDamageMultiplier(
+        DRAGON_BREATH_BASE_MULTIPLIER,
+        DRAGON_BREATH_PER_LEVEL,
+        level,
+      )
+      const damageScale = damageMultiplier / DRAGON_BREATH_BASE_MULTIPLIER
       const weaknessBonus = level >= 3 ? 0.05 : 0
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
@@ -100,7 +159,7 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_FALLEN_DRAGON.id,
     name: META_FALLEN_DRAGON.name,
-    description: META_FALLEN_DRAGON.description,
+    description: describeFallenDragon(1),
     cost: { type: 'qi', percentOfQiMax: 0.04 },
     flash: 'skill',
     cooldown: 5,
@@ -115,9 +174,17 @@ export const SKILLS: SkillDefinition[] = [
       return Math.max(1, 5 * multiplier)
     },
     getCostMultiplier: (level) => (level >= 6 ? 0.8 : 1),
+    getDamageMultiplier: (level) =>
+      resolveDamageMultiplier(FALLEN_DRAGON_BASE_MULTIPLIER, FALLEN_DRAGON_PER_LEVEL, level),
+    getDescription: describeFallenDragon,
     execute: ({ stats, monster, rng, progress }) => {
       const level = Math.max(progress?.level ?? 1, 1)
-      const damageScale = 1 + 0.04 * (level - 1)
+      const damageMultiplier = resolveDamageMultiplier(
+        FALLEN_DRAGON_BASE_MULTIPLIER,
+        FALLEN_DRAGON_PER_LEVEL,
+        level,
+      )
+      const damageScale = damageMultiplier / FALLEN_DRAGON_BASE_MULTIPLIER
       const weaknessBonus = level >= 3 ? 0.10 : 0
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
@@ -145,7 +212,7 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_STAR_REALM.id,
     name: META_STAR_REALM.name,
-    description: META_STAR_REALM.description,
+    description: describeStarRealm(1),
     cost: { type: 'qi', percentOfQiMax: 0.1 },
     flash: 'ult',
     cooldown: 20,
@@ -160,9 +227,17 @@ export const SKILLS: SkillDefinition[] = [
       return Math.max(5, 20 * multiplier)
     },
     getCostMultiplier: (level) => (level >= 6 ? 0.8 : 1),
+    getDamageMultiplier: (level) =>
+      resolveDamageMultiplier(STAR_REALM_BASE_MULTIPLIER, STAR_REALM_PER_LEVEL, level),
+    getDescription: describeStarRealm,
     execute: ({ stats, monster, rng, progress }) => {
       const level = Math.max(progress?.level ?? 1, 1)
-      const damageScale = 1 + 0.08 * (level - 1)
+      const damageMultiplier = resolveDamageMultiplier(
+        STAR_REALM_BASE_MULTIPLIER,
+        STAR_REALM_PER_LEVEL,
+        level,
+      )
+      const damageScale = damageMultiplier / STAR_REALM_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
@@ -219,4 +294,11 @@ export const SKILL_MAP = new Map(SKILLS.map(skill => [skill.id, skill]))
 export function getSkillDefinition(skillId: string | null | undefined) {
   if (!skillId) return null
   return SKILL_MAP.get(skillId) ?? null
+}
+
+export function getSkillDescription(definition: SkillDefinition, level = 1): string {
+  if (typeof definition.getDescription === 'function') {
+    return definition.getDescription(level)
+  }
+  return definition.description
 }

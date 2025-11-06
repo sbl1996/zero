@@ -9,6 +9,8 @@ const SkillView = () => import('@/views/SkillView.vue')
 const MapView = () => import('@/views/MapView.vue')
 const MeditationView = () => import('@/views/MeditationView.vue')
 const WarriorGuildView = () => import('@/views/WarriorGuildView.vue')
+const QuestBoardView = () => import('@/views/QuestBoardView.vue')
+const QuestView = () => import('@/views/QuestView.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -23,5 +25,7 @@ export const router = createRouter({
     { path: '/shop', name: 'shop', component: ShopView },
     { path: '/meditation', name: 'meditation', component: MeditationView },
     { path: '/warrior-guild', name: 'warrior-guild', component: WarriorGuildView },
+    { path: '/quest-board', name: 'quest-board', component: QuestBoardView },
+    { path: '/quests', name: 'quests', component: QuestView },
   ],
 })

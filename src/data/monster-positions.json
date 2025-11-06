@@ -10,7 +10,7 @@
     "m-ice-boli": { "x": 25, "y": 43 },
     "m-pyro-fox": { "x": 60, "y": 52 },
     "m-froststone-colossus": { "x": 26, "y": 70 },
-    "m-boss-wind-raptor": { "x": 70, "y": 82 }
+    "boss-wind-raptor": { "x": 70, "y": 82 }
   },
   "thunderveil-keep": {
     "m-shade": { "x": 52, "y": 45 },

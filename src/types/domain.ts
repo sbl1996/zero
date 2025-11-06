@@ -278,6 +278,32 @@ export interface MonsterRewards {
   lootTableId?: string
 }
 
+export interface MonsterSkillHit {
+  delay: number
+  multiplier: number
+}
+
+export interface MonsterSkillDefinition {
+  id: string
+  name: string
+  cooldown: number
+  aftercast: number
+  hits: MonsterSkillHit[]
+}
+
+export interface MonsterSkillProfile {
+  basic: MonsterSkillDefinition
+  extras: MonsterSkillDefinition[]
+}
+
+export interface MonsterAIContext {
+  monster: Monster
+  skillStates: Record<string, number>
+  rng: () => number
+}
+
+export type MonsterAISelector = (context: MonsterAIContext) => string | null
+
 export interface Monster {
   id: string
   name: string
@@ -293,6 +319,8 @@ export interface Monster {
   isBoss: boolean
   penetration?: PenetrationProfile
   portraits?: string[]
+  skillProfile?: MonsterSkillProfile
+  skillSelector?: MonsterAISelector
 }
 
 export interface ItemStack {
@@ -419,7 +447,10 @@ export interface MonsterFollowupState {
   stage: MonsterFollowupStage
   timer: number
   delay: number
-  damageMultiplier: number
+  baseMultiplier: number
+  hits: MonsterSkillHit[]
+  nextHitIndex: number
+  lastHitDelay: number
   label: string
 }
 
@@ -449,6 +480,7 @@ export interface BattleState {
   battleStartedAt: number | null
   battleEndedAt: number | null
   monsterTimer: number
+  monsterSkillCooldowns: Record<string, number>
   skillCooldowns: number[]
   itemCooldowns: Record<string, number>
   actionLockUntil: number | null

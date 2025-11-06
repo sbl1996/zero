@@ -258,7 +258,7 @@ const skillSlots = computed(() => {
     }
   })
 })
-const defaultPlayerPortrait = resolveAssetUrl('main.webp')
+const defaultPlayerPortrait = resolveAssetUrl('main_normal.webp')
 const attackPlayerPortrait = resolveAssetUrl('main_attack.webp')
 const playerPortraitSrc = ref(defaultPlayerPortrait)
 let portraitTimer: ReturnType<typeof setTimeout> | null = null

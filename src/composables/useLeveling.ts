@@ -273,6 +273,7 @@ function createDefaultResources(hpMax: number, qiMax: number): Resources {
       hpPerSecond: 0,
       updatedAt: null,
     },
+    activeCoreBoost: null,
   }
 }
 
@@ -303,7 +304,7 @@ function createDefaultCultivationState(): PlayerCultivationState {
             def: 0.4,
             agi: 0.2,
           },
-          name: '龙血斗气',
+          name: '星魂斗气',
         },
     breakthrough: {
       pending: false,

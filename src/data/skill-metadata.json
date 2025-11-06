@@ -2,17 +2,17 @@
   {
     "id": "dragon_breath_slash",
     "name": "龙息斩",
-    "description": "基础单体斩击（倍率 100%），释放后 0.2s 硬直。"
+    "description": "基础单体斩击"
   },
   {
     "id": "fallen_dragon_smash",
     "name": "陨龙击",
-    "description": "蓄力 0.2s 后施放的重击（倍率 160%），包含 0.2s 后摇。"
+    "description": "蓄力后施放重击"
   },
   {
     "id": "star_realm_dragon_blood_break",
     "name": "星界龙血破",
-    "description": "蓄力 0.5s 的终极爆发斩击（倍率 350%），附带 0.2s 后摇。"
+    "description": "终极爆发斩击"
   },
   {
     "id": "qi_dodge",

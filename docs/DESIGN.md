@@ -1,4 +1,4 @@
-# ZERO R 游戏设计总览（整合版 V2.0）
+# ZERO R 游戏设计总览 V2.0
 
 ---
 
@@ -72,7 +72,7 @@ AGI_final = Body_AGI + F(t)*Qi_AGI
 ```
 
 **功法侧重**：
-龙血 0.40/0.40/0.20；不死 0.45/0.50/0.05；虎纹 0.50/0.10/0.40；**紫焰** 0.30/0.30/0.15 + **恢复系 0.25**（§4）
+星魂 0.40/0.40/0.20；不死 0.45/0.50/0.05；虎纹 0.50/0.10/0.40；**紫焰** 0.30/0.30/0.15 + **恢复系 0.25**（§4）
 
 ### 1.4 修炼、瓶颈与突破
 
@@ -84,7 +84,6 @@ AGI_final = Body_AGI + F(t)*Qi_AGI
 K_bp=0.1, K_env：1.0
 ```
 
-* 消灭怪物可获得BP
 * 所有消耗斗气的行为可获得BP，公式如下（过于复杂，暂不启用）
 ```
 ΔBP = K_bp * { K_env * (α * Qi_spent + β * Qi_restored) + K_actions }
@@ -126,7 +125,7 @@ F_mult：运转=F(t) / 非运转&冥想=1.0
 ### 2.3 斗气防御 & 斗气闪避
 
 * **斗气防御**（运转中自动生效）
-  吸收比：`0.90 * F(t)`；单次吸收 ≤ 来伤 60%；**Qi 代价**：吸收值×1.1；Qi 不足则按上限吸收后退出
+  固定吸收来伤的 60%；**Qi 代价**：吸收值×1.0；Qi 不足则按可吸收量折算后退出
 * **斗气闪避**（主动帧技）
   成功率100%，不同闪避技能有不同的无敌窗口、后摇、冷却与消耗
 
@@ -254,8 +253,8 @@ IF roll(0,1) < Chance_Weakness:
 ```
 
 **4) 斗气防御层**（若防守方处于“运转”状态则生效）
-* 吸收比：`0.90 * F(t)`；**单次吸收上限**：来伤的 60%。
-* **Qi 代价**：`吸收值 × 1.1`；Qi 不足则按上限吸收后退出运转。
+* 固定吸收来伤的 60%。
+* **Qi 代价**：`吸收值 × 1.0`；Qi 不足则按余量吸收后退出运转。
 * 余量进入 HP 扣减。
 
 ---
@@ -367,7 +366,7 @@ MaxLV_by_Realm:
 
 按钮或切页即可退出；清状态与计时；不结算掉落与 GOLD；**HP/Qi 不回满**
 
-### 7.3 胜败与自动重赛（改写）
+### 7.3 胜败与自动重赛
 
 * **胜利**：`GOLD += rewardGold`；BOSS 首杀解锁下一张野外地图；**0.8s** 后普通怪可自动重赛（**不回满 HP/Qi**）；BOSS 留场展示战利品，点击立绘可重赛（不回满）
 * **失败**：`GOLD -= floor(GOLD/3)`；随后 **回满 HP 与 Qi** 并返回地图
@@ -380,9 +379,32 @@ MaxLV_by_Realm:
 | potionHP                        | 生命药水Ⅰ       | 回复 **100 HP** |                 50 |
 | potionQi                        | 斗气药水Ⅰ       | 回复 **120 Qi** |                120 |
 | potionQiPlus                    | 斗气药水Ⅱ     | 回复 **240 Qi** |                240 |
+| coreShardTier1~9                | X级晶核       | 冥想时使用，10s内+BP/s | 100~25,600 |
 | blessGem / soulGem / miracleGem | 祝福/灵魂/奇迹宝石 | 强化素材（§6）      | 1000 / 2000 / 5000 |
 
 **快捷物品栏**（底部 4 槽）：点击即生效，统一 10s 冷却；不同物品分开计时；默认绑定：生命Ⅰ/斗气Ⅰ/斗气Ⅱ/（空）
+
+### 7.5 晶核系统
+
+**晶核**：修炼加速消耗品，仅在冥想状态下使用。
+
+#### 等级与效果
+* **9个等级**：一到九级，对应怪物境界等级
+* **加成公式**：`1 × 2^(等级-1)` BP/s（一级+1/s，九级+256/s）
+* **持续时间**：固定 **10秒**
+* **价格公式**：`100 × 2^(等级-1)` 金币
+
+#### 获取方式
+* **战斗掉落**：怪物胜利后概率获得
+  * 普通怪物：**20%** 掉落概率
+  * 精英怪物：**45%** 掉落概率
+  * Boss怪物：**90%** 掉落概率
+* **掉落等级**：晶核等级 = 怪物境界等级（一到九级）
+
+#### 使用机制
+* **前置条件**：必须处于冥想状态
+* **使用效果**：激活后获得额外BP/s加成，10秒后自动失效
+* **状态管理**：同时只能激活一个晶核效果，高等级会覆盖低等级
 
 
 ---
@@ -409,7 +431,148 @@ MaxLV_by_Realm:
 
 ---
 
-## 9. 地图系统
+## 9. 任务系统
+
+### 9.1 核心概念
+
+* **任务（Quest）**：由NPC或任务板发布，玩家主动接受与提交。
+* **目标（Objective）**：任务的细化条件，详见任务类型。
+* **状态（State）**：未解锁 → 可接受 → 已接受 → 可交付（完成未提交）→ 已完成 / 已放弃。
+
+### 9.2 任务生命周期
+
+1. **解锁**
+   * 某些任务需要满足前置条件后才可接受。
+   * 条件示例：
+     * 玩家境界 ≥ 某阈值。
+     * 首杀某BOSS后解锁一批新任务。
+     * 完成前置任务链后开放后续任务。
+
+2. **接受**
+   * 玩家在NPC对话或任务板界面手动点击“接受”。
+   * 接受后：
+     * 对应目标开始计数。
+     * 若为“收集任务物品”，从此刻起开启 **任务物品掉落逻辑**。
+
+3. **进行中**
+   * 任务界面显示当前进度。完成或部分完成目标时即时更新。
+
+4. **达成**
+   * 所有目标满足 → 状态切换为“可交付”。
+   * 玩家需要返回任务来源（或指定交付NPC）提交。
+
+5. **提交/完成**
+   * 结算奖励，更新任务链进度，解锁后续任务/地图/商店内容。
+
+6. **放弃（可选）**
+   * 玩家手动放弃任务：
+     * 清除任务进度。
+     * 本阶段简化处理：**已获得的任务物品直接销毁**，防止后续计数混乱。
+   * 某些关键任务可以设置为**不可放弃**。
+
+### 9.3 任务类型
+
+* 击杀 X 只 Y 怪物（KillXMonster）
+  * 必须在任务被接受之后的击杀才计数。
+* 获取 X 个 Y 物品（KillCollectXItem）
+  * 任务物品只在任务已接受时有概率掉落。
+    * 未接受任务时，怪物不掉该任务物品。
+    * 任务完成/放弃后，相关任务物品停止掉落。
+  * 任务物品为**非交易、非普通掉落表**的独立类别：
+    * 不占用普通掉落槽（避免打乱原有掉落与经济）。
+    * 采用“任务叠加掉落层”：判定任务物品之前先走普通掉落。
+  * 掉落配置：
+    * 任务物品ID：例如“史莱姆凝胶样本 (Slime Gel Sample)”。
+    * 掉落怪物集：一般是 1~2 种指定怪物（如仅史莱姆，但也可以“史莱姆或黄金绵羊”）。
+    * 基础掉率：例如 40%、60% 等，可随任务等级增加而调低。
+    * 每次击杀最多掉落 1 个同类任务物品（防止单次爆出过多秒完任务）。
+  * 失败与多次接取
+    * 放弃任务时：**自动销毁背包内相关任务物品**。
+    * 再次接取时：重新从 0 计数，不保留旧物品。
+
+### 9.5 奖励与难度标记
+
+* **基础奖励构成**：
+  * GOLD：覆盖玩家在该任务预期战斗中的药水消耗，并略有盈余。
+  * 消耗品：生命药水Ⅰ / 斗气药水Ⅰ/Ⅱ，视难度补一点缓冲。
+  * 晶核：作为“修炼加速”的长线奖励，用于鼓励挑战更高阶怪。
+
+* **难度标记**：
+  * ★：预计 3–5 分钟内完成的简单任务。
+  * ★★：预计 5–10 分钟，或需要进入稍高危险区域。
+  * ★★★：地图后段区域或与精英/BOSS相关。
+
+### 9.6 任务列表
+
+#### 青苔原的黏液祸患
+
+* **任务名**：青苔原的黏液祸患
+* **任务类型**：击杀 X 只 Y 怪物（KillXMonster）
+* **推荐境界**：一级
+* **领取地点**：翡冷翠任务板
+* **可重复接取**：是
+* **发布者**：青苔原生态管理员
+* **任务描述**：
+  “最近青苔原边缘到处都是史莱姆的粘液印记，路过的行人被它们缠得寸步难行。帮忙清理一批吧，别让那些软泥团以为这片草地是它们的王国。”
+* **目标**：
+  * 在 **青苔原** 击杀 **10只史莱姆**
+* **失败条件**：无（可随时放弃）
+* **完成奖励**：
+  * GOLD +80
+  * 生命药水Ⅰ ×1
+  * 斗气药水Ⅰ ×1
+* **难度标记**：★
+
+#### 野狼利齿样本
+
+* **任务名**：野狼利齿样本
+* **任务类型**：获取 X 个 Y 物品（KillCollectXItem）
+* **推荐境界**：一级
+* **领取地点**：翡冷翠任务板
+* **可重复接取**：是
+* **发布者**：铁匠罗恩
+* **任务描述**：
+  “那些在夜里嚎叫的野狼总是在铁矿道附近徘徊，我想看看它们的牙齿是不是被矿粉磨得更锋利。帮我带些利齿回来，我可以给你打折——当然，只是‘一点点’。”
+* **目标**：
+  * 收集 **5 个『野狼利齿』** 任务物品
+* **任务物品掉落规则**：
+  * 任务物品名：**野狼利齿**
+  * 掉落怪物：仅 **野狼**
+  * 掉率：基础 60% / 只
+  * 掉落方式：额外任务掉落，不占普通掉落槽
+  * 仅在任务“已接受”状态下才有掉落判定；任务完成或放弃后即不再掉落。
+* **完成奖励**：
+  * GOLD +120
+  * 斗气药水Ⅰ ×2
+  * 一级晶核 ×1
+* **难度标记**：★☆
+
+#### 寒岩碎核调查
+* **任务名**：寒岩碎核调查
+* **任务类型**：获取 X 个 Y 物品（CollectXItem）
+* **推荐境界**：二级
+* **领取地点**：翡冷翠任务板
+* **可重复接取**：是
+* **发布者**：远行学者米洛
+* **任务描述**：
+  “熔冰之脊的寒岩巨像似乎不是天然形成的岩石，它们体内有一种奇特的晶核，在冰与火之间不断震荡。帮我敲下一些碎核，我想研究它们与晶核修炼之间的关系。”
+* **目标**：
+  * 收集 **3 个『寒岩碎核』** 任务物品
+* **任务物品掉落规则**：
+  * 任务物品名：**寒岩碎核**
+  * 掉落怪物：寒岩巨像
+  * 掉率：基础 50% / 只
+  * 掉落方式：额外任务掉落，不占普通掉落槽
+  * 仅在任务“已接受”状态下才有掉落判定。
+* **完成奖励**：
+  * GOLD +260
+  * 斗气药水Ⅱ ×1
+  * 二级晶核 ×1
+* **难度标记**：★★
+
+---
+
+## 10. 地图系统
 
 * 地图页为默认落点：左侧列表 / 右侧根据地图类型切换布局
 * 城市地图：地点标记按钮（百分比坐标）
@@ -419,7 +582,7 @@ MaxLV_by_Realm:
 
 ---
 
-## 10. UI 与可视化
+## 11. UI 与可视化
 
 * **境界条**：显示当前段与小境界进度；满值高亮“瓶颈”，弹出可选突破途径与成功率修正
 * **斗气环**：显示 `Qi/QiMax`、运转/预热 `F(t)`、低蓝警示（<5%）
@@ -439,14 +602,13 @@ MaxLV_by_Realm:
 
 ---
 
-## 11. 调参起点
+## 12. 调参起点
 
 * **BP→单位**：`K_bp2unit = 5`
-* **修炼**：仅怪物击杀获得 BP；其余行为不产出 BP
 * **突破**：强突 `P0=0.08-0.04p`（≤35%）；导师 ×1.15
 * **运转**：预热 5s；退出阈值 5% QiMax；成本 1/3/7/12% QiMax；闪避 6%（成功返 4%）
 * **恢复**：`Qi/sec=(1+0.06*REC)*state_mult*F_mult`；紫焰×`(1+0.2F)`、`REC+20`；HP 自然恢复 `0.1*REC`（战中×0.5、Boss×0.25）
-* **防御**：斗气防御固定 90%×F(t)，单击上限 60%，Qi 代价=吸收×1.1
+* **防御**：斗气防御固定吸收来伤的 60%，Qi 代价=吸收×1.0
 * **对抗**：`PenPct = clamp(0.05 + 0.01*Realm + 0.03*rank, 0, 0.60)`；`PenFlat` 由技能/装备提供
 * **减伤曲线**：平衡点 f=0.5，`K=DEF_ref(realm_stage)`；tough：玩家1.0/怪1.0/BOSS1.5（0.5~2.0 浮动）
 
@@ -502,50 +664,51 @@ MaxLV_by_Realm:
 
 ### 怪物数据
 
-| ID                     | 名称                         | 等阶 | HP   | BP   | 特化       | EXP  | GOLD | BOSS | 所属地图                       |
-|------------------------|------------------------------|------|------|------|------------|------|------|------|--------------------------------|
-| `m-slime`                | 史莱姆 (Slime)               | 一级 | 80   | 100  | Balanced   | 30   | 25   |      | 青苔原 (fringe)                |
-| `m-wolf`                 | 野狼 (Wolf)                  | 一级 | 130  | 120  | Skirmisher | 45   | 35   |      | 青苔原 (fringe)                |
-| `m-goblin`               | 哥布林 (Goblin)              | 一级 | 180  | 140  | Attacker   | 65   | 55   |      | 青苔原 (fringe)                |
-| `m-boar`                 | 巨型野猪 (Boar)              | 一级 | 260  | 160  | Bruiser    | 90   | 70   |      | 青苔原 (fringe)                |
-| `boss-golden-sheep`    | 黄金绵羊 (Golden Sheep)      | 一级 | 800  | 200  | Defender   | 400  | 300  | ✔    | 青苔原 (fringe)                |
-| `m-ice-boli`             | 冰玻力 (Ice Boli)            | 二级 | 460  | 240  | Defender   | 160  | 140  |      | 熔冰之脊 (spine-of-frostfire)  |
-| `m-pyro-fox`             | 火焰狐 (Pyro Fox)            | 二级 | 520  | 300  | Skirmisher | 190  | 165  |      | 熔冰之脊 (spine-of-frostfire)  |
-| `m-froststone-colossus`  | 寒岩巨像 (Stone Golem)       | 二级 | 780  | 340  | Defender   | 240  | 210  |      | 熔冰之脊 (spine-of-frostfire)  |
-| `boss-wind-raptor`     | 风暴迅猛龙 (Wind Raptor)     | 二级 | 1600 | 400  | Agile      | 540  | 600  | ✔    | 熔冰之脊 (spine-of-frostfire)  |
-| `m-shade`                | 影子刺客 (Shade)             | 三级 | 980  | 480  | Agile      | 360  | 330  |      | 雷隐堡垒 (thunderveil-keep)    |
-| `m-thunder-knight`       | 雷霆骑士 (Thunder Knight)    | 三级 | 1200 | 600  | Defender   | 480  | 420  |      | 雷隐堡垒 (thunderveil-keep)    |
-| `m-abyss-witch`          | 深渊女巫 (Abyss Witch)       | 三级 | 1350 | 680  | Mystic     | 540  | 500  |      | 雷隐堡垒 (thunderveil-keep)    |
-| `boss-dragon-whelp`    | 幼龙 (Dragon Whelp)          | 三级 | 2200 | 800  | Balanced   | 660  | 610  | ✔    | 雷隐堡垒 (thunderveil-keep)    |
-| `m-specter`            | 沼泽魅影 (Marsh Specter)     | 四级 | 1622 | 880  | Crazy      | 441  | 378  |      | 腐沼根海 (bogroot-expanse)     |
-| `m-rockback`           | 岩背巨兽 (Marsh Rockback)    | 四级 | 1682 | 1000 | Bruiser    | 456  | 391  |      | 腐沼根海 (bogroot-expanse)     |
-| `m-raven`              | 血鸦 (Marsh Blood Raven)     | 四级 | 1785 | 1080 | Skirmisher | 483  | 415  |      | 腐沼根海 (bogroot-expanse)     |
-| `boss-treant`          | 腐沼树妖 (Bog Treant)        | 四级 | 2676 | 1200 | Defender   | 622  | 535  | ✔    | 腐沼根海 (bogroot-expanse)     |
-| `m-nightstalker`       | 夜巡狼人 (Nightstalker)      | 四级 | 1906 | 1220 | Agile      | 513  | 441  |      | 暮影裂谷 (duskfang-rift)       |
-| `m-troll`              | 寒霜巨魔 (Frost Troll)       | 四级 | 1967 | 1360 | Bruiser    | 529  | 454  |      | 暮影裂谷 (duskfang-rift)       |
-| `m-hound`              | 熔岩猎犬 (Lava Hound)        | 四级 | 2070 | 1480 | Attacker   | 556  | 477  |      | 暮影裂谷 (duskfang-rift)       |
-| `boss-priest`          | 暗影祭司 (Shadow Priest)     | 四级 | 3088 | 1600 | Mystic   | 713  | 612  | ✔    | 暮影裂谷 (duskfang-rift)       |
-| `m-harvester`          | 骨响收割者 (Bone Harvester)  | 五级 | 2190 | 1760 | Attacker   | 586  | 503  |      | 暗辉法枢 (gloomlit-arcanum)    |
-| `m-sentinel`           | 符文哨兵 (Rune Sentinel)     | 五级 | 2233 | 2000 | Defender   | 598  | 513  |      | 暗辉法枢 (gloomlit-arcanum)    |
-| `m-reaver`             | 虚空撕裂者 (Void Reaver)     | 五级 | 2354 | 2180 | Crazy      | 628  | 540  |      | 暗辉法枢 (gloomlit-arcanum)    |
-| `boss-archmage`        | 堕落大法师 (Fallen Archmage) | 五级 | 3500 | 2400 | Mystic   | 803  | 690  | ✔    | 暗辉法枢 (gloomlit-arcanum)    |
-| `m-stormcaller`        | 风暴召唤者 (Stormcaller)     | 五级 | 2457 | 2580 | Mystic     | 655  | 563  |      | 黑曜风痕 (obsidian-windscar)   |
-| `m-colossus`           | 黑曜巨像 (Obsidian Colossus) | 五级 | 2517 | 2800 | Defender   | 670  | 576  |      | 黑曜风痕 (obsidian-windscar)   |
-| `m-titan`              | 焰生泰坦 (Flameborn Titan)   | 五级 | 2638 | 2980 | Bruiser    | 700  | 602  |      | 黑曜风痕 (obsidian-windscar)   |
-| `boss-knight`          | 恐惧骑士 (Dread Knight)      | 五级 | 3887 | 3200 | Bruiser    | 891  | 765  | ✔    | 黑曜风痕 (obsidian-windscar)   |
-| `m-chimera`            | 秘能奇美拉 (Arcane Chimera)  | 六级 | 2741 | 3600 | Balanced   | 727  | 625  |      | 霜焰裂潮 (frostfire-maelstrom) |
-| `m-wyrm`               | 冰霜飞龙 (Frost Wyrm)        | 六级 | 2801 | 4000 | Attacker   | 742  | 638  |      | 霜焰裂潮 (frostfire-maelstrom) |
-| `m-kraken`             | 深海巨妖 (Abyss Kraken)      | 六级 | 2922 | 4360 | Bruiser    | 773  | 664  |      | 霜焰裂潮 (frostfire-maelstrom) |
-| `boss-warlord`         | 地狱军阀 (Infernal Warlord)  | 六级 | 4299 | 4800 | Bruiser    | 981  | 842  | ✔    | 霜焰裂潮 (frostfire-maelstrom) |
-| `m-templar`            | 天穹圣卫 (Celestial Templar) | 六级 | 3025 | 5140 | Defender   | 800  | 687  |      | 星界王座 (astral-crown)        |
-| `m-banshee`            | 灰烬魅灵 (Ashen Banshee)     | 六级 | 3086 | 5480 | Mystic     | 815  | 700  |      | 星界王座 (astral-crown)        |
-| `m-hunter`             | 苍穹狩魔者 (Skyscour Hunter) | 六级 | 3207 | 6000 | Agile      | 845  | 727  |      | 星界王座 (astral-crown)        |
-| `boss-dragon`          | 远古龙王 (Ancient Dragon)    | 六级 | 4600 | 6400 | Balanced   | 1075 | 923  | ✔    | 星界王座 (astral-crown)        |
-| `m-faerie`             | 森灵妖精 (Forest Faerie)     | 七级 | 3150 | 6640 | Agile      | 860  | 735  |      | 绿野仙境 (green-elysium)       |
-| `m-bloomfiend`         | 绽灵花魔 (Bloomfiend)        | 七级 | 3220 | 7200 | Mystic     | 882  | 750  |      | 绿野仙境 (green-elysium)       |
-| `m-dreamstag`          | 梦角鹿 (Dream Stag)          | 七级 | 3305 | 7920 | Balanced   | 905  | 768  |      | 绿野仙境 (green-elysium)       |
-| `m-sylvan-sentinel`    | 森域守卫 (Sylvan Sentinel)   | 七级 | 3400 | 8760 | Agile      | 930  | 785  |      | 绿野仙境 (green-elysium)       |
-| `boss-queen-of-blooms` | 绽辉女王 (Queen of Blooms)   | 七级 | 4950 | 9600 | Defender   | 1150 | 970  | ✔    | 绿野仙境 (green-elysium)       |
+| ID                      | 名称                         | 等阶 | HP   | BP   | 特化       | GOLD | BOSS | 所属地图                       |
+|-------------------------|------------------------------|------|------|------|------------|------|------|--------------------------------|
+| `m-slime`               | 史莱姆 (Slime)               | 一级 | 80   | 100  | Balanced   | 25   |      | 青苔原 (fringe)                |
+| `m-wolf`                | 野狼 (Wolf)                  | 一级 | 130  | 120  | Skirmisher | 35   |      | 青苔原 (fringe)                |
+| `m-goblin`              | 哥布林 (Goblin)              | 一级 | 180  | 140  | Attacker   | 55   |      | 青苔原 (fringe)                |
+| `m-boar`                | 巨型野猪 (Boar)              | 一级 | 260  | 160  | Bruiser    | 70   |      | 青苔原 (fringe)                |
+| `boss-golden-sheep`     | 黄金绵羊 (Golden Sheep)      | 一级 | 800  | 200  | Defender   | 300  | ✔    | 青苔原 (fringe)                |
+| `m-ice-boli`            | 冰玻力 (Ice Boli)            | 二级 | 460  | 240  | Defender   | 140  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `m-pyro-fox`            | 火焰狐 (Pyro Fox)            | 二级 | 520  | 300  | Skirmisher | 165  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `m-froststone-colossus` | 寒岩巨像 (Stone Golem)       | 二级 | 780  | 340  | Defender   | 210  |      | 熔冰之脊 (spine-of-frostfire)  |
+| `boss-wind-raptor`      | 风暴迅猛龙 (Wind Raptor)     | 二级 | 1600 | 400  | Agile      | 600  | ✔    | 熔冰之脊 (spine-of-frostfire)  |
+| `m-shade`               | 影子刺客 (Shade)             | 三级 | 980  | 480  | Agile      | 330  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `m-thunder-knight`      | 雷霆骑士 (Thunder Knight)    | 三级 | 1200 | 600  | Defender   | 420  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `m-abyss-witch`         | 深渊女巫 (Abyss Witch)       | 三级 | 1350 | 680  | Mystic     | 500  |      | 雷隐堡垒 (thunderveil-keep)    |
+| `boss-dragon-whelp`     | 幼龙 (Dragon Whelp)          | 三级 | 2200 | 800  | Balanced   | 610  | ✔    | 雷隐堡垒 (thunderveil-keep)    |
+| `m-specter`             | 沼泽魅影 (Marsh Specter)     | 四级 | 1622 | 880  | Crazy      | 378  |      | 腐沼根海 (bogroot-expanse)     |
+| `m-rockback`            | 岩背巨兽 (Marsh Rockback)    | 四级 | 1682 | 1000 | Bruiser    | 391  |      | 腐沼根海 (bogroot-expanse)     |
+| `m-raven`               | 血鸦 (Marsh Blood Raven)     | 四级 | 1785 | 1080 | Skirmisher | 415  |      | 腐沼根海 (bogroot-expanse)     |
+| `boss-treant`           | 腐沼树妖 (Bog Treant)        | 四级 | 2676 | 1200 | Defender   | 535  | ✔    | 腐沼根海 (bogroot-expanse)     |
+| `m-nightstalker`        | 夜巡狼人 (Nightstalker)      | 四级 | 1906 | 1220 | Agile      | 441  |      | 暮影裂谷 (duskfang-rift)       |
+| `m-troll`               | 寒霜巨魔 (Frost Troll)       | 四级 | 1967 | 1360 | Bruiser    | 454  |      | 暮影裂谷 (duskfang-rift)       |
+| `m-hound`               | 熔岩猎犬 (Lava Hound)        | 四级 | 2070 | 1480 | Attacker   | 477  |      | 暮影裂谷 (duskfang-rift)       |
+| `boss-priest`           | 暗影祭司 (Shadow Priest)     | 四级 | 3088 | 1600 | Mystic     | 612  | ✔    | 暮影裂谷 (duskfang-rift)       |
+| `m-harvester`           | 骨响收割者 (Bone Harvester)  | 五级 | 2190 | 1760 | Attacker   | 503  |      | 暗辉法枢 (gloomlit-arcanum)    |
+| `m-sentinel`            | 符文哨兵 (Rune Sentinel)     | 五级 | 2233 | 2000 | Defender   | 513  |      | 暗辉法枢 (gloomlit-arcanum)    |
+| `m-reaver`              | 虚空撕裂者 (Void Reaver)     | 五级 | 2354 | 2180 | Crazy      | 540  |      | 暗辉法枢 (gloomlit-arcanum)    |
+| `boss-archmage`         | 堕落大法师 (Fallen Archmage) | 五级 | 3500 | 2400 | Mystic     | 690  | ✔    | 暗辉法枢 (gloomlit-arcanum)    |
+| `m-stormcaller`         | 风暴召唤者 (Stormcaller)     | 五级 | 2457 | 2580 | Mystic     | 563  |      | 黑曜风痕 (obsidian-windscar)   |
+| `m-colossus`            | 黑曜巨像 (Obsidian Colossus) | 五级 | 2517 | 2800 | Defender   | 576  |      | 黑曜风痕 (obsidian-windscar)   |
+| `m-titan`               | 焰生泰坦 (Flameborn Titan)   | 五级 | 2638 | 2980 | Bruiser    | 602  |      | 黑曜风痕 (obsidian-windscar)   |
+| `boss-knight`           | 恐惧骑士 (Dread Knight)      | 五级 | 3887 | 3200 | Bruiser    | 765  | ✔    | 黑曜风痕 (obsidian-windscar)   |
+| `m-chimera`             | 秘能奇美拉 (Arcane Chimera)  | 六级 | 2741 | 3600 | Balanced   | 625  |      | 霜焰裂潮 (frostfire-maelstrom) |
+| `m-wyrm`                | 冰霜飞龙 (Frost Wyrm)        | 六级 | 2801 | 4000 | Attacker   | 638  |      | 霜焰裂潮 (frostfire-maelstrom) |
+| `m-kraken`              | 深海巨妖 (Abyss Kraken)      | 六级 | 2922 | 4360 | Bruiser    | 664  |      | 霜焰裂潮 (frostfire-maelstrom) |
+| `boss-warlord`          | 地狱军阀 (Infernal Warlord)  | 六级 | 4299 | 4800 | Bruiser    | 842  | ✔    | 霜焰裂潮 (frostfire-maelstrom) |
+| `m-templar`             | 天穹圣卫 (Celestial Templar) | 六级 | 3025 | 5140 | Defender   | 687  |      | 星界王座 (astral-crown)        |
+| `m-banshee`             | 灰烬魅灵 (Ashen Banshee)     | 六级 | 3086 | 5480 | Mystic     | 700  |      | 星界王座 (astral-crown)        |
+| `m-hunter`              | 苍穹狩魔者 (Skyscour Hunter) | 六级 | 3207 | 6000 | Agile      | 727  |      | 星界王座 (astral-crown)        |
+| `boss-dragon`           | 远古龙王 (Ancient Dragon)    | 六级 | 4600 | 6400 | Balanced   | 923  | ✔    | 星界王座 (astral-crown)        |
+| `m-faerie`              | 森灵妖精 (Forest Faerie)     | 七级 | 3150 | 6640 | Agile      | 735  |      | 绿野仙境 (green-elysium)       |
+| `m-bloomfiend`          | 绽灵花魔 (Bloomfiend)        | 七级 | 3220 | 7200 | Mystic     | 750  |      | 绿野仙境 (green-elysium)       |
+| `m-dreamstag`           | 梦角鹿 (Dream Stag)          | 七级 | 3305 | 7920 | Balanced   | 768  |      | 绿野仙境 (green-elysium)       |
+| `m-sylvan-sentinel`     | 森域守卫 (Sylvan Sentinel)   | 七级 | 3400 | 8760 | Agile      | 785  |      | 绿野仙境 (green-elysium)       |
+| `boss-queen-of-blooms`  | 绽辉女王 (Queen of Blooms)   | 七级 | 4950 | 9600 | Defender   | 970  | ✔    | 绿野仙境 (green-elysium)       |
+
 
 ### BOSS列表
 通用规则：

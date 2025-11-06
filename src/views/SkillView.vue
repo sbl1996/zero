@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import type { QiFocusProfile, SkillCost } from '@/types/domain'
+import type { QiFocusProfile, SkillCost, SkillDefinition } from '@/types/domain'
 import { usePlayerStore } from '@/stores/player'
-import { getSkillDefinition } from '@/data/skills'
+import { getSkillDefinition, getSkillDescription } from '@/data/skills'
 import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
 import { createDefaultSkillProgress, getRealmSkillLevelCap, getSkillMaxLevel, getSkillXpCap } from '@/composables/useSkills'
 
@@ -83,6 +83,7 @@ const knownSkillDetails = computed(() =>
     const realmCap = realmSkillCap.value
     const allowedMax = Math.min(skillMax, Math.max(realmCap, 1))
     const blockedByRealm = level >= allowedMax && skillMax > realmCap
+    const description = getSkillDescription(definition, level)
     return {
       definition,
       progress,
@@ -95,6 +96,7 @@ const knownSkillDetails = computed(() =>
       skillMax,
       allowedMax,
       blockedByRealm,
+      description,
     }
   }),
 )
@@ -123,6 +125,32 @@ function formatSkillCost(cost: SkillCost | undefined) {
   const amount = cost.amount ?? 0
   const typeLabel = (cost.type ?? 'none') as string
   return `${typeLabel.toUpperCase()} ${amount}`
+}
+
+function resolveSkillCooldown(definition: SkillDefinition, level: number): number | null {
+  if (typeof definition.getCooldown === 'function') {
+    return definition.getCooldown(level)
+  }
+  if (typeof definition.cooldown === 'number') {
+    return definition.cooldown
+  }
+  return null
+}
+
+function formatCooldownValue(value: number): string {
+  const rounded = Math.round(value * 10) / 10
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : rounded.toFixed(1)
+}
+
+function formatSkillCooldown(definition: SkillDefinition, level: number): string {
+  const cooldown = resolveSkillCooldown(definition, level)
+  if (cooldown == null) {
+    return '无冷却'
+  }
+  if (!Number.isFinite(cooldown) || cooldown <= 0) {
+    return '无冷却'
+  }
+  return `${formatCooldownValue(cooldown)}s`
 }
 
 function handleSlotChange(index: number, value: string) {
@@ -220,13 +248,14 @@ function equipToFirstEmpty(skillId: string) {
                   <span class="text-small text-muted">Lv.{{ skill.level }}/{{ skill.allowedMax }}</span>
                 </h4>
                 <span class="text-small text-muted">消耗：{{ formatSkillCost(skill.definition.cost) }}</span>
+                <span class="text-small text-muted">冷却：{{ formatSkillCooldown(skill.definition, skill.level) }}</span>
               </div>
             </div>
             <button class="btn" type="button" @click="equipToFirstEmpty(skill.definition.id)">
               装备到空槽
             </button>
           </header>
-          <p class="text-small" style="margin: 0; line-height: 1.6;">{{ skill.definition.description }}</p>
+          <p class="text-small" style="margin: 0; line-height: 1.6;">{{ skill.description }}</p>
           <div class="skill-progress-wrapper">
             <div class="skill-progress-bar">
               <div
@@ -236,7 +265,7 @@ function equipToFirstEmpty(skillId: string) {
             </div>
             <div class="skill-progress-meta">
               <span class="text-small text-muted">熟练度 {{ skill.xpLabel }} / {{ skill.xpCapLabel }}</span>
-              <span v-if="skill.blockedByRealm" class="text-small text-warning">境界不足，无法突破</span>
+              <span v-if="skill.blockedByRealm" class="text-small text-warning">境界不足，无法提升</span>
             </div>
           </div>
         </article>

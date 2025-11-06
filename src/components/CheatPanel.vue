@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui'
 const playerStore = usePlayerStore()
 const progressStore = useProgressStore()
 const ui = useUiStore()
-const { showCheatPanel, enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(ui)
+const { showCheatPanel, autoRematchAfterVictory } = storeToRefs(ui)
 
 const goldAmount = ref(1000)
 const upgradingRealm = ref(false)
@@ -48,12 +48,6 @@ function deleteSave() {
     console.warn('[cheat] failed to clear localStorage', error)
   }
   window.location.reload()
-}
-
-function handleAutoCastToggle(event: Event) {
-  const target = event.target as HTMLInputElement | null
-  if (!target) return
-  ui.toggleHoldAutoCast(target.checked)
 }
 
 function handleAutoRematchToggle(event: Event) {
@@ -102,19 +96,6 @@ function fillBasePower() {
           </button>
         </div>
         <p v-if="isRealmMaxed" class="text-small text-muted" style="margin: 6px 0 0;">已达最高境界。</p>
-
-        <div class="cheat-settings">
-          <label class="cheat-settings-toggle">
-            <input
-              class="cheat-settings-checkbox"
-              type="checkbox"
-              :checked="enableHoldAutoCast"
-              @change="handleAutoCastToggle"
-            >
-            长按技能自动施法
-          </label>
-          <p class="text-small text-muted" style="margin-top: 6px;">关闭后长按技能不会自动连发。</p>
-        </div>
 
         <div class="cheat-settings">
           <label class="cheat-settings-toggle">

@@ -23,6 +23,13 @@
           "routeName": "warrior-guild"
         },
         {
+          "id": "quest-board",
+          "name": "任务板",
+          "description": "查看可接受的任务并提交成果。",
+          "position": { "x": 58, "y": 66 },
+          "routeName": "quest-board"
+        },
+        {
           "id": "to-fringe",
           "name": "青苔原",
           "description": "前往青苔遍布的初级狩猎地。",

@@ -9,6 +9,7 @@ import { useInventoryStore } from '@/stores/inventory'
 import { computeBreakthroughChance, computeEnvironmentMultiplier, PASSIVE_MEDITATION_BP_PER_SECOND } from '@/composables/useLeveling'
 import type { BreakthroughMethod } from '@/types/domain'
 import { clamp } from '@/utils/math'
+import { CORE_SHARD_CONFIGS } from '@/data/cultivationCores'
 
 const player = usePlayerStore()
 const inventory = useInventoryStore()
@@ -21,6 +22,8 @@ const nowTick = ref(Date.now())
 const breakthroughFeedback = ref<string | null>(null)
 const breakthroughFeedbackPositive = ref<boolean | null>(null)
 const levelUpRewards = ref<LevelUpRewards | null>(null)
+const coreFeedback = ref<string | null>(null)
+const coreFeedbackPositive = ref<boolean | null>(null)
 
 let elapsedTimer: ReturnType<typeof setInterval> | null = null
 let nowTimer: ReturnType<typeof setInterval> | null = null
@@ -116,10 +119,47 @@ const bpRangeMax = computed(() => Math.round(cultivation.value.bp.range.max))
 
 const hpPerSecond = computed(() => res.value.recovery.hpPerSecond)
 const qiPerSecond = computed(() => res.value.recovery.qiPerSecond)
+const activeCoreBoost = computed(() => res.value.activeCoreBoost ?? null)
 
 const meditationBpRate = computed(() => {
   const multiplier = computeEnvironmentMultiplier('meditation')
-  return PASSIVE_MEDITATION_BP_PER_SECOND * multiplier
+  const base = PASSIVE_MEDITATION_BP_PER_SECOND * multiplier
+  if (!isMeditating.value) return 0
+  const boost = activeCoreBoost.value?.bonusPerSecond ?? 0
+  return base + boost
+})
+
+const coreBoostRemainingMs = computed(() => {
+  const boost = activeCoreBoost.value
+  if (!boost) return 0
+  return Math.max(0, boost.expiresAt - nowTick.value)
+})
+
+const coreBoostRemainingText = computed(() => {
+  const remainingMs = coreBoostRemainingMs.value
+  if (remainingMs <= 0) return '即将消散'
+  const totalSeconds = Math.ceil(remainingMs / 1000)
+  if (totalSeconds < 60) {
+    return `${totalSeconds}s`
+  }
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return `${minutes}分${seconds.toString().padStart(2, '0')}秒`
+})
+
+const coreShardOptions = computed(() => {
+  return CORE_SHARD_CONFIGS.map((config) => {
+    const quantity = inventory.quantity(config.id)
+    return {
+      id: config.id,
+      tier: config.tier,
+      name: config.name,
+      bonusPerSecond: config.bonusPerSecond,
+      durationMs: config.durationMs,
+      quantity,
+      disabled: quantity <= 0 || !isMeditating.value,
+    }
+  }).filter(option => option.quantity > 0)
 })
 
 const realm = computed(() => cultivation.value.realm)
@@ -155,12 +195,23 @@ const chanceTreasure = computed(() => {
   return computeBreakthroughChance(cultivation.value, 'treasure')
 })
 
-const forceScrollQty = computed(() => inventory.quantity('breakScrollForce'))
 const treasureScrollQty = computed(() => inventory.quantity('breakScrollTreasure'))
 
 watch(isBottlenecked, (value) => {
   if (!value) {
     clearBreakthroughFeedback()
+  }
+})
+
+watch(isMeditating, (value) => {
+  if (!value) {
+    clearCoreFeedback()
+  }
+})
+
+watch(activeCoreBoost, (boost) => {
+  if (!boost) {
+    clearCoreFeedback()
   }
 })
 
@@ -189,6 +240,42 @@ function setBreakthroughFeedback(message: string, positive: boolean | null = nul
 function clearBreakthroughFeedback() {
   breakthroughFeedback.value = null
   breakthroughFeedbackPositive.value = null
+}
+
+function setCoreFeedback(message: string, positive: boolean | null = null) {
+  coreFeedback.value = message
+  coreFeedbackPositive.value = positive
+}
+
+function clearCoreFeedback() {
+  coreFeedback.value = null
+  coreFeedbackPositive.value = null
+}
+
+async function useCoreShard(tier: number) {
+  const option = CORE_SHARD_CONFIGS.find(config => config.tier === tier)
+  if (!option) return
+  if (!isMeditating.value) {
+    setCoreFeedback('需在冥想状态下才能引导晶核之力。', false)
+    return
+  }
+  const available = inventory.quantity(option.id)
+  if (available <= 0) {
+    setCoreFeedback('晶核库存不足。', false)
+    return
+  }
+  const spent = inventory.spend(option.id, 1)
+  if (!spent) {
+    setCoreFeedback('晶核库存不足。', false)
+    return
+  }
+  const applied = await player.useItem(option.id)
+  if (!applied) {
+    inventory.addItem(option.id, 1)
+    setCoreFeedback('未能引导晶核之力。', false)
+    return
+  }
+  setCoreFeedback(`引动${option.name}，本源 +${option.bonusPerSecond.toFixed(1)}/s`, true)
 }
 
 function closeLevelUpModal() {
@@ -274,9 +361,6 @@ async function handleTreasureBreakthrough() {
   await performBreakthrough('treasure', { consumeItemId: 'breakScrollTreasure' })
 }
 
-async function handleForceScrollBreakthrough() {
-  await performBreakthrough('force', { consumeItemId: 'breakScrollForce' })
-}
 
 if (isMeditating.value) {
   startElapsedTimer()
@@ -364,11 +448,54 @@ onBeforeUnmount(() => {
           <span>斗气本源 {{ bpCurrent }} / {{ bpRangeMax }}</span>
           <span>区间 {{ bpRangeMin }} ~ {{ bpRangeMax }}</span>
         </div>
-        <div class="progress-bar">
-          <div class="progress-fill" :style="{ width: `${bpProgressPercent}%` }" />
-        </div>
+      <div class="progress-bar">
+        <div class="progress-fill" :style="{ width: `${bpProgressPercent}%` }" />
       </div>
-      <div class="breakthrough-panel">
+    </div>
+      <div class="core-panel">
+        <header class="core-header">
+          <h3>晶核导引</h3>
+          <p>冥想时可消耗晶核，在短时间内加快修炼速度。</p>
+        </header>
+        <div class="core-status">
+          <template v-if="activeCoreBoost">
+            <span class="core-status-label">当前加成</span>
+            <span class="core-status-value">+{{ activeCoreBoost.bonusPerSecond.toFixed(1) }}/s</span>
+            <span class="core-status-aux">剩余 {{ coreBoostRemainingText }}</span>
+          </template>
+          <span v-else class="core-status-empty">当前无晶核增益。</span>
+        </div>
+        <div
+          v-if="coreFeedback"
+          class="core-feedback"
+          :class="{
+            positive: coreFeedbackPositive === true,
+            negative: coreFeedbackPositive === false
+          }"
+        >
+          {{ coreFeedback }}
+        </div>
+        <div v-if="coreShardOptions.length > 0" class="core-grid">
+          <button
+            v-for="option in coreShardOptions"
+            :key="option.id"
+            type="button"
+            class="btn core-btn"
+            :disabled="option.disabled"
+            @click="useCoreShard(option.tier)"
+          >
+            <div class="core-btn-head">
+              <div class="core-btn-left">
+                <span class="btn-title">{{ option.name }}</span>
+                <span class="btn-subtitle">+{{ option.bonusPerSecond.toFixed(1) }}/s ｜ {{ option.durationMs / 1000 }}秒</span>
+              </div>
+              <span class="btn-meta btn-qty">X {{ option.quantity }}</span>
+            </div>
+          </button>
+        </div>
+        <p v-else class="core-empty">尚无晶核库存，可在战斗胜利后探索。</p>
+      </div>
+    <div class="breakthrough-panel">
         <header class="breakthrough-header">
           <h3>境界突破</h3>
           <p>瓶颈期可尝试强行冲击，或借助破境符提升成功率。突破会重置区间并清空溢出。</p>
@@ -406,15 +533,6 @@ onBeforeUnmount(() => {
           >
             <span class="btn-title">冲击瓶颈</span>
             <span class="btn-subtitle">成功率 {{ formatChance(chanceForce) }}</span>
-          </button>
-          <button
-            type="button"
-            class="btn breakthrough-btn"
-            :disabled="forceScrollQty <= 0 || !isBottlenecked || isOnBreakthroughCooldown"
-            @click="handleForceScrollBreakthrough"
-          >
-            <span class="btn-title">破境符（强压）</span>
-            <span class="btn-subtitle">持有 {{ forceScrollQty }} ｜ 成功率 {{ formatChance(chanceForce) }}</span>
           </button>
           <button
             type="button"
@@ -720,6 +838,121 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 255, 255, 0.04);
 }
 
+.core-panel {
+  margin-top: 28px;
+  padding: 20px;
+  border-radius: 16px;
+  background: rgba(24, 56, 100, 0.35);
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  box-shadow: inset 0 0 20px rgba(16, 38, 70, 0.4);
+}
+
+.core-header h3 {
+  margin: 0;
+  font-size: 18px;
+  letter-spacing: 0.5px;
+}
+
+.core-header p {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.6;
+  color: rgba(200, 225, 255, 0.75);
+}
+
+.core-status {
+  margin-top: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: baseline;
+  background: rgba(14, 32, 60, 0.55);
+  border: 1px solid rgba(120, 200, 255, 0.18);
+  border-radius: 12px;
+  padding: 12px 16px;
+}
+
+.core-status-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  color: rgba(180, 215, 255, 0.7);
+}
+
+.core-status-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.core-status-aux {
+  font-size: 13px;
+  color: rgba(200, 225, 255, 0.8);
+}
+
+.core-status-empty {
+  font-size: 13px;
+  color: rgba(200, 220, 255, 0.7);
+}
+
+.core-feedback {
+  margin-top: 14px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  font-size: 13px;
+  line-height: 1.6;
+  background: rgba(30, 54, 90, 0.6);
+  border: 1px solid rgba(120, 200, 255, 0.2);
+}
+
+.core-feedback.positive {
+  border-color: rgba(120, 230, 180, 0.55);
+  background: rgba(30, 80, 60, 0.55);
+  color: rgba(210, 255, 230, 0.92);
+}
+
+.core-feedback.negative {
+  border-color: rgba(255, 140, 120, 0.4);
+  background: rgba(80, 30, 30, 0.55);
+  color: rgba(255, 210, 200, 0.9);
+}
+
+.core-grid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.core-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  border-radius: 12px;
+  padding: 14px 16px;
+  background: linear-gradient(145deg, rgba(40, 90, 150, 0.6), rgba(28, 58, 110, 0.6));
+  border: 1px solid rgba(110, 190, 255, 0.3);
+  color: #fff;
+  transition: transform 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+}
+
+.core-btn:hover:not(:disabled) {
+  transform: translateY(-2px);
+  border-color: rgba(160, 220, 255, 0.5);
+  background: linear-gradient(145deg, rgba(70, 140, 210, 0.65), rgba(40, 80, 150, 0.65));
+}
+
+.core-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.core-empty {
+  margin-top: 12px;
+  font-size: 13px;
+  color: rgba(200, 220, 255, 0.7);
+}
+
 .breakthrough-panel {
   margin-top: 28px;
   padding: 22px;
@@ -834,6 +1067,31 @@ onBeforeUnmount(() => {
   margin-top: 4px;
   font-size: 12px;
   color: rgba(220, 235, 255, 0.75);
+}
+
+.btn-meta {
+  margin-top: 6px;
+  font-size: 12px;
+  color: rgba(220, 235, 255, 0.7);
+}
+
+.btn-qty {
+  align-self: flex-end;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.core-btn-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.core-btn-left {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
 }
 
 .progress-header {

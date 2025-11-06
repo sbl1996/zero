@@ -459,16 +459,23 @@ export const usePlayerStore = defineStore('player', {
       this.res.hp = clamp(this.res.hp, 0, this.res.hpMax)
       this.res.qi = clamp(this.res.qi, 0, this.res.qiMax)
       this.res.recovery.mode = 'idle'
+      this.res.activeCoreBoost = null
     },
     setRecoveryMode(mode: RecoveryMode, options: { preserveOperation?: boolean } = {}) {
       if (mode === 'meditate' && !options.preserveOperation) {
         this.res.operation = resetQiOperation(this.res.operation)
       }
       this.res.recovery.mode = mode
+      if (mode !== 'meditate') {
+        this.res.activeCoreBoost = null
+      }
     },
     setRecoveryModeKeepOperation(mode: RecoveryMode) {
       // 设置恢复模式但不重置斗气运转状态
       this.res.recovery.mode = mode
+      if (mode !== 'meditate') {
+        this.res.activeCoreBoost = null
+      }
     },
     async attemptBreakthrough(method: BreakthroughMethod) {
       const now = Date.now()
@@ -545,9 +552,29 @@ export const usePlayerStore = defineStore('player', {
       let deltaApplied = 0
       let deltaOverflow = 0
       let deltaBpGain = 0
+      const tickStartMs = now - deltaSeconds * 1000
+      const isMeditationEnvironment = environment === 'meditation' && this.res.recovery.mode === 'meditate'
 
-      if (environment === 'meditation' && this.res.recovery.mode === 'meditate') {
+      if (isMeditationEnvironment) {
         deltaBpGain += deltaSeconds * PASSIVE_MEDITATION_BP_PER_SECOND * envMultiplier
+        const activeBoost = this.res.activeCoreBoost
+        if (activeBoost) {
+          if (activeBoost.expiresAt <= tickStartMs) {
+            this.res.activeCoreBoost = null
+          } else {
+            const overlapEnd = Math.min(activeBoost.expiresAt, now)
+            const overlapMs = Math.max(0, overlapEnd - tickStartMs)
+            if (overlapMs > 0) {
+              const overlapSeconds = Math.min(deltaSeconds, overlapMs / 1000)
+              deltaBpGain += overlapSeconds * activeBoost.bonusPerSecond
+            }
+            if (activeBoost.expiresAt <= now) {
+              this.res.activeCoreBoost = null
+            }
+          }
+        }
+      } else if (this.res.activeCoreBoost) {
+        this.res.activeCoreBoost = null
       }
 
       const actions = options.actions ?? {}
@@ -732,10 +759,16 @@ export const usePlayerStore = defineStore('player', {
 
       const isHeal = 'heal' in def && typeof def.heal === 'number'
       const isQi = 'restoreQi' in def && typeof def.restoreQi === 'number'
-      const hasDelta = 'gainDeltaBp' in def && typeof def.gainDeltaBp === 'number'
       const hasBreak = 'breakthroughMethod' in def && def.breakthroughMethod
+      const meditationBoost = 'meditationBoost' in def ? def.meditationBoost : undefined
+      const hasMeditationBoost =
+        meditationBoost &&
+        typeof meditationBoost.bonusPerSecond === 'number' &&
+        meditationBoost.bonusPerSecond > 0 &&
+        typeof meditationBoost.durationMs === 'number' &&
+        meditationBoost.durationMs > 0
 
-      if (!isHeal && !isQi && !hasDelta && !hasBreak) {
+      if (!isHeal && !isQi && !hasMeditationBoost && !hasBreak) {
         return false
       }
 
@@ -751,11 +784,28 @@ export const usePlayerStore = defineStore('player', {
         effectApplied = true
       }
 
-      if (hasDelta && def.gainDeltaBp! > 0) {
+      if (hasMeditationBoost) {
+        if (this.res.recovery.mode !== 'meditate') {
+          return false
+        }
         const now = Date.now()
-        const result = applyDeltaBp(this.cultivation, def.gainDeltaBp!, now)
-        if (result.applied > 0 || result.overflow > 0) {
-          this.refreshDerived()
+        const tier = 'coreShardTier' in def && typeof def.coreShardTier === 'number' ? def.coreShardTier : 0
+        const current = this.res.activeCoreBoost
+        if (current && current.tier === tier) {
+          // Same tier: extend duration instead of overriding
+          const base = Math.max(current.expiresAt, now)
+          this.res.activeCoreBoost = {
+            tier: current.tier,
+            bonusPerSecond: current.bonusPerSecond,
+            expiresAt: base + meditationBoost.durationMs,
+          }
+        } else {
+          // Different tier or no active boost: replace and reset duration
+          this.res.activeCoreBoost = {
+            tier,
+            bonusPerSecond: meditationBoost.bonusPerSecond,
+            expiresAt: now + meditationBoost.durationMs,
+          }
         }
         effectApplied = true
       }
