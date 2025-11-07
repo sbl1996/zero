@@ -13,7 +13,7 @@ import { getMonsterMap } from '@/data/monsters'
 import { getAutoMonsterPortraits } from '@/utils/monsterPortraits'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import { formatRealmTierLabel } from '@/utils/realm'
-import type { FloatText, LootResult, Monster } from '@/types/domain'
+import type { FloatText, LootResult, Monster, MonsterFollowupState } from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import QuickItemBar from '@/components/QuickItemBar.vue'
 import MonsterAttackTimeline from '@/components/MonsterAttackTimeline.vue'
@@ -79,6 +79,28 @@ function getBreakChanceColor(chance: number): string {
   if (chance >= 0.1) return '#4ecdc4' // 低破绽率：青色
   return '#94a3b8' // 极低破绽率：灰色
 }
+function computeFollowupTimers(followup: MonsterFollowupState): number[] {
+  if (!followup || followup.hits.length === 0) return []
+  const remainingHits = followup.hits.slice(followup.nextHitIndex)
+  if (remainingHits.length === 0) return []
+  const timers: number[] = []
+  let timeUntil = Math.max(0, followup.timer)
+  let prevDelay = followup.lastHitDelay ?? 0
+  for (let index = 0; index < remainingHits.length; index += 1) {
+    const hit = remainingHits[index]
+    if (!hit) continue
+    if (index === 0) {
+      timers.push(timeUntil)
+    } else {
+      const deltaDelay = Math.max(hit.delay - prevDelay, 0)
+      timeUntil += deltaDelay
+      timers.push(timeUntil)
+    }
+    prevDelay = hit.delay
+  }
+  return timers
+}
+
 const monsterFollowupHint = computed(() => {
   if (!isMonsterAttackActive.value) return null
   const followup = battle.monsterFollowup
@@ -88,6 +110,7 @@ const monsterFollowupHint = computed(() => {
     label: followup.label,
     phase: followup.stage,
     delay: followup.delay,
+    hits: computeFollowupTimers(followup),
   }
 })
 

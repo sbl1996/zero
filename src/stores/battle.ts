@@ -9,7 +9,7 @@ import { ITEMS } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
 import { getSkillDefinition } from '@/data/skills'
-import { MONSTER_SKILL_IDS, resolveMonsterSkillProfile, resolveMonsterSkillSelector } from '@/data/monsterSkills'
+import { resolveMonsterSkillProfile, resolveMonsterSkillSelector } from '@/data/monsterSkills'
 import { MAX_EQUIP_LEVEL } from '@/composables/useEnhance'
 import { realmTierContentLevel } from '@/utils/realm'
 import type { NumericRealmTier } from '@/utils/realm'
@@ -30,6 +30,7 @@ import type {
   ItemLootResult,
   QiOperationState,
   SkillDefinition,
+  MonsterSkillDefinition,
   FloatText,
   PendingItemUseState,
   SkillChargeState,
@@ -53,7 +54,7 @@ function createEmptyCultivationMetrics(): CultivationFrameMetrics {
   }
 }
 
-const TICK_INTERVAL_MS = 1000 / 15
+const TICK_INTERVAL_MS = 1000 / 20
 const MAX_FRAME_TIME = 0.25
 const DEFAULT_MONSTER_ATTACK_INTERVAL = 1.6
 const FALLBACK_SKILL_COOLDOWN = 2
@@ -63,8 +64,6 @@ const AUTO_REMATCH_BASE_DELAY = 800
 const AUTO_REMATCH_MIN_INTERVAL = 5000
 const DODGE_SKILL_ID = 'qi_dodge'
 const DODGE_REFUND_PERCENT = 0.04
-const GOLDEN_SHEEP_ID = 'boss-golden-sheep'
-const GOLDEN_SHEEP_FOLLOWUP_LABEL = '×2'
 const DEFAULT_ITEM_USE_DURATION_MS = 1000
 
 const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
@@ -403,7 +402,7 @@ export const useBattleStore = defineStore('battle', {
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
-      this.scheduleGoldenSheepFollowupTelegraph()
+      this.scheduleMonsterComboTelegraph()
       this.startLoop()
     },
     clearRematchTimer() {
@@ -418,37 +417,50 @@ export const useBattleStore = defineStore('battle', {
         this.tick()
       }, TICK_INTERVAL_MS)
     },
-    scheduleGoldenSheepFollowupTelegraph() {
+    scheduleMonsterComboTelegraph() {
       if (this.concluded !== 'idle') return
       const monster = this.monster
       if (!monster) return
-      if (monster.id !== GOLDEN_SHEEP_ID) return
       if (this.monsterFollowup) return
       const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
-      const doubleSkill = profile.extras.find((skill) => skill.id === MONSTER_SKILL_IDS.GOLDEN_SHEEP_DOUBLE_STAB)
-      if (!doubleSkill) return
-      const doubleSkillId = doubleSkill.id
+      const selector = monster.skillSelector ?? resolveMonsterSkillSelector(monster)
+      const comboSkills = new Map<string, MonsterSkillDefinition>()
+      if (profile.basic.hits.length > 1) {
+        comboSkills.set(profile.basic.id, profile.basic)
+      }
+      profile.extras.forEach((skill) => {
+        if (skill.hits.length > 1) {
+          comboSkills.set(skill.id, skill)
+        }
+      })
+      if (comboSkills.size === 0) return
       const timeToNextAttack = Math.max(0, this.monsterTimer)
-      const remaining = this.monsterSkillCooldowns[doubleSkillId] ?? 0
-      const selector = resolveMonsterSkillSelector(monster)
-      const doubleSkillState = Math.max(remaining - timeToNextAttack, 0)
       const skillStates: Record<string, number> = {
         [profile.basic.id]: 0,
-        [doubleSkillId]: doubleSkillState,
       }
-      if (doubleSkillState > 0) return
+      profile.extras.forEach((skill) => {
+        const remaining = this.monsterSkillCooldowns[skill.id] ?? 0
+        skillStates[skill.id] = Math.max(remaining - timeToNextAttack, 0)
+      })
       const rng = makeRng(this.rngSeed ^ 0x3c6ef372)
       this.rngSeed = (this.rngSeed + 0xa4093822) >>> 0
       const choice = selector({ monster, skillStates, rng })
-      if (choice !== doubleSkillId) return
-      this.monsterSkillCooldowns[doubleSkillId] = doubleSkill.cooldown
-      const hits = doubleSkill.hits ?? []
-      if (hits.length === 0) return
+      if (!choice) return
+      const selectedSkill = comboSkills.get(choice)
+      if (!selectedSkill) return
+      const cooldownState = skillStates[choice] ?? 0
+      if (cooldownState > 0) return
+      const hits = selectedSkill.hits ?? []
+      if (hits.length <= 1) return
       const baseHit = hits[0]!
       const extraHits = hits.slice(1)
       const firstExtraDelay = extraHits.length > 0 ? extraHits[0]!.delay : 0
+      if (choice !== profile.basic.id) {
+        this.monsterSkillCooldowns[choice] = selectedSkill.cooldown
+      }
       this.monsterFollowup = {
-        source: 'golden_sheep_double_strike',
+        source: choice,
+        skillId: choice,
         stage: 'telegraph',
         timer: timeToNextAttack + firstExtraDelay,
         delay: firstExtraDelay,
@@ -456,7 +468,8 @@ export const useBattleStore = defineStore('battle', {
         hits: extraHits,
         nextHitIndex: 0,
         lastHitDelay: baseHit.delay,
-        label: GOLDEN_SHEEP_FOLLOWUP_LABEL,
+        label: selectedSkill.comboLabel ?? `×${hits.length}`,
+        lastUpdatedAt: this.lastTickAt || getNow(),
       }
     },
     stopLoop() {
@@ -580,12 +593,22 @@ export const useBattleStore = defineStore('battle', {
       }
 
       if (attacksResolved > 0) {
-        this.scheduleGoldenSheepFollowupTelegraph()
+        this.scheduleMonsterComboTelegraph()
       }
 
       const followup = this.monsterFollowup
       if (followup && this.concluded === 'idle' && this.monster) {
-        followup.timer -= delta
+        const reference = Number.isFinite(followup.lastUpdatedAt) ? followup.lastUpdatedAt : this.lastTickAt
+        let elapsedSeconds = 0
+        if (typeof reference === 'number' && Number.isFinite(reference)) {
+          elapsedSeconds = Math.max(0, (now - reference) / 1000)
+        } else {
+          elapsedSeconds = Math.max(0, delta)
+        }
+        if (elapsedSeconds > 0) {
+          followup.timer -= elapsedSeconds
+          followup.lastUpdatedAt = now
+        }
         if (followup.stage === 'active' && followup.timer <= 0) {
           this.resolveMonsterFollowupAttack()
         }
@@ -1415,6 +1438,7 @@ export const useBattleStore = defineStore('battle', {
         const baseDelay = this.monsterFollowup.lastHitDelay ?? 0
         const nextHit = this.monsterFollowup.hits[this.monsterFollowup.nextHitIndex]
         this.monsterFollowup.timer = nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0
+        this.monsterFollowup.lastUpdatedAt = this.lastTickAt || getNow()
         baseMultiplier = this.monsterFollowup.baseMultiplier ?? 1
       }
       const rng = makeRng(this.rngSeed ^ 0x517cc1b7)
@@ -1423,7 +1447,7 @@ export const useBattleStore = defineStore('battle', {
       this.resolveMonsterAttackWithRng(rng, baseMultiplier)
       if (this.monsterFollowup && this.monsterFollowup.stage === 'active' && this.monsterFollowup.hits.length === 0) {
         this.monsterFollowup = null
-        this.scheduleGoldenSheepFollowupTelegraph()
+        this.scheduleMonsterComboTelegraph()
       }
     },
     resolveMonsterAttackWithRng(rng: () => number, damageMultiplier = 1) {
@@ -1534,7 +1558,7 @@ export const useBattleStore = defineStore('battle', {
       if (!hit) {
         this.monsterFollowup = null
         if (this.concluded === 'idle') {
-          this.scheduleGoldenSheepFollowupTelegraph()
+          this.scheduleMonsterComboTelegraph()
         }
         return
       }
@@ -1547,11 +1571,12 @@ export const useBattleStore = defineStore('battle', {
         const nextHit = followup.hits[followup.nextHitIndex]!
         const deltaDelay = Math.max(nextHit.delay - followup.lastHitDelay, 0)
         followup.timer = deltaDelay
+        followup.lastUpdatedAt = this.lastTickAt || getNow()
         this.monsterFollowup = followup
       } else {
         this.monsterFollowup = null
         if (this.concluded === 'idle') {
-          this.scheduleGoldenSheepFollowupTelegraph()
+          this.scheduleMonsterComboTelegraph()
         }
       }
     },

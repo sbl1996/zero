@@ -8,6 +8,8 @@ import type {
 const DEFAULT_SKILL_ID = 'monster.normal_attack'
 const GOLDEN_SHEEP_ID = 'boss-golden-sheep'
 const GOLDEN_SHEEP_DOUBLE_STAB_ID = 'monster.golden_sheep_double_stab'
+const WIND_RAPTOR_ID = 'boss-wind-raptor'
+const WIND_RAPTOR_BLADE_DANCE_ID = 'monster.wind_raptor_blade_dance'
 
 const BASIC_MONSTER_ATTACK: MonsterSkillDefinition = {
   id: DEFAULT_SKILL_ID,
@@ -37,10 +39,34 @@ const GOLDEN_SHEEP_DOUBLE_STAB: MonsterSkillDefinition = {
       multiplier: 0.6,
     },
   ],
+  comboLabel: '×2',
+}
+
+const WIND_RAPTOR_BLADE_DANCE: MonsterSkillDefinition = {
+  id: WIND_RAPTOR_BLADE_DANCE_ID,
+  name: '风刃乱舞',
+  cooldown: 10,
+  aftercast: 1,
+  hits: [
+    {
+      delay: 0,
+      multiplier: 0.5,
+    },
+    {
+      delay: 0.15,
+      multiplier: 0.5,
+    },
+    {
+      delay: 0.3,
+      multiplier: 0.5,
+    },
+  ],
+  comboLabel: '×3',
 }
 
 const extraSkillMap: Record<string, MonsterSkillDefinition[]> = {
   [GOLDEN_SHEEP_ID]: [GOLDEN_SHEEP_DOUBLE_STAB],
+  [WIND_RAPTOR_ID]: [WIND_RAPTOR_BLADE_DANCE],
 }
 
 export function resolveMonsterSkillProfile(monster: Monster): MonsterSkillProfile {
@@ -51,26 +77,32 @@ export function resolveMonsterSkillProfile(monster: Monster): MonsterSkillProfil
   }
 }
 
+function isSkillReady(skillId: string, skillStates: Record<string, number>): boolean {
+  return (skillStates[skillId] ?? 0) <= 0
+}
+
 const monsterAiMap: Record<string, MonsterAISelector> = {
   [GOLDEN_SHEEP_ID]: ({ skillStates, rng }) => {
-    const doubleStabReady = (skillStates[GOLDEN_SHEEP_DOUBLE_STAB_ID] ?? 0) <= 0
-    const basicReady = (skillStates[DEFAULT_SKILL_ID] ?? 0) <= 0
+    const doubleStabReady = isSkillReady(GOLDEN_SHEEP_DOUBLE_STAB_ID, skillStates)
+    const basicReady = isSkillReady(DEFAULT_SKILL_ID, skillStates)
     if (!basicReady && !doubleStabReady) return null
     if (doubleStabReady && rng() < 0.2) {
       return GOLDEN_SHEEP_DOUBLE_STAB_ID
     }
     return basicReady ? DEFAULT_SKILL_ID : null
   },
+  [WIND_RAPTOR_ID]: ({ skillStates }) => {
+    const bladeDanceReady = isSkillReady(WIND_RAPTOR_BLADE_DANCE_ID, skillStates)
+    const basicReady = isSkillReady(DEFAULT_SKILL_ID, skillStates)
+    if (!bladeDanceReady && !basicReady) return null
+    if (bladeDanceReady) return WIND_RAPTOR_BLADE_DANCE_ID
+    return basicReady ? DEFAULT_SKILL_ID : null
+  },
 }
 
 export function resolveMonsterSkillSelector(monster: Monster): MonsterAISelector {
   return monsterAiMap[monster.id] ?? (({ skillStates }) => {
-    const basicReady = (skillStates[DEFAULT_SKILL_ID] ?? 0) <= 0
+    const basicReady = isSkillReady(DEFAULT_SKILL_ID, skillStates)
     return basicReady ? DEFAULT_SKILL_ID : null
   })
 }
-
-export const MONSTER_SKILL_IDS = {
-  BASIC: DEFAULT_SKILL_ID,
-  GOLDEN_SHEEP_DOUBLE_STAB: GOLDEN_SHEEP_DOUBLE_STAB_ID,
-} as const

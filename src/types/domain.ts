@@ -296,6 +296,7 @@ export interface MonsterSkillDefinition {
   cooldown: number
   aftercast: number
   hits: MonsterSkillHit[]
+  comboLabel?: string
 }
 
 export interface MonsterSkillProfile {
@@ -458,12 +459,13 @@ export interface PendingItemUseState {
   silent: boolean
 }
 
-export type MonsterFollowupSource = 'golden_sheep_double_strike'
+export type MonsterFollowupSource = string
 
 export type MonsterFollowupStage = 'telegraph' | 'active'
 
 export interface MonsterFollowupState {
   source: MonsterFollowupSource
+  skillId?: string
   stage: MonsterFollowupStage
   timer: number
   delay: number
@@ -472,6 +474,7 @@ export interface MonsterFollowupState {
   nextHitIndex: number
   lastHitDelay: number
   label: string
+  lastUpdatedAt: number
 }
 
 export type BattleResolution = 'idle' | 'victory' | 'defeat'

@@ -14,7 +14,7 @@ const props = defineProps<{
   timeToAttack: number | null
   pendingDodge: PendingDodgeState | null
   actionLockUntil: number | null
-  followup: { time: number, label?: string, phase?: MonsterFollowupStage, delay?: number } | null
+  followup: { time: number, label?: string, phase?: MonsterFollowupStage, delay?: number, hits?: number[] } | null
 }>()
 
 const getNowMs = () => (typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -140,18 +140,6 @@ const attackMarkerStyle = computed(() => {
   }
 })
 
-const followupMarkerStyle = computed(() => {
-  if (!props.active) return null
-  const hint = props.followup
-  if (!hint) return null
-  const time = hint.time
-  if (!Number.isFinite(time) || time <= 0) return null
-  const positionPercent = timeToPercent(time)
-  return {
-    left: `${positionPercent}%`,
-  }
-})
-
 const followupLabel = computed(() => props.followup?.label ?? '追击')
 
 const followupPhase = computed<MonsterFollowupStage | null>(() => props.followup?.phase ?? null)
@@ -195,6 +183,25 @@ const dodgeHintClasses = computed(() => {
     classes['is-distant'] = true
   }
   return classes
+})
+
+const followupMarkers = computed(() => {
+  if (!props.active) return []
+  const hint = props.followup
+  if (!hint) return []
+  const rawTimes = Array.isArray(hint.hits) && hint.hits.length > 0
+    ? hint.hits
+    : (Number.isFinite(hint.time) ? [hint.time] : [])
+  return rawTimes
+    .map((value) => Math.max(0, Number(value)))
+    .filter((value) => Number.isFinite(value))
+    .map((time, index) => ({
+      key: `followup-${index}`,
+      style: {
+        left: `${timeToPercent(time)}%`,
+      },
+      showLabel: index === 0,
+    }))
 })
 
 const recentAttackStyle = computed(() => {
@@ -245,11 +252,12 @@ const timelineClasses = computed(() => ({
         <span class="timeline-rail__attack-glow" />
       </div>
       <div
-        v-if="followupMarkerStyle"
+        v-for="marker in followupMarkers"
+        :key="marker.key"
         :class="followupAttackClasses"
-        :style="followupMarkerStyle"
+        :style="marker.style"
       >
-        <span class="timeline-rail__attack-label">{{ followupLabel }}</span>
+        <span v-if="marker.showLabel" class="timeline-rail__attack-label">{{ followupLabel }}</span>
         <span class="timeline-rail__attack-glow" />
       </div>
       <div
