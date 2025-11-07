@@ -44,11 +44,11 @@ const canClickRematch = computed(() => {
     (!autoRematchAfterVictory.value || monster.value.isBoss)
 })
 const monsterAttackProgress = computed(() => {
-  const activeMonster = battle.monster
-  if (!activeMonster || !isMonsterAttackActive.value) return 0
-  const interval = activeMonster.attackInterval > 0 ? activeMonster.attackInterval : 1.6
-  if (interval <= 0) return 0
-  return Math.max(0, Math.min(1, battle.monsterTimer / interval))
+  if (!isMonsterAttackActive.value) return 0
+  const total = battle.monsterNextSkillTotal
+  if (!Number.isFinite(total) || total <= 0) return 0
+  const remaining = Math.max(0, battle.monsterNextSkillTimer)
+  return Math.max(0, Math.min(1, remaining / total))
 })
 
 // 计算破绽率
@@ -1357,7 +1357,7 @@ onBeforeUnmount(() => {
 
       <MonsterAttackTimeline
         :active="isMonsterAttackActive"
-        :time-to-attack="isMonsterAttackActive ? battle.monsterTimer : null"
+        :time-to-attack="isMonsterAttackActive ? battle.monsterNextSkillTimer : null"
         :pending-dodge="battle.pendingDodge"
         :action-lock-until="battle.actionLockUntil"
         :followup="monsterFollowupHint"

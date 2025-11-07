@@ -31,6 +31,8 @@ import type {
   QiOperationState,
   SkillDefinition,
   MonsterSkillDefinition,
+  MonsterSkillHit,
+  MonsterSkillProfile,
   FloatText,
   PendingItemUseState,
   SkillChargeState,
@@ -56,10 +58,10 @@ function createEmptyCultivationMetrics(): CultivationFrameMetrics {
 
 const TICK_INTERVAL_MS = 1000 / 20
 const MAX_FRAME_TIME = 0.25
-const DEFAULT_MONSTER_ATTACK_INTERVAL = 1.6
 const FALLBACK_SKILL_COOLDOWN = 2
 export const ITEM_COOLDOWN = 10
 const SKILL_SLOT_COUNT = 4
+const MAX_MONSTER_ACTIONS_PER_TICK = 4
 const AUTO_REMATCH_BASE_DELAY = 800
 const AUTO_REMATCH_MIN_INTERVAL = 5000
 const DODGE_SKILL_ID = 'qi_dodge'
@@ -205,11 +207,6 @@ function resolveMonsterAgi(monster: Monster): number {
   return monster.stats.AGI
 }
 
-function resolveMonsterAttackInterval(monster: Monster | null | undefined): number {
-  if (!monster) return DEFAULT_MONSTER_ATTACK_INTERVAL
-  return monster.attackInterval > 0 ? monster.attackInterval : DEFAULT_MONSTER_ATTACK_INTERVAL
-}
-
 function resolveMonsterRealmPower(monster: Monster): number {
   return realmTierContentLevel(monster.realmTier)
 }
@@ -220,6 +217,60 @@ function resolveMonsterPenetration(monster: Monster) {
     flat: 0,
     pct: Math.min(Math.max(0.1 + 0.012 * fallbackLevel, 0), 0.6),
   }
+}
+
+function createMonsterSkillCooldownMap(profile: MonsterSkillProfile): Record<string, number> {
+  const cooldowns: Record<string, number> = {}
+  const skills = [profile.basic, ...profile.extras]
+  skills.forEach((skill) => {
+    cooldowns[skill.id] = 0
+  })
+  return cooldowns
+}
+
+function findMonsterSkill(profile: MonsterSkillProfile, skillId: string): MonsterSkillDefinition | null {
+  if (profile.basic.id === skillId) return profile.basic
+  return profile.extras.find((skill) => skill.id === skillId) ?? null
+}
+
+function buildSkillStateSnapshot(
+  cooldowns: Record<string, number>,
+  delaySeconds: number,
+): Record<string, number> {
+  const snapshot: Record<string, number> = {}
+  const delay = Math.max(0, delaySeconds)
+  Object.entries(cooldowns).forEach(([skillId, remaining]) => {
+    const adjusted = Math.max((remaining ?? 0) - delay, 0)
+    snapshot[skillId] = adjusted
+  })
+  return snapshot
+}
+
+function resolveMonsterCooldownFloor(cooldowns: Record<string, number>): number {
+  let floor = Infinity
+  const entries = Object.values(cooldowns)
+  if (entries.length === 0) return 0
+  for (let index = 0; index < entries.length; index += 1) {
+    const value = entries[index]
+    if (!Number.isFinite(value)) {
+      floor = Math.min(floor, 0)
+      continue
+    }
+    const normalized = typeof value === 'number' ? value : 0
+    const remaining = Math.max(0, normalized)
+    if (remaining < floor) {
+      floor = remaining
+      if (floor === 0) break
+    }
+  }
+  return floor === Infinity ? 0 : floor
+}
+
+function resolveInitialMonsterDelay(monster: Monster, profile: MonsterSkillProfile): number {
+  if (Number.isFinite(monster.attackInterval) && monster.attackInterval > 0) {
+    return monster.attackInterval
+  }
+  return Math.max(profile.basic.cooldown ?? 0, 0)
 }
 
 function resolveItemUseDurationMs(itemId: string, _player: ReturnType<typeof usePlayerStore>): number {
@@ -252,7 +303,10 @@ function initialState(): BattleState {
     lastTickAt: 0,
     battleStartedAt: null,
     battleEndedAt: null,
-    monsterTimer: DEFAULT_MONSTER_ATTACK_INTERVAL,
+    monsterNextSkill: null,
+    monsterNextSkillTimer: 0,
+    monsterNextSkillTotal: 0,
+    monsterCurrentSkill: null,
     monsterSkillCooldowns: {},
     skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
     itemCooldowns: {},
@@ -337,7 +391,10 @@ export const useBattleStore = defineStore('battle', {
       this.monsterFollowup = null
       this.skillCharges = Array(slotCount).fill(null)
       this.activeSkillChargeSlot = null
-      this.monsterTimer = DEFAULT_MONSTER_ATTACK_INTERVAL
+      this.monsterNextSkill = null
+      this.monsterNextSkillTimer = 0
+      this.monsterNextSkillTotal = 0
+      this.monsterCurrentSkill = null
       this.lastTickAt = 0
       this.battleStartedAt = null
       this.battleEndedAt = null
@@ -381,18 +438,18 @@ export const useBattleStore = defineStore('battle', {
       const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
       this.skillCooldowns = Array(slotCount).fill(0)
       this.itemCooldowns = {}
-      this.monsterSkillCooldowns = {}
       const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
-      profile.extras.forEach((skill) => {
-        this.monsterSkillCooldowns[skill.id] = 0
-      })
+      this.monsterSkillCooldowns = createMonsterSkillCooldownMap(profile)
       this.actionLockUntil = null
       this.pendingDodge = null
       this.pendingItemUse = null
       this.monsterFollowup = null
       this.skillCharges = Array(slotCount).fill(null)
       this.activeSkillChargeSlot = null
-      this.monsterTimer = resolveMonsterAttackInterval(monster)
+      this.monsterNextSkill = null
+      this.monsterNextSkillTimer = 0
+      this.monsterNextSkillTotal = 0
+      this.monsterCurrentSkill = null
       this.lastTickAt = getNow()
       this.skillChain = {
         lastSkillId: null,
@@ -402,8 +459,128 @@ export const useBattleStore = defineStore('battle', {
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
-      this.scheduleMonsterComboTelegraph()
+      const initialDelay = resolveInitialMonsterDelay(monster, profile)
+      this.planNextMonsterSkill(initialDelay)
       this.startLoop()
+    },
+    planNextMonsterSkill(delaySeconds: number) {
+      if (!this.monster || this.concluded !== 'idle') return
+      const delay = Math.max(0, Number.isFinite(delaySeconds) ? delaySeconds : 0)
+      const cooldownFloor = resolveMonsterCooldownFloor(this.monsterSkillCooldowns)
+      const totalDelay = Math.max(delay, cooldownFloor)
+      this.monsterNextSkillTimer = totalDelay
+      this.monsterNextSkillTotal = totalDelay
+      const skill = this.selectMonsterSkill(totalDelay)
+      this.monsterNextSkill = skill
+      this.setupMonsterComboTelegraph(skill, totalDelay)
+    },
+    selectMonsterSkill(delaySeconds: number): MonsterSkillDefinition | null {
+      const monster = this.monster
+      if (!monster) return null
+      const selector = monster.skillSelector ?? resolveMonsterSkillSelector(monster)
+      const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
+      const skillStates = buildSkillStateSnapshot(this.monsterSkillCooldowns, delaySeconds)
+      const rng = makeRng(this.rngSeed ^ 0x3c6ef372)
+      this.rngSeed = (this.rngSeed + 0xa4093822) >>> 0
+      const choice = selector({ monster, skillStates, rng })
+      if (!choice) return null
+      return findMonsterSkill(profile, choice)
+    },
+    setupMonsterComboTelegraph(skill: MonsterSkillDefinition | null, delaySeconds: number) {
+      if (!skill || skill.hits.length <= 1) {
+        if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
+          this.monsterFollowup = null
+        }
+        return
+      }
+      const hits = skill.hits
+      const baseHit = hits[0]
+      const extraHits = hits.slice(1)
+      if (!baseHit || extraHits.length === 0) {
+        if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
+          this.monsterFollowup = null
+        }
+        return
+      }
+      const firstExtraDelay = extraHits[0]?.delay ?? 0
+      const baseDelay = baseHit.delay ?? 0
+      const timer = Math.max(0, Math.max(delaySeconds, 0) + Math.max(firstExtraDelay - baseDelay, 0))
+      const now = this.lastTickAt || getNow()
+      this.monsterFollowup = {
+        source: skill.id,
+        skillId: skill.id,
+        stage: 'telegraph',
+        timer,
+        delay: firstExtraDelay,
+        baseMultiplier: baseHit.multiplier ?? 1,
+        hits: extraHits,
+        nextHitIndex: 0,
+        lastHitDelay: baseDelay,
+        label: skill.comboLabel ?? `×${hits.length}`,
+        lastUpdatedAt: now,
+      }
+    },
+    executeReadyMonsterSkill(): boolean {
+      if (!this.monster || this.concluded !== 'idle') return false
+      let skill = this.monsterNextSkill
+      if (!skill) {
+        skill = this.selectMonsterSkill(0)
+      }
+      if (!skill) return false
+      this.monsterNextSkill = null
+      this.monsterNextSkillTimer = 0
+      this.monsterNextSkillTotal = 0
+      this.monsterCurrentSkill = skill
+      this.monsterSkillCooldowns[skill.id] = skill.cooldown
+      this.monsterAttack(skill)
+      return true
+    },
+    activateMonsterComboSequence(
+      skill: MonsterSkillDefinition | null | undefined,
+      baseHit: MonsterSkillHit,
+      extraHits: MonsterSkillHit[],
+    ) {
+      if (!skill || extraHits.length === 0) {
+        if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
+          this.monsterFollowup = null
+        }
+        return
+      }
+      const now = this.lastTickAt || getNow()
+      const baseDelay = baseHit.delay ?? 0
+      const nextHit = extraHits[0]
+      if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph' && this.monsterFollowup.skillId === skill.id) {
+        this.monsterFollowup.stage = 'active'
+        this.monsterFollowup.nextHitIndex = 0
+        this.monsterFollowup.hits = extraHits
+        this.monsterFollowup.timer = nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0
+        this.monsterFollowup.lastHitDelay = baseDelay
+        this.monsterFollowup.baseMultiplier = baseHit.multiplier ?? 1
+        this.monsterFollowup.lastUpdatedAt = now
+      } else {
+        this.monsterFollowup = {
+          source: skill.id,
+          skillId: skill.id,
+          stage: 'active',
+          timer: nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0,
+          delay: nextHit?.delay ?? 0,
+          baseMultiplier: baseHit.multiplier ?? 1,
+          hits: extraHits,
+          nextHitIndex: 0,
+          lastHitDelay: baseDelay,
+          label: skill.comboLabel ?? `×${extraHits.length + 1}`,
+          lastUpdatedAt: now,
+        }
+      }
+    },
+    onMonsterSkillResolved(skill: MonsterSkillDefinition | null) {
+      if (!skill) {
+        this.monsterCurrentSkill = null
+        return
+      }
+      const delay = Math.max(0, skill.aftercast ?? 0)
+      this.monsterCurrentSkill = null
+      this.planNextMonsterSkill(delay)
     },
     clearRematchTimer() {
       if (this.rematchTimer !== null) {
@@ -416,61 +593,6 @@ export const useBattleStore = defineStore('battle', {
       this.loopHandle = setInterval(() => {
         this.tick()
       }, TICK_INTERVAL_MS)
-    },
-    scheduleMonsterComboTelegraph() {
-      if (this.concluded !== 'idle') return
-      const monster = this.monster
-      if (!monster) return
-      if (this.monsterFollowup) return
-      const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
-      const selector = monster.skillSelector ?? resolveMonsterSkillSelector(monster)
-      const comboSkills = new Map<string, MonsterSkillDefinition>()
-      if (profile.basic.hits.length > 1) {
-        comboSkills.set(profile.basic.id, profile.basic)
-      }
-      profile.extras.forEach((skill) => {
-        if (skill.hits.length > 1) {
-          comboSkills.set(skill.id, skill)
-        }
-      })
-      if (comboSkills.size === 0) return
-      const timeToNextAttack = Math.max(0, this.monsterTimer)
-      const skillStates: Record<string, number> = {
-        [profile.basic.id]: 0,
-      }
-      profile.extras.forEach((skill) => {
-        const remaining = this.monsterSkillCooldowns[skill.id] ?? 0
-        skillStates[skill.id] = Math.max(remaining - timeToNextAttack, 0)
-      })
-      const rng = makeRng(this.rngSeed ^ 0x3c6ef372)
-      this.rngSeed = (this.rngSeed + 0xa4093822) >>> 0
-      const choice = selector({ monster, skillStates, rng })
-      if (!choice) return
-      const selectedSkill = comboSkills.get(choice)
-      if (!selectedSkill) return
-      const cooldownState = skillStates[choice] ?? 0
-      if (cooldownState > 0) return
-      const hits = selectedSkill.hits ?? []
-      if (hits.length <= 1) return
-      const baseHit = hits[0]!
-      const extraHits = hits.slice(1)
-      const firstExtraDelay = extraHits.length > 0 ? extraHits[0]!.delay : 0
-      if (choice !== profile.basic.id) {
-        this.monsterSkillCooldowns[choice] = selectedSkill.cooldown
-      }
-      this.monsterFollowup = {
-        source: choice,
-        skillId: choice,
-        stage: 'telegraph',
-        timer: timeToNextAttack + firstExtraDelay,
-        delay: firstExtraDelay,
-        baseMultiplier: baseHit.multiplier,
-        hits: extraHits,
-        nextHitIndex: 0,
-        lastHitDelay: baseHit.delay,
-        label: selectedSkill.comboLabel ?? `×${hits.length}`,
-        lastUpdatedAt: this.lastTickAt || getNow(),
-      }
     },
     stopLoop() {
       if (this.loopHandle !== null) {
@@ -583,17 +705,16 @@ export const useBattleStore = defineStore('battle', {
         }
       }
 
-      this.monsterTimer -= delta
-      let attacksResolved = 0
-      while (this.monsterTimer <= 0 && this.concluded === 'idle' && this.monster) {
-        const interval = resolveMonsterAttackInterval(this.monster)
-        this.monsterAttack()
-        this.monsterTimer += interval
-        attacksResolved += 1
+      if (this.monsterNextSkillTimer > 0) {
+        this.monsterNextSkillTimer = Math.max(0, this.monsterNextSkillTimer - delta)
       }
-
-      if (attacksResolved > 0) {
-        this.scheduleMonsterComboTelegraph()
+      let actionsResolved = 0
+      while (this.monster && this.concluded === 'idle' && this.monsterNextSkillTimer <= 0) {
+        const executed = this.executeReadyMonsterSkill()
+        if (!executed) break
+        actionsResolved += 1
+        if (actionsResolved >= MAX_MONSTER_ACTIONS_PER_TICK) break
+        if (this.monsterNextSkillTimer > 0) break
       }
 
       const followup = this.monsterFollowup
@@ -771,7 +892,10 @@ export const useBattleStore = defineStore('battle', {
       this.monsterHp = 0
       this.skillCooldowns = Array(slotCount).fill(0)
       this.itemCooldowns = {}
-      this.monsterTimer = DEFAULT_MONSTER_ATTACK_INTERVAL
+      this.monsterNextSkill = null
+      this.monsterNextSkillTimer = 0
+      this.monsterNextSkillTotal = 0
+      this.monsterCurrentSkill = null
       this.lastTickAt = 0
       this.actionLockUntil = null
       this.pendingDodge = null
@@ -1429,25 +1553,23 @@ export const useBattleStore = defineStore('battle', {
       this.pushFloat(`-${dmg}`, 'hitE', variant)
       this.triggerFlash(source)
     },
-    monsterAttack() {
+    monsterAttack(skill?: MonsterSkillDefinition) {
       if (!this.monster || this.concluded !== 'idle') return
-      let baseMultiplier = 1
-      if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
-        this.monsterFollowup.stage = 'active'
-        this.monsterFollowup.nextHitIndex = 0
-        const baseDelay = this.monsterFollowup.lastHitDelay ?? 0
-        const nextHit = this.monsterFollowup.hits[this.monsterFollowup.nextHitIndex]
-        this.monsterFollowup.timer = nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0
-        this.monsterFollowup.lastUpdatedAt = this.lastTickAt || getNow()
-        baseMultiplier = this.monsterFollowup.baseMultiplier ?? 1
+      const currentSkill = skill ?? this.monsterCurrentSkill
+      const hits = currentSkill?.hits ?? []
+      const baseHit = hits[0]
+      let baseMultiplier = baseHit?.multiplier ?? 1
+      if (hits.length > 1 && baseHit) {
+        this.activateMonsterComboSequence(currentSkill, baseHit, hits.slice(1))
+      } else if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
+        this.monsterFollowup = null
       }
       const rng = makeRng(this.rngSeed ^ 0x517cc1b7)
       this.rngSeed = (this.rngSeed + 0x7f4a7c15) >>> 0
 
       this.resolveMonsterAttackWithRng(rng, baseMultiplier)
-      if (this.monsterFollowup && this.monsterFollowup.stage === 'active' && this.monsterFollowup.hits.length === 0) {
-        this.monsterFollowup = null
-        this.scheduleMonsterComboTelegraph()
+      if (!currentSkill || hits.length <= 1) {
+        this.onMonsterSkillResolved(currentSkill ?? null)
       }
     },
     resolveMonsterAttackWithRng(rng: () => number, damageMultiplier = 1) {
@@ -1558,7 +1680,7 @@ export const useBattleStore = defineStore('battle', {
       if (!hit) {
         this.monsterFollowup = null
         if (this.concluded === 'idle') {
-          this.scheduleMonsterComboTelegraph()
+          this.onMonsterSkillResolved(this.monsterCurrentSkill)
         }
         return
       }
@@ -1576,7 +1698,7 @@ export const useBattleStore = defineStore('battle', {
       } else {
         this.monsterFollowup = null
         if (this.concluded === 'idle') {
-          this.scheduleMonsterComboTelegraph()
+          this.onMonsterSkillResolved(this.monsterCurrentSkill)
         }
       }
     },

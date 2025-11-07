@@ -502,7 +502,10 @@ export interface BattleState {
   lastTickAt: number
   battleStartedAt: number | null
   battleEndedAt: number | null
-  monsterTimer: number
+  monsterNextSkill: MonsterSkillDefinition | null
+  monsterNextSkillTimer: number
+  monsterNextSkillTotal: number
+  monsterCurrentSkill: MonsterSkillDefinition | null
   monsterSkillCooldowns: Record<string, number>
   skillCooldowns: number[]
   itemCooldowns: Record<string, number>

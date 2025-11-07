@@ -11,6 +11,13 @@ const GOLDEN_SHEEP_DOUBLE_STAB_ID = 'monster.golden_sheep_double_stab'
 const WIND_RAPTOR_ID = 'boss-wind-raptor'
 const WIND_RAPTOR_BLADE_DANCE_ID = 'monster.wind_raptor_blade_dance'
 
+function cloneSkillDefinition(definition: MonsterSkillDefinition): MonsterSkillDefinition {
+  return {
+    ...definition,
+    hits: definition.hits.map((hit) => ({ ...hit })),
+  }
+}
+
 const BASIC_MONSTER_ATTACK: MonsterSkillDefinition = {
   id: DEFAULT_SKILL_ID,
   name: '普通攻击',
@@ -70,10 +77,13 @@ const extraSkillMap: Record<string, MonsterSkillDefinition[]> = {
 }
 
 export function resolveMonsterSkillProfile(monster: Monster): MonsterSkillProfile {
-  const extras = extraSkillMap[monster.id] ?? []
+  const extras = (extraSkillMap[monster.id] ?? []).map(cloneSkillDefinition)
+  const basic = cloneSkillDefinition(BASIC_MONSTER_ATTACK)
+  const attackInterval = monster.attackInterval > 0 ? monster.attackInterval : BASIC_MONSTER_ATTACK.cooldown
+  basic.cooldown = attackInterval
   return {
-    basic: BASIC_MONSTER_ATTACK,
-    extras: [...extras],
+    basic,
+    extras,
   }
 }
 
