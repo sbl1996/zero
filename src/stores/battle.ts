@@ -31,6 +31,8 @@ import type {
   QiOperationState,
   SkillDefinition,
   FloatText,
+  PendingItemUseState,
+  SkillChargeState,
 } from '@/types/domain'
 
 const ITEM_MAP = new Map(ITEMS.map((item) => [item.id, item]))
@@ -63,6 +65,7 @@ const DODGE_SKILL_ID = 'qi_dodge'
 const DODGE_REFUND_PERCENT = 0.04
 const GOLDEN_SHEEP_ID = 'boss-golden-sheep'
 const GOLDEN_SHEEP_FOLLOWUP_LABEL = '×2'
+const DEFAULT_ITEM_USE_DURATION_MS = 1000
 
 const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
   iron: 1,
@@ -220,6 +223,19 @@ function resolveMonsterPenetration(monster: Monster) {
   }
 }
 
+function resolveItemUseDurationMs(itemId: string, _player: ReturnType<typeof usePlayerStore>): number {
+  const definition = ITEM_MAP.get(itemId)
+  let base = DEFAULT_ITEM_USE_DURATION_MS
+  if (definition && 'useDurationMs' in definition && typeof definition.useDurationMs === 'number') {
+    base = Math.max(definition.useDurationMs, 0)
+  }
+  if (!Number.isFinite(base) || base < 0) {
+    base = DEFAULT_ITEM_USE_DURATION_MS
+  }
+  // Hook for future modifiers (talents or gear can adjust drink speed)
+  return base
+}
+
 function initialState(): BattleState {
   return {
     monster: null,
@@ -243,8 +259,10 @@ function initialState(): BattleState {
     itemCooldowns: {},
     actionLockUntil: null,
     pendingDodge: null,
-    pendingSkillCast: null,
+    pendingItemUse: null,
     monsterFollowup: null,
+    skillCharges: Array(SKILL_SLOT_COUNT).fill(null),
+    activeSkillChargeSlot: null,
     playerQi: 0,
     playerQiMax: 0,
     qiOperation: defaultQiOperationState(),
@@ -302,6 +320,8 @@ export const useBattleStore = defineStore('battle', {
     exitBattle() {
       this.stopLoop()
       this.clearRematchTimer()
+      const player = usePlayerStore()
+      const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
       this.monster = null
       this.monsterHp = 0
       this.monsterQi = 0
@@ -309,13 +329,15 @@ export const useBattleStore = defineStore('battle', {
       this.floatTexts = []
       this.flashEffects = []
       this.rematchTimer = null
-      this.skillCooldowns = Array(this.skillCooldowns.length || SKILL_SLOT_COUNT).fill(0)
+      this.skillCooldowns = Array(slotCount).fill(0)
       this.itemCooldowns = {}
       this.monsterSkillCooldowns = {}
       this.actionLockUntil = null
       this.pendingDodge = null
-      this.pendingSkillCast = null
+      this.pendingItemUse = null
       this.monsterFollowup = null
+      this.skillCharges = Array(slotCount).fill(null)
+      this.activeSkillChargeSlot = null
       this.monsterTimer = DEFAULT_MONSTER_ATTACK_INTERVAL
       this.lastTickAt = 0
       this.battleStartedAt = null
@@ -324,7 +346,6 @@ export const useBattleStore = defineStore('battle', {
       this.playerQiMax = 0
       this.qiOperation = defaultQiOperationState()
       this.resetCultivationMetrics()
-      const player = usePlayerStore()
       player.setRecoveryMode('idle')
       this.skillChain = {
         lastSkillId: null,
@@ -368,8 +389,10 @@ export const useBattleStore = defineStore('battle', {
       })
       this.actionLockUntil = null
       this.pendingDodge = null
-      this.pendingSkillCast = null
+      this.pendingItemUse = null
       this.monsterFollowup = null
+      this.skillCharges = Array(slotCount).fill(null)
+      this.activeSkillChargeSlot = null
       this.monsterTimer = resolveMonsterAttackInterval(monster)
       this.lastTickAt = getNow()
       this.skillChain = {
@@ -511,7 +534,8 @@ export const useBattleStore = defineStore('battle', {
 
       if (delta <= 0) return
 
-      this.resolvePendingSkillCast(now)
+      this.tickSkillCharges(delta, now)
+      this.resolvePendingItemUse(now)
       if (!this.monster || this.concluded !== 'idle') return
 
       for (let index = 0; index < this.skillCooldowns.length; index += 1) {
@@ -708,6 +732,8 @@ export const useBattleStore = defineStore('battle', {
       const currentMonster = this.monster
       this.stopLoop()
       this.resetCultivationMetrics()
+      const player = usePlayerStore()
+      const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
       this.concluded = result
       this.battleEndedAt = Date.now()
       this.loot = loot
@@ -720,15 +746,16 @@ export const useBattleStore = defineStore('battle', {
         }
       }
       this.monsterHp = 0
-      this.skillCooldowns = Array(this.skillCooldowns.length || SKILL_SLOT_COUNT).fill(0)
+      this.skillCooldowns = Array(slotCount).fill(0)
       this.itemCooldowns = {}
       this.monsterTimer = DEFAULT_MONSTER_ATTACK_INTERVAL
       this.lastTickAt = 0
       this.actionLockUntil = null
       this.pendingDodge = null
-      this.pendingSkillCast = null
+      this.pendingItemUse = null
       this.monsterFollowup = null
-      const player = usePlayerStore()
+      this.skillCharges = Array(slotCount).fill(null)
+      this.activeSkillChargeSlot = null
       player.setRecoveryMode('idle')
       if (result === 'victory') {
         if (currentMonster) {
@@ -751,9 +778,17 @@ export const useBattleStore = defineStore('battle', {
 
       const player = usePlayerStore()
       const silent = options?.silent ?? false
+      if (this.pendingItemUse) {
+        if (!silent) this.pushFloat('正在使用道具', 'miss')
+        return false
+      }
       const now = getNow()
       if (this.actionLockUntil !== null && now < this.actionLockUntil) {
         if (!silent) this.pushFloat('动作硬直中', 'miss')
+        return false
+      }
+      if (this.activeSkillChargeSlot !== null && this.activeSkillChargeSlot !== slotIndex) {
+        if (!silent) this.pushFloat('蓄力中', 'miss')
         return false
       }
       const loadout = player.skills.loadout
@@ -792,6 +827,20 @@ export const useBattleStore = defineStore('battle', {
       const nowReal = Date.now()
       this.cleanupSkillCooldownBonuses(nowReal)
 
+      const chargeTime = resolveSkillChargeTime(skill, level)
+      const aftercastTime = resolveSkillAftercast(skill, level)
+      if (chargeTime > 0) {
+        return this.startSkillCharge(slotIndex, {
+          skill,
+          skillId,
+          level,
+          chargeTime,
+          aftercastTime,
+          silent,
+          now,
+        })
+      }
+
       let qiCost = 0
       if (skill.cost.type === 'qi') {
         qiCost = resolveQiCost(skill, level, player.res.qiMax)
@@ -801,48 +850,305 @@ export const useBattleStore = defineStore('battle', {
         }
         if (qiCost > 0) this.recordQiSpent(qiCost)
       }
-      const chargeTime = resolveSkillChargeTime(skill, level)
-      const aftercastTime = resolveSkillAftercast(skill, level)
-      const totalLockMs = (chargeTime + aftercastTime) * 1000
+
+      const totalLockMs = aftercastTime * 1000
       if (totalLockMs > 0) {
         const unlockAt = now + totalLockMs
         this.actionLockUntil = this.actionLockUntil === null ? unlockAt : Math.max(this.actionLockUntil, unlockAt)
       }
 
-      let skillCooldown = resolveSkillCooldown(skill, level, FALLBACK_SKILL_COOLDOWN)
+      const skillCooldown = this.resolveEffectiveSkillCooldown(skillId, skill, level, nowReal)
+      this.setSkillCooldownForLoadout(loadout, skillId, skillCooldown)
+
+      return this.executeSkillEffect(skill, skillId, qiCost, silent)
+    },
+    startSkillCharge(
+      slotIndex: number,
+      options: {
+        skill: SkillDefinition
+        skillId: string
+        level: number
+        chargeTime: number
+        aftercastTime: number
+        silent: boolean
+        now: number
+      },
+    ): boolean {
+      const player = usePlayerStore()
+      const { skill, skillId, level, chargeTime, aftercastTime, silent, now } = options
+      if (chargeTime <= 0) return false
+
+      const loadout = player.skills.loadout
+      const existing = this.skillCharges[slotIndex]
+      const progress = existing ? Math.max(0, Math.min(existing.progress, 1)) : 0
+
+      let qiCost = 0
+      if (skill.cost.type === 'qi') {
+        qiCost = resolveQiCost(skill, level, player.res.qiMax)
+        if (qiCost > 0 && player.res.qi < qiCost) {
+          if (!silent) this.pushFloat('斗气不足', 'miss')
+          return false
+        }
+      }
+
+      const chargeState: SkillChargeState = {
+        slotIndex,
+        skillId,
+        level,
+        chargeTime,
+        aftercastTime,
+        qiCost,
+        status: progress >= 1 ? 'charged' : 'charging',
+        progress,
+        startedAt: now,
+        lastUpdatedAt: now,
+        silent: existing ? existing.silent && silent : silent,
+      }
+
+      this.skillCharges.splice(slotIndex, 1, chargeState)
+      this.activeSkillChargeSlot = slotIndex
+
+      // Reset cooldown display while charging (ensure consistency if resuming)
+      this.setSkillCooldownForLoadout(loadout, skillId, 0)
+
+      return true
+    },
+    releaseSkillCharge(slotIndex: number, options?: { silent?: boolean }): boolean {
+      const state = this.skillCharges[slotIndex]
+      if (!state) return false
+      const now = getNow()
+      const silentOverride = options?.silent
+
+      this.advanceChargeState(state, now)
+
+      if (state.progress >= 1 && state.status !== 'rewinding') {
+        const committed = this.commitChargedSkill(state, now, silentOverride)
+        if (committed) {
+          this.skillCharges.splice(slotIndex, 1, null)
+          if (this.activeSkillChargeSlot === slotIndex) {
+            this.activeSkillChargeSlot = null
+          }
+          return true
+        }
+        state.status = 'rewinding'
+        state.lastUpdatedAt = now
+      } else {
+        state.status = 'rewinding'
+        state.lastUpdatedAt = now
+      }
+
+      if (this.activeSkillChargeSlot === slotIndex) {
+        this.activeSkillChargeSlot = null
+      }
+      return false
+    },
+    cancelSkillCharge(slotIndex: number) {
+      const state = this.skillCharges[slotIndex]
+      if (!state) return
+      if (state.status === 'rewinding') return
+      const now = getNow()
+      this.advanceChargeState(state, now)
+      state.status = 'rewinding'
+      state.lastUpdatedAt = now
+      if (this.activeSkillChargeSlot === slotIndex) {
+        this.activeSkillChargeSlot = null
+      }
+    },
+    advanceChargeState(state: SkillChargeState, now: number) {
+      const delta = Math.max(0, (now - state.lastUpdatedAt) / 1000)
+      if (delta <= 0) return
+      if (state.status === 'charging') {
+        const progress = state.progress + delta / Math.max(state.chargeTime, 0.001)
+        state.progress = progress >= 1 ? 1 : progress
+        state.status = state.progress >= 1 ? 'charged' : 'charging'
+      } else if (state.status === 'charged') {
+        state.progress = 1
+      } else if (state.status === 'rewinding') {
+        const progress = state.progress - delta / Math.max(state.chargeTime, 0.001)
+        state.progress = progress <= 0 ? 0 : progress
+      }
+      state.lastUpdatedAt = now
+    },
+    commitChargedSkill(state: SkillChargeState, now: number, silentOverride?: boolean): boolean {
+      const player = usePlayerStore()
+      const skill = getSkillDefinition(state.skillId)
+      if (!skill) return false
+
+      const silent = silentOverride ?? state.silent ?? false
+      const qiCost = state.qiCost
+      if (skill.cost.type === 'qi') {
+        if (qiCost > 0 && player.res.qi < qiCost) {
+          if (!silent) this.pushFloat('斗气不足', 'miss')
+          return false
+        }
+        if (qiCost > 0 && !player.spendQi(qiCost)) {
+          if (!silent) this.pushFloat('斗气不足', 'miss')
+          return false
+        }
+        if (qiCost > 0) this.recordQiSpent(qiCost)
+      }
+
+      const nowReal = Date.now()
+      this.cleanupSkillCooldownBonuses(nowReal)
+      const cooldown = this.resolveEffectiveSkillCooldown(state.skillId, skill, state.level, nowReal)
+      const loadout = player.skills.loadout
+      this.setSkillCooldownForLoadout(loadout, state.skillId, cooldown)
+
+      const aftercastLock = state.aftercastTime * 1000
+      if (aftercastLock > 0) {
+        const unlockAt = now + aftercastLock
+        this.actionLockUntil = this.actionLockUntil === null ? unlockAt : Math.max(this.actionLockUntil, unlockAt)
+      }
+
+      return this.executeSkillEffect(skill, state.skillId, qiCost, silent)
+    },
+    resolveEffectiveSkillCooldown(skillId: string, skill: SkillDefinition, level: number, nowReal: number): number {
+      let cooldown = resolveSkillCooldown(skill, level, FALLBACK_SKILL_COOLDOWN)
       const bonus = this.skillCooldownBonuses[skillId]
       if (bonus) {
         if (nowReal <= bonus.expiresAt) {
           const reduction = Math.min(Math.max(bonus.reductionPercent, 0), 0.9)
-          skillCooldown *= Math.max(0, 1 - reduction)
+          cooldown *= Math.max(0, 1 - reduction)
         }
         delete this.skillCooldownBonuses[skillId]
       }
+      return cooldown
+    },
+    setSkillCooldownForLoadout(loadout: Array<string | null>, skillId: string, cooldown: number) {
       for (let index = 0; index < loadout.length; index += 1) {
         if (loadout[index] === skillId) {
-          this.skillCooldowns[index] = skillCooldown
+          this.skillCooldowns[index] = cooldown
         }
       }
-      if (chargeTime > 0) {
-        this.pendingSkillCast = {
-          skillId,
-          resolveAt: now + chargeTime * 1000,
-          qiCost,
-          silent,
+    },
+    tickSkillCharges(deltaSeconds: number, now: number) {
+      if (!Number.isFinite(deltaSeconds) || deltaSeconds <= 0) return
+      const readyStates: SkillChargeState[] = []
+      let activeSlot: number | null = null
+      for (let index = 0; index < this.skillCharges.length; index += 1) {
+        const state = this.skillCharges[index]
+        if (!state) continue
+        const rate = deltaSeconds / Math.max(state.chargeTime, 0.001)
+        if (state.status === 'charging') {
+          const progress = state.progress + rate
+          state.progress = progress >= 1 ? 1 : progress
+          state.status = state.progress >= 1 ? 'charged' : 'charging'
+          state.lastUpdatedAt = now
+          if (state.status === 'charged') {
+            readyStates.push(state)
+          } else {
+            activeSlot = state.slotIndex
+          }
+        } else if (state.status === 'charged') {
+          state.progress = 1
+          state.lastUpdatedAt = now
+          readyStates.push(state)
+        } else if (state.status === 'rewinding') {
+          const progress = state.progress - rate
+          if (progress <= 0) {
+            this.skillCharges.splice(index, 1, null)
+            if (this.activeSkillChargeSlot === state.slotIndex) {
+              this.activeSkillChargeSlot = null
+            }
+            continue
+          }
+          state.progress = progress
+          state.lastUpdatedAt = now
         }
-        return true
       }
 
-      return this.executeSkillEffect(skill, skillId, qiCost, silent)
+      if (readyStates.length > 0) {
+        for (const state of readyStates) {
+          const committed = this.commitChargedSkill(state, now, state.silent)
+          if (committed) {
+            this.skillCharges.splice(state.slotIndex, 1, null)
+            if (this.activeSkillChargeSlot === state.slotIndex) {
+              this.activeSkillChargeSlot = null
+            }
+          } else {
+            state.status = 'rewinding'
+            state.lastUpdatedAt = now
+          }
+        }
+      }
+
+      if (activeSlot !== null) {
+        this.activeSkillChargeSlot = activeSlot
+      } else {
+        const hasActive = this.skillCharges.some(
+          (entry) => entry && (entry.status === 'charging' || entry.status === 'charged'),
+        )
+        if (!hasActive) {
+          this.activeSkillChargeSlot = null
+        }
+      }
     },
-    resolvePendingSkillCast(nowMs: number) {
-      const pending = this.pendingSkillCast
+    resolvePendingItemUse(nowMs: number) {
+      const pending = this.pendingItemUse
       if (!pending) return
-      if (pending.resolveAt > nowMs) return
-      const skill = getSkillDefinition(pending.skillId)
-      this.pendingSkillCast = null
-      if (!skill) return
-      this.executeSkillEffect(skill, pending.skillId, pending.qiCost, pending.silent)
+      const duration = Math.max(pending.durationMs, 0)
+      let progress: number
+      if (duration > 0) {
+        progress = (nowMs - pending.startedAt) / duration
+      } else {
+        progress = 1
+      }
+      if (!Number.isFinite(progress)) {
+        progress = duration > 0 ? 0 : 1
+      }
+      progress = Math.max(0, Math.min(progress, 1))
+      if (progress !== pending.progress) {
+        pending.progress = progress
+      }
+      if (progress < 1) {
+        this.pendingItemUse = pending
+        return
+      }
+      this.pendingItemUse = null
+      void this.finishPendingItemUse(pending)
+    },
+    async finishPendingItemUse(pending: PendingItemUseState) {
+      if (!this.monster || this.concluded !== 'idle') return
+
+      const inventory = useInventoryStore()
+      const player = usePlayerStore()
+
+      if (!inventory.spend(pending.itemId, 1)) {
+        if (!pending.silent) this.pushFloat('无库存', 'miss')
+        return
+      }
+
+      const beforeHp = player.res.hp
+      const beforeQi = player.res.qi
+      const beforeOverflow = player.cultivation.realm.overflow
+
+      const applied = await player.useItem(pending.itemId)
+      if (!applied) {
+        inventory.addItem(pending.itemId, 1)
+        if (!pending.silent) this.pushFloat('未生效', 'miss')
+        return
+      }
+
+      const hpGain = Math.max(player.res.hp - beforeHp, 0)
+      if (hpGain > 0) {
+        this.pushFloat(`+${Math.round(hpGain)}`, 'heal')
+      }
+
+      const qiGain = Math.max(player.res.qi - beforeQi, 0)
+      if (qiGain > 0) {
+        this.recordQiRestored(qiGain)
+        this.pushFloat(`斗气+${Math.round(qiGain)}`, 'heal')
+      }
+
+      const overflowChange = Math.max(player.cultivation.realm.overflow - beforeOverflow, 0)
+      if (overflowChange > 0) {
+        this.pushFloat(`ΔBP+${overflowChange.toFixed(2)}`, 'loot')
+      }
+
+      this.itemCooldowns[pending.itemId] = ITEM_COOLDOWN
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
     },
     executeSkillEffect(skill: SkillDefinition, skillId: string, qiCost: number, silent: boolean): boolean {
       if (!this.monster || this.concluded !== 'idle') return false
@@ -992,6 +1298,15 @@ export const useBattleStore = defineStore('battle', {
 
       return true
     },
+    cancelItemUse(reason: 'cancelled' | 'interrupted' = 'cancelled'): boolean {
+      const pending = this.pendingItemUse
+      if (!pending) return false
+      this.pendingItemUse = null
+      if (reason === 'interrupted' && !pending.silent) {
+        this.pushFloat('喝药被打断', 'miss')
+      }
+      return true
+    },
     handleMonsterDefeat(player: ReturnType<typeof usePlayerStore>) {
       if (!this.monster) return
 
@@ -1033,10 +1348,17 @@ export const useBattleStore = defineStore('battle', {
 
       const silent = options?.silent ?? false
       const now = getNow()
+
+      if (this.pendingItemUse) {
+        if (!silent) this.pushFloat('正在使用道具', 'miss')
+        return false
+      }
+
       if (this.actionLockUntil !== null && now < this.actionLockUntil) {
         if (!silent) this.pushFloat('动作硬直中', 'miss')
         return false
       }
+
       const cooldownRemaining = this.getItemCooldown(itemId)
       if (cooldownRemaining > 0) {
         if (!silent) this.pushFloat(`冷却中 ${cooldownRemaining.toFixed(1)}s`, 'miss')
@@ -1052,42 +1374,26 @@ export const useBattleStore = defineStore('battle', {
         return false
       }
 
-      const used = inventory.spend(itemId, 1)
-      if (!used) {
+      const quantity = inventory.quantity(itemId)
+      if (quantity <= 0) {
         if (!silent) this.pushFloat('无库存', 'miss')
         return false
       }
 
-      const beforeHp = player.res.hp
-      const beforeQi = player.res.qi
-      const beforeOverflow = player.cultivation.realm.overflow
-      const applied = await player.useItem(itemId)
-      if (!applied) {
-        inventory.addItem(itemId, 1)
-        if (!silent) this.pushFloat('未生效', 'miss')
-        return false
+      const durationMs = resolveItemUseDurationMs(itemId, player)
+      this.pendingItemUse = {
+        itemId,
+        startedAt: now,
+        resolveAt: now + durationMs,
+        durationMs,
+        progress: durationMs > 0 ? 0 : 1,
+        silent,
       }
 
-      const hpGain = Math.max(player.res.hp - beforeHp, 0)
-      if (hpGain > 0) {
-        this.pushFloat(`+${Math.round(hpGain)}`, 'heal')
+      if (durationMs <= 0) {
+        this.resolvePendingItemUse(now)
       }
 
-      const qiGain = Math.max(player.res.qi - beforeQi, 0)
-      if (qiGain > 0) {
-        this.recordQiRestored(qiGain)
-        this.pushFloat(`斗气+${Math.round(qiGain)}`, 'heal')
-      }
-
-      const overflowChange = Math.max(player.cultivation.realm.overflow - beforeOverflow, 0)
-      if (overflowChange > 0) {
-        this.pushFloat(`ΔBP+${overflowChange.toFixed(2)}`, 'loot')
-      }
-
-      this.itemCooldowns[itemId] = ITEM_COOLDOWN
-      this.playerQi = player.res.qi
-      this.playerQiMax = player.res.qiMax
-      this.qiOperation = cloneQiOperationState(player.res.operation)
       return true
     },
     applyPlayerDamage(
@@ -1162,6 +1468,8 @@ export const useBattleStore = defineStore('battle', {
         this.qiOperation = cloneQiOperationState(player.res.operation)
         return
       }
+
+      this.cancelItemUse('interrupted')
 
       const penetration = resolveMonsterPenetration(this.monster)
       const defRef = getDefRefForRealm(player.cultivation.realm)

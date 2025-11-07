@@ -7,6 +7,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
 import { useInventoryStore } from '@/stores/inventory'
 import { getSkillDefinition } from '@/data/skills'
+import { resolveSkillChargeTime } from '@/composables/useSkills'
 import { quickConsumableIds } from '@/data/items'
 import { getMonsterMap } from '@/data/monsters'
 import { getAutoMonsterPortraits } from '@/utils/monsterPortraits'
@@ -107,6 +108,7 @@ const battleDurationText = computed(() => {
 const autoCastTimers = ref<Map<number, ReturnType<typeof setInterval>>>(new Map())
 const autoCastHoldStart = ref<Map<number, number>>(new Map())
 const isLongPress = ref<Map<number, boolean>>(new Map())
+const activePressSlots = ref<Set<number>>(new Set())
 const AUTO_CAST_DELAY = 1000 // 1 second hold to start auto-casting
 const AUTO_CAST_INTERVAL = 200 // 200ms interval between casts
 
@@ -117,6 +119,7 @@ const hotkeyLabels = ['Z', 'X', 'C', 'V']
 const ITEM_HOTKEYS = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'] as const
 const itemHotkeyLabels = ['NUM1', 'NUM2', 'NUM3', 'NUM4']
 const itemHotkeyMap = new Map<string, number>(ITEM_HOTKEYS.map((code, index) => [code, index]))
+const activeItemHotkeys = new Set<string>()
 
 function describeMonsterRealm(monster: Monster | null | undefined): string {
   if (!monster?.realmTier) return '未知'
@@ -149,13 +152,32 @@ const skillSlots = computed(() => {
   const { qi } = res.value
   const operationMode = res.value.operation?.mode ?? 'idle'
   const actionLockUntil = battle.actionLockUntil
+  const activeChargeSlot = battle.activeSkillChargeSlot
   const nowMs = getNowMs()
   const isActionLocked = actionLockUntil !== null && actionLockUntil > nowMs
+
   return playerStore.skills.loadout.map((skillId, index) => {
     const skill = getSkillDefinition(skillId)
     const cost = skill?.cost
     const label = skill?.name ?? '空槽'
     const iconSrc = skill?.icon ?? null
+
+    const progressState = skillId ? playerStore.ensureSkillProgress(skillId) : null
+    const level = progressState ? Math.max(progressState.level, 1) : 1
+    const requiredChargeTime = skill && progressState ? resolveSkillChargeTime(skill, level) : 0
+    const requiresCharge = requiredChargeTime > 0
+
+    const chargeState = battle.skillCharges[index] ?? null
+    const chargeProgress = chargeState ? Math.max(0, Math.min(chargeState.progress, 1)) : 0
+    const isCharging = Boolean(chargeState && chargeState.status === 'charging')
+    const isChargeReady = Boolean(chargeState && chargeState.status === 'charged')
+    const isRewinding = Boolean(chargeState && chargeState.status === 'rewinding')
+    const chargeAngle = Math.round(chargeProgress * 360 * 100) / 100
+    const chargeStyle = chargeProgress > 0 ? {
+      '--charge-angle': `${chargeAngle}deg`,
+      '--charge-progress': `${chargeProgress}`,
+    } : undefined
+
     const { label: costLabel, badge: costBadge, type: costType } = (() => {
       if (!skill) {
         return { label: '未装备', badge: null, type: null }
@@ -199,6 +221,9 @@ const skillSlots = computed(() => {
     } else if (operationMode === 'idle') {
       disabled = true
       reason = '需运转斗气'
+    } else if (activeChargeSlot !== null && activeChargeSlot !== index) {
+      disabled = true
+      reason = '蓄力中'
     } else if (cooldown > 0) {
       disabled = true
       reason = `冷却中 ${cooldown.toFixed(1)}s`
@@ -214,7 +239,7 @@ const skillSlots = computed(() => {
 
     // Check if auto-casting is active for this slot
     const isAutoCasting = autoCastTimers.value.has(index)
-    const isHolding = autoCastHoldStart.value.has(index) && !isLongPress.value.has(index)
+    const isHoldingAuto = autoCastHoldStart.value.has(index) && !isLongPress.value.has(index)
 
     // Get hotkey info for this slot
     const hotkey = index < SKILL_HOTKEYS.length ? SKILL_HOTKEYS[index] : null
@@ -237,11 +262,18 @@ const skillSlots = computed(() => {
       reason,
       isEmpty: !skill,
       isAutoCasting,
-      isHolding,
+      isHolding: isHoldingAuto,
       hasImage: Boolean(iconSrc),
       imageSrc: iconSrc,
       hotkey,
       hotkeyLabel,
+      requiresCharge,
+      chargeProgress,
+      chargeStyle,
+      isCharging,
+      isChargeReady,
+      isRewinding,
+      chargeActive: chargeProgress > 0,
     }
   })
 })
@@ -405,6 +437,8 @@ watch(
   (concluded) => {
     if (concluded !== 'idle') {
       stopAllAutoCast()
+      activeItemHotkeys.clear()
+      battle.cancelItemUse('cancelled')
     }
   },
 )
@@ -415,30 +449,96 @@ watch(enableHoldAutoCast, (enabled) => {
   }
 })
 
-function useSkill(slotIndex: number) {
-  // Don't use skill if this was a long press that's already being handled
-  if (isLongPress.value.has(slotIndex)) {
-    // Clear the long press flag after a short delay
+function handleSkillPress(slotIndex: number, event?: MouseEvent | TouchEvent) {
+  if (event instanceof MouseEvent && event.button !== 0) {
+    return
+  }
+
+  const slot = skillSlots.value[slotIndex]
+  if (!slot) return
+
+  activePressSlots.value.add(slotIndex)
+
+  if (slot.requiresCharge) {
+    const started = battle.playerUseSkill(slotIndex)
+    if (!started) {
+      activePressSlots.value.delete(slotIndex)
+    }
+    if (event && 'preventDefault' in event) {
+      event.preventDefault()
+    }
+    return
+  }
+
+  if (event && 'preventDefault' in event && event.type.startsWith('touch')) {
+    event.preventDefault()
+  }
+
+  if (slot.isEmpty || slot.disabled) return
+
+  startSkillHold(slotIndex, event)
+}
+
+function handleSkillRelease(slotIndex: number) {
+  if (!activePressSlots.value.has(slotIndex)) {
+    stopAutoCast(slotIndex)
+    return
+  }
+
+  const wasLongPress = isLongPress.value.has(slotIndex)
+  activePressSlots.value.delete(slotIndex)
+  stopAutoCast(slotIndex)
+
+  const slot = skillSlots.value[slotIndex]
+  if (!slot) return
+
+  if (slot.requiresCharge) {
+    battle.releaseSkillCharge(slotIndex)
+    return
+  }
+
+  if (wasLongPress) {
     setTimeout(() => {
       isLongPress.value.delete(slotIndex)
     }, 100)
     return
   }
+
   battle.playerUseSkill(slotIndex)
 }
 
-function useQuickItem(slotIndex: number) {
-  if (!battle.inBattle || battle.concluded !== 'idle') return
-  if (slotIndex < 0 || slotIndex >= inventory.quickSlots.length) return
+function handleSkillCancel(slotIndex: number) {
+  if (!activePressSlots.value.has(slotIndex)) {
+    stopAutoCast(slotIndex)
+    return
+  }
+  activePressSlots.value.delete(slotIndex)
+  stopAutoCast(slotIndex)
+
+  const slot = skillSlots.value[slotIndex]
+  if (slot?.requiresCharge) {
+    battle.cancelSkillCharge(slotIndex)
+  }
+}
+
+async function useQuickItem(slotIndex: number): Promise<boolean> {
+  if (!battle.inBattle || battle.concluded !== 'idle') return false
+  if (slotIndex < 0 || slotIndex >= inventory.quickSlots.length) return false
   const itemId = inventory.quickSlots[slotIndex]
-  if (typeof itemId !== 'string' || !quickConsumableIds.has(itemId)) return
-  battle.useItem(itemId).catch(() => {})
+  if (typeof itemId !== 'string' || !quickConsumableIds.has(itemId)) return false
+  try {
+    const started = await battle.useItem(itemId)
+    return Boolean(started)
+  } catch {
+    return false
+  }
 }
 
 // Auto-cast functions
 function startSkillHold(slotIndex: number, event?: MouseEvent | TouchEvent) {
   const slot = skillSlots.value[slotIndex]
   if (!slot || slot.disabled || slot.isEmpty) return
+  if (slot.requiresCharge) return
 
   if (!enableHoldAutoCast.value) return
 
@@ -467,6 +567,10 @@ function startAutoCast(slotIndex: number) {
   const attempt = (silent = true) => {
     const slot = skillSlots.value[slotIndex]
     if (!slot || slot.isEmpty) {
+      stopAutoCast(slotIndex)
+      return
+    }
+    if (slot.requiresCharge) {
       stopAutoCast(slotIndex)
       return
     }
@@ -520,6 +624,9 @@ function stopAllAutoCast() {
   // Clear all long press flags
   isLongPress.value.clear()
 
+  // Clear active presses
+  activePressSlots.value.clear()
+
   // Clear all auto-cast timers
   autoCastTimers.value.forEach((timer) => {
     clearInterval(timer)
@@ -556,7 +663,7 @@ function handleBossPortraitClick() {
 }
 
 // Keyboard event handler for skill hotkeys
-function handleKeyDown(event: KeyboardEvent) {
+async function handleKeyDown(event: KeyboardEvent) {
   // Only handle keydown events during active battle
   if (!battle.inBattle || battle.concluded !== 'idle') return
 
@@ -564,28 +671,55 @@ function handleKeyDown(event: KeyboardEvent) {
   const hotkeyIndex = SKILL_HOTKEYS.indexOf(key as typeof SKILL_HOTKEYS[number])
 
   if (hotkeyIndex !== -1) {
-    // Prevent default behavior and use the skill
     event.preventDefault()
-    useSkill(hotkeyIndex)
+    const slot = skillSlots.value[hotkeyIndex]
+    if (slot?.requiresCharge && event.repeat) return
+    const started = battle.playerUseSkill(hotkeyIndex)
+    if (slot?.requiresCharge && started) {
+      activePressSlots.value.add(hotkeyIndex)
+    }
     return
   }
 
   const itemSlotIndex = itemHotkeyMap.get(event.code)
   if (itemSlotIndex !== undefined) {
     event.preventDefault()
-    useQuickItem(itemSlotIndex)
+    if (activeItemHotkeys.has(event.code)) return
+    const started = await useQuickItem(itemSlotIndex)
+    if (started) {
+      activeItemHotkeys.add(event.code)
+    }
   }
+}
+
+function handleKeyUp(event: KeyboardEvent) {
+  const key = event.key.toLowerCase()
+  const hotkeyIndex = SKILL_HOTKEYS.indexOf(key as typeof SKILL_HOTKEYS[number])
+  if (hotkeyIndex !== -1) {
+    if (activePressSlots.value.has(hotkeyIndex)) {
+      battle.releaseSkillCharge(hotkeyIndex)
+      activePressSlots.value.delete(hotkeyIndex)
+    }
+    stopAutoCast(hotkeyIndex)
+  }
+
+  if (!activeItemHotkeys.has(event.code)) return
+  activeItemHotkeys.delete(event.code)
+  battle.cancelItemUse('cancelled')
 }
 
 onMounted(() => {
   // Add global keyboard event listener
   window.addEventListener('keydown', handleKeyDown)
+  window.addEventListener('keyup', handleKeyUp)
 })
 
 onBeforeUnmount(() => {
   // Remove keyboard event listener
   window.removeEventListener('keydown', handleKeyDown)
+  window.removeEventListener('keyup', handleKeyUp)
 
+  activeItemHotkeys.clear()
   battle.exitBattle()
   stopAllAutoCast()
   if (portraitTimer) {
@@ -654,15 +788,15 @@ onBeforeUnmount(() => {
   border-radius: inherit;
   background: conic-gradient(
     from 0deg,
-    rgba(88, 184, 255, 0) 0deg,
-    rgba(88, 184, 255, 0) calc(360deg - var(--cooldown-angle, 0deg)),
-    rgba(88, 184, 255, 0.82) calc(360deg - var(--cooldown-angle, 0deg)),
-    rgba(88, 184, 255, 0.82) 360deg
+    rgba(64, 70, 82, 0) 0deg,
+    rgba(64, 70, 82, 0) calc(360deg - var(--cooldown-angle, 0deg)),
+    rgba(64, 70, 82, 0.85) calc(360deg - var(--cooldown-angle, 0deg)),
+    rgba(64, 70, 82, 0.85) 360deg
   );
   opacity: 0;
   transition: opacity 160ms ease, background 120ms linear;
   z-index: 0;
-  mix-blend-mode: screen;
+  mix-blend-mode: saturation;
 }
 
 .battle-actions button.on-cooldown::before {
@@ -670,12 +804,36 @@ onBeforeUnmount(() => {
 }
 
 .battle-actions button.on-cooldown {
-  border-color: rgba(154, 224, 255, 0.95);
-  filter: saturate(1.15) brightness(1.05);
+  border-color: rgba(148, 158, 172, 0.95);
+  filter: grayscale(0.9) brightness(0.95);
+}
+
+.battle-actions button.requires-charge {
+  border-color: rgba(164, 180, 198, 0.55);
+}
+
+.battle-actions button.is-charging {
+  border-color: rgba(180, 196, 214, 0.78);
+  box-shadow: 0 0 12px rgba(112, 164, 208, 0.25);
+}
+
+.battle-actions button.is-charge-ready {
+  border-color: rgba(213, 220, 226, 0.95);
+  box-shadow: 0 0 16px rgba(210, 220, 230, 0.35);
+}
+
+.battle-actions button.is-charge-rewinding {
+  border-color: rgba(128, 138, 152, 0.6);
 }
 
 .battle-actions button > * {
   position: relative;
+  z-index: 2;
+}
+
+.battle-actions button > .skill-charge-progress {
+  position: absolute;
+  inset: 0;
   z-index: 1;
 }
 
@@ -684,6 +842,38 @@ onBeforeUnmount(() => {
   inset: 0;
   pointer-events: none;
   z-index: 3;
+}
+
+.skill-charge-progress {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  background: conic-gradient(
+    from -90deg,
+    rgba(18, 24, 36, 0.92) 0deg,
+    rgba(18, 24, 36, 0.92) var(--charge-angle, 0deg),
+    rgba(210, 215, 225, 0) var(--charge-angle, 0deg),
+    rgba(210, 215, 225, 0) 360deg
+  );
+  mix-blend-mode: multiply;
+  transition: background 120ms linear, opacity 160ms ease, filter 160ms ease;
+  opacity: 0.95;
+  z-index: 1;
+  transform: rotate(90deg) scaleY(-1);
+  transform-origin: 50% 50%;
+  filter: grayscale(0.9) brightness(0.9);
+}
+
+.skill-charge-progress--rewinding {
+  opacity: 0.65;
+  filter: grayscale(1) brightness(0.75);
+}
+
+.skill-charge-progress--ready {
+  opacity: 0.35;
+  box-shadow: inset 0 0 18px rgba(224, 228, 234, 0.36);
+  filter: grayscale(0.4) brightness(1.08);
 }
 
 .battle-action-slot {
@@ -1164,17 +1354,20 @@ onBeforeUnmount(() => {
                 'auto-casting': slot.isAutoCasting,
                 'holding': slot.isHolding,
                 'on-cooldown': slot.isOnCooldown,
-                'has-image': slot.hasImage
+                'has-image': slot.hasImage,
+                'requires-charge': slot.requiresCharge,
+                'is-charging': slot.isCharging,
+                'is-charge-ready': slot.isChargeReady,
+                'is-charge-rewinding': slot.isRewinding
               }"
               :title="slot.reason || undefined"
               :style="slot.cooldownStyle"
-              @click="useSkill(slot.index)"
-              @mousedown="startSkillHold(slot.index, $event)"
-              @mouseup="stopAutoCast(slot.index)"
-              @mouseleave="stopAutoCast(slot.index)"
-              @touchstart="startSkillHold(slot.index, $event)"
-              @touchend="stopAutoCast(slot.index)"
-              @touchcancel="stopAutoCast(slot.index)"
+              @mousedown="handleSkillPress(slot.index, $event)"
+              @mouseup="handleSkillRelease(slot.index)"
+              @mouseleave="handleSkillCancel(slot.index)"
+              @touchstart.prevent="handleSkillPress(slot.index, $event)"
+              @touchend="handleSkillRelease(slot.index)"
+              @touchcancel="handleSkillCancel(slot.index)"
             >
               <template v-if="slot.hasImage">
                 <div class="skill-image-container">
@@ -1190,6 +1383,15 @@ onBeforeUnmount(() => {
                 <span class="skill-name">{{ slot.label }}</span>
                 <span class="skill-cost">{{ slot.costLabel }}</span>
               </template>
+              <div
+                v-if="slot.chargeProgress > 0"
+                class="skill-charge-progress"
+                :class="{
+                  'skill-charge-progress--ready': slot.isChargeReady,
+                  'skill-charge-progress--rewinding': slot.isRewinding
+                }"
+                :style="slot.chargeStyle"
+              />
               <div class="skill-overlay">
                 <span
                   v-if="slot.hasImage && slot.costBadge"

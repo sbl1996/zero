@@ -1,11 +1,10 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { DODGE_LOCK_DURATION_MS, DODGE_WINDOW_MS } from '@/constants/dodge'
+import { DODGE_WINDOW_MS } from '@/constants/dodge'
 import type { MonsterFollowupStage, PendingDodgeState } from '@/types/domain'
 
 const HALF_SPAN_SECONDS = 3
 const TOTAL_SPAN_SECONDS = HALF_SPAN_SECONDS * 2
-const DODGE_TOTAL_SECONDS = DODGE_LOCK_DURATION_MS / 1000
 const DODGE_JUDGE_SECONDS = DODGE_WINDOW_MS / 1000
 const ATTACK_RESET_THRESHOLD = 0.25
 const HALF_SPAN_MS = HALF_SPAN_SECONDS * 1000
@@ -174,25 +173,6 @@ const attackSeverityClass = computed(() => {
   return 'is-ready'
 })
 
-const isDodgeLockActive = computed(() => props.pendingDodge !== null)
-
-const dodgeStartMs = computed(() => {
-  if (!isDodgeLockActive.value) return null
-  if (props.actionLockUntil === null) return null
-  const start = props.actionLockUntil - DODGE_TOTAL_SECONDS * 1000
-  return start
-})
-
-const dodgeSegmentStyle = computed(() => {
-  if (!isDodgeLockActive.value) return null
-  if (props.actionLockUntil === null) return null
-  const now = nowMs.value
-  const startMs = dodgeStartMs.value ?? now
-  const startSeconds = (startMs - now) / 1000
-  const endSeconds = (props.actionLockUntil - now) / 1000
-  return segmentToStyle(startSeconds, endSeconds)
-})
-
 const dodgeHintSegmentStyle = computed(() => {
   if (!props.active) return null
   return segmentToStyle(0, DODGE_JUDGE_SECONDS)
@@ -255,11 +235,6 @@ const timelineClasses = computed(() => ({
         class="timeline-rail__hint"
         :class="dodgeHintClasses"
         :style="dodgeHintSegmentStyle"
-      />
-      <div
-        v-if="dodgeSegmentStyle"
-        class="timeline-rail__dodge"
-        :style="dodgeSegmentStyle"
       />
       <div
         v-if="attackMarkerStyle"
@@ -438,18 +413,6 @@ const timelineClasses = computed(() => ({
   --hint-opacity: 0.42;
 }
 
-.timeline-rail__dodge {
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  background: linear-gradient(90deg, rgba(116, 205, 255, 0.32), rgba(62, 167, 255, 0.22));
-  border: 1px solid rgba(108, 192, 255, 0.4);
-  border-radius: 12px;
-  box-shadow: 0 0 12px rgba(80, 190, 255, 0.25);
-  pointer-events: none;
-  transition: opacity 0.12s ease;
-  z-index: 1;
-}
 .timeline-rail__attack {
   position: absolute;
   top: 0;

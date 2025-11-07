@@ -353,6 +353,7 @@ export interface ConsumableDefinition {
   // Optional fields for meditation core shard items
   coreShardTier?: number
   meditationBoost?: MeditationBoost
+  useDurationMs?: number
 }
 
 export interface MaterialDefinition {
@@ -448,10 +449,12 @@ export interface PendingDodgeState {
   refundGranted: boolean
 }
 
-export interface PendingSkillCastState {
-  skillId: string
+export interface PendingItemUseState {
+  itemId: string
+  startedAt: number
   resolveAt: number
-  qiCost: number
+  durationMs: number
+  progress: number
   silent: boolean
 }
 
@@ -502,8 +505,10 @@ export interface BattleState {
   itemCooldowns: Record<string, number>
   actionLockUntil: number | null
   pendingDodge: PendingDodgeState | null
-  pendingSkillCast: PendingSkillCastState | null
+  pendingItemUse: PendingItemUseState | null
   monsterFollowup: MonsterFollowupState | null
+  skillCharges: Array<SkillChargeState | null>
+  activeSkillChargeSlot: number | null
   playerQi: number
   playerQiMax: number
   qiOperation: QiOperationState
@@ -520,6 +525,22 @@ export interface BattleState {
   skillRealmNotified: Record<string, boolean>
   skillCooldownBonuses: Record<string, { expiresAt: number; reductionPercent: number }>
   monsterVulnerability: { percent: number; expiresAt: number } | null
+}
+
+export type SkillChargeStatus = 'charging' | 'charged' | 'rewinding'
+
+export interface SkillChargeState {
+  slotIndex: number
+  skillId: string
+  level: number
+  chargeTime: number
+  aftercastTime: number
+  qiCost: number
+  status: SkillChargeStatus
+  progress: number
+  startedAt: number
+  lastUpdatedAt: number
+  silent: boolean
 }
 
 export interface UnlockState {

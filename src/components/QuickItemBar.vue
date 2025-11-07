@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { ITEMS, quickConsumableIds } from '@/data/items'
 import { useBattleStore, ITEM_COOLDOWN } from '@/stores/battle'
@@ -19,6 +19,15 @@ const props = withDefaults(defineProps<{
   hotkeyLabels: () => ['NUM1', 'NUM2', 'NUM3', 'NUM4'],
 })
 
+interface ActiveHoldState {
+  pointerId: number
+  slotIndex: number
+  itemId: string
+  element: HTMLElement | null
+}
+
+const activeHold = ref<ActiveHoldState | null>(null)
+
 const getNowMs = () => {
   if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
     return performance.now()
@@ -30,14 +39,21 @@ const slots = computed(() => {
   const { hp, hpMax, qi, qiMax } = res.value
   const needsHp = hp < hpMax
   const needsQi = qi < qiMax
-  const actionLockUntil = battle.actionLockUntil
   const nowMs = getNowMs()
+  const actionLockUntil = battle.actionLockUntil
   const isActionLocked = actionLockUntil !== null && actionLockUntil > nowMs
+  const pending = battle.pendingItemUse
+  const pendingItemId = pending?.itemId ?? null
+  const pendingProgress = pending?.progress ?? 0
 
   return inventory.quickSlots.map((id, index) => {
     const itemId = typeof id === 'string' && quickConsumableIds.has(id) ? id : null
     const item = itemId ? ITEMS.find(def => def.id === itemId) : undefined
     const quantity = itemId ? inventory.quantity(itemId) : 0
+
+    const isChanneling = Boolean(pending && itemId && pendingItemId === itemId)
+    const lockedByItem = Boolean(pending && !isChanneling)
+
     const effects: string[] = []
 
     if (item) {
@@ -67,34 +83,50 @@ const slots = computed(() => {
 
     const cooldown = item ? (battle.itemCooldowns[item.id] ?? 0) : 0
     const cooldownPercent = ITEM_COOLDOWN > 0 ? Math.min(Math.max(cooldown / ITEM_COOLDOWN, 0), 1) : 0
-    const cooldownAngle = Math.round(cooldownPercent * 360 * 100) / 100
     const cooldownDisplay = cooldown > 0 ? `${cooldown.toFixed(1)}s` : ''
-    const cooldownStyle = cooldownPercent > 0
-      ? {
-          '--cooldown-angle': `${cooldownAngle}deg`,
-          '--cooldown-progress': `${cooldownPercent}`,
-        }
-      : undefined
+
+    const styleVars: Record<string, string> = {}
+    if (cooldownPercent > 0) {
+      const cooldownAngle = Math.round(cooldownPercent * 360 * 100) / 100
+      styleVars['--cooldown-angle'] = `${cooldownAngle}deg`
+      styleVars['--cooldown-progress'] = `${cooldownPercent}`
+    }
+
+    const channelPercent = isChanneling ? Math.max(Math.min(pendingProgress, 1), 0) : 0
+    if (isChanneling) {
+      styleVars['--channel-progress'] = `${channelPercent}`
+    }
 
     let disabled = false
+    let buttonDisabled = false
     let reason = ''
     if (!battle.inBattle || battle.concluded !== 'idle') {
       disabled = true
+      buttonDisabled = true
       reason = '未在战斗'
     } else if (!item) {
       disabled = true
+      buttonDisabled = true
       reason = '未装备道具'
+    } else if (lockedByItem) {
+      disabled = true
+      buttonDisabled = true
+      reason = '正在使用其他道具'
     } else if (isActionLocked) {
       disabled = true
+      buttonDisabled = true
       reason = '动作硬直中'
     } else if (quantity <= 0) {
       disabled = true
+      buttonDisabled = true
       reason = '库存不足'
     } else if (hasResourceEffect && !effectApplies) {
       disabled = true
+      buttonDisabled = true
       reason = '状态已满'
     } else if (cooldown > 0) {
       disabled = true
+      buttonDisabled = true
       reason = `冷却中 ${cooldown.toFixed(1)}s`
     }
 
@@ -107,6 +139,7 @@ const slots = computed(() => {
       tooltipSegments.push(reason)
     }
     const tooltip = tooltipSegments.join(' • ')
+    const style = Object.keys(styleVars).length > 0 ? styleVars : undefined
 
     return {
       index,
@@ -119,21 +152,77 @@ const slots = computed(() => {
       label,
       cooldown,
       cooldownDisplay,
-      cooldownStyle,
+      styleVars: style,
       isOnCooldown: cooldown > 0,
       disabled,
+      buttonDisabled,
       reason,
       isEmpty: !item,
       tooltip,
+      isChanneling,
+      lockedByItem,
+      channelPercent,
     }
   })
 })
 
-function handleUse(slotIndex: number) {
-  const slot = slots.value[slotIndex]
-  if (!slot || slot.disabled || !slot.item) return
-  battle.useItem(slot.item.id).catch(() => {})
+function cleanupHold(pointerId?: number, cancel = false) {
+  const hold = activeHold.value
+  if (!hold) return
+  if (typeof pointerId === 'number' && hold.pointerId !== pointerId) return
+  if (hold.element && typeof hold.element.releasePointerCapture === 'function') {
+    try {
+      hold.element.releasePointerCapture(hold.pointerId)
+    } catch {
+      // Ignore release errors
+    }
+  }
+  activeHold.value = null
+  if (cancel) {
+    battle.cancelItemUse('cancelled')
+  }
 }
+
+async function handlePointerDown(event: PointerEvent, slotIndex: number) {
+  const slot = slots.value[slotIndex]
+  if (!slot || slot.buttonDisabled || !slot.item) return
+  if (activeHold.value) return
+  event.preventDefault()
+  const element = event.currentTarget instanceof HTMLElement ? event.currentTarget : null
+  if (element && typeof element.setPointerCapture === 'function') {
+    element.setPointerCapture(event.pointerId)
+  }
+  activeHold.value = {
+    pointerId: event.pointerId,
+    slotIndex,
+    itemId: slot.item.id,
+    element,
+  }
+  try {
+    const started = await battle.useItem(slot.item.id)
+    if (!started) {
+      cleanupHold(event.pointerId, false)
+    }
+  } catch {
+    cleanupHold(event.pointerId, false)
+  }
+}
+
+function handlePointerUp(event: PointerEvent) {
+  cleanupHold(event.pointerId, true)
+}
+
+function handlePointerCancel(event: PointerEvent) {
+  cleanupHold(event.pointerId, true)
+}
+
+watch(
+  () => battle.pendingItemUse,
+  (pending) => {
+    if (pending) return
+    cleanupHold(undefined, false)
+  },
+)
 </script>
 
 <template>
@@ -145,13 +234,18 @@ function handleUse(slotIndex: number) {
       :class="{
         disabled: slot.disabled,
         empty: slot.isEmpty,
-        'on-cooldown': slot.isOnCooldown
+        'on-cooldown': slot.isOnCooldown,
+        channeling: slot.isChanneling,
+        'locked-by-item': slot.lockedByItem
       }"
       type="button"
       :title="slot.tooltip || undefined"
-      :style="slot.cooldownStyle"
-      :disabled="slot.disabled"
-      @click="handleUse(slot.index)"
+      :style="slot.styleVars"
+      :disabled="slot.buttonDisabled"
+      @pointerdown="handlePointerDown($event, slot.index)"
+      @pointerup="handlePointerUp($event)"
+      @pointercancel="handlePointerCancel($event)"
+      @pointerleave="handlePointerCancel($event)"
     >
       <span
         class="quick-item-icon"

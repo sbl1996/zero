@@ -608,6 +608,38 @@ button {
   opacity: 1;
 }
 
+.quick-item-slot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  opacity: 0;
+  pointer-events: none;
+  z-index: 1;
+  background: conic-gradient(
+    from -90deg,
+    rgba(30, 41, 59, 0.65) 0deg,
+    rgba(30, 41, 59, 0.65) calc(var(--channel-progress, 0) * 360deg),
+    rgba(30, 41, 59, 0) calc(var(--channel-progress, 0) * 360deg),
+    rgba(30, 41, 59, 0) 360deg
+  );
+  mix-blend-mode: multiply;
+  transform: rotate(90deg) scaleY(-1);
+  transform-origin: 50% 50%;
+}
+
+.quick-item-slot.channeling {
+  box-shadow: 0 0 14px rgba(148, 163, 184, 0.35);
+}
+
+.quick-item-slot.channeling::after {
+  opacity: 1;
+}
+
+.quick-item-slot.locked-by-item {
+  filter: grayscale(0.5) saturate(0.7) brightness(0.9);
+}
+
 .quick-item-quantity {
   position: absolute;
   bottom: 2px;
