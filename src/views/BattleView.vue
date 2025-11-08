@@ -9,11 +9,18 @@ import { useInventoryStore } from '@/stores/inventory'
 import { getSkillDefinition } from '@/data/skills'
 import { resolveSkillChargeTime } from '@/composables/useSkills'
 import { quickConsumableIds } from '@/data/items'
+import { resolveDodgeSuccessChance } from '@/composables/useDodge'
 import { getMonsterMap } from '@/data/monsters'
 import { getAutoMonsterPortraits } from '@/utils/monsterPortraits'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import { formatRealmTierLabel } from '@/utils/realm'
-import type { FloatText, LootResult, Monster, MonsterFollowupState } from '@/types/domain'
+import type {
+  FloatText,
+  LootResult,
+  Monster,
+  MonsterFollowupState,
+  MonsterComboPreviewInfo,
+} from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import QuickItemBar from '@/components/QuickItemBar.vue'
 import MonsterAttackTimeline from '@/components/MonsterAttackTimeline.vue'
@@ -79,6 +86,20 @@ function getBreakChanceColor(chance: number): string {
   if (chance >= 0.1) return '#4ecdc4' // 低破绽率：青色
   return '#94a3b8' // 极低破绽率：灰色
 }
+const dodgeSuccessChance = computed(() => {
+  if (!monster.value) return 0
+  const playerAgi = playerStore.finalStats.totals.AGI ?? 0
+  const monsterAgi = monster.value.stats.AGI ?? 0
+  return resolveDodgeSuccessChance(monsterAgi, playerAgi)
+})
+const dodgeSuccessChanceText = computed(() => `${Math.round(dodgeSuccessChance.value * 100)}%`)
+
+function getDodgeChanceColor(chance: number): string {
+  if (chance >= 0.7) return '#4ade80'
+  if (chance >= 0.4) return '#fcd34d'
+  if (chance >= 0.2) return '#fb923c'
+  return '#94a3b8'
+}
 function computeFollowupTimers(followup: MonsterFollowupState): number[] {
   if (!followup || followup.hits.length === 0) return []
   const remainingHits = followup.hits.slice(followup.nextHitIndex)
@@ -101,17 +122,109 @@ function computeFollowupTimers(followup: MonsterFollowupState): number[] {
   return timers
 }
 
-const monsterFollowupHint = computed(() => {
-  if (!isMonsterAttackActive.value) return null
-  const followup = battle.monsterFollowup
-  if (!followup) return null
-  return {
-    time: Math.max(0, followup.timer),
-    label: followup.label,
-    phase: followup.stage,
-    delay: followup.delay,
-    hits: computeFollowupTimers(followup),
+function computeComboPreviewTimers(
+  preview: MonsterComboPreviewInfo | null | undefined,
+  timeToSkill: number,
+): number[] {
+  if (!preview || preview.hits.length === 0) return []
+  const hits: number[] = []
+  const baseDelay = preview.baseDelay ?? 0
+  const firstHit = preview.hits[0]
+  if (!firstHit) return hits
+  let timeUntil = Math.max(0, timeToSkill + Math.max(firstHit.delay - baseDelay, 0))
+  hits.push(timeUntil)
+  let prevDelay = firstHit.delay
+  for (let index = 1; index < preview.hits.length; index += 1) {
+    const hit = preview.hits[index]
+    if (!hit) continue
+    const deltaDelay = Math.max(hit.delay - prevDelay, 0)
+    timeUntil += deltaDelay
+    hits.push(timeUntil)
+    prevDelay = hit.delay
   }
+  return hits
+}
+
+const timelineAttackTimes = computed(() => {
+  type TimelineAttackTime = { key: string, seconds: number, label?: string }
+  const markers: TimelineAttackTime[] = []
+  const seenTime = new Set<number>()
+
+  const pushMarker = (key: string, seconds: number, label?: string) => {
+    if (!Number.isFinite(seconds)) return
+    const rounded = Math.round(seconds * 1000)
+    if (seenTime.has(rounded)) return
+    seenTime.add(rounded)
+    markers.push({ key, seconds, label })
+  }
+
+  const followup = battle.monsterFollowup
+  const preview = battle.monsterFollowupPreview
+  const activeFollowup = followup ?? preview ?? null
+  if (activeFollowup) {
+    const hits = computeFollowupTimers(activeFollowup)
+    const label = activeFollowup.label ?? '追击'
+    hits.forEach((seconds, index) => {
+      pushMarker(
+        `followup-${activeFollowup.stage}-${index}`,
+        seconds,
+        index === 0 ? label : undefined,
+      )
+    })
+  }
+
+  const plan = battle.monsterSkillPlan ?? []
+  if (plan.length === 0) return markers
+  const referenceMs = battle.lastTickAt ?? getNowMs()
+  const maxEntries = 3
+  let processedEntries = 0
+
+  for (let index = 0; index < plan.length && processedEntries < maxEntries; index += 1) {
+    const entry = plan[index]
+    if (!entry) continue
+    const timeToSkill = Math.max(0, (entry.scheduledAt - referenceMs) / 1000)
+    if (!Number.isFinite(timeToSkill)) continue
+    const isTelegraphedEntry = Boolean(
+      preview &&
+      preview.stage === 'telegraph' &&
+      entry.skill &&
+      preview.skillId &&
+      entry.skill.id === preview.skillId,
+    )
+
+    if (index === 0) {
+      const comboHits = computeComboPreviewTimers(entry.comboPreview ?? null, timeToSkill)
+      if (!isTelegraphedEntry && comboHits.length > 0) {
+        comboHits.forEach((hitTime, hitIndex) => {
+          pushMarker(
+            `plan-${index}-combo-${hitIndex}`,
+            hitTime,
+            hitIndex === 0 ? entry.comboPreview?.label : undefined,
+          )
+        })
+      }
+    } else {
+      pushMarker(
+        `plan-${index}`,
+        timeToSkill,
+        entry.skill?.name,
+      )
+      const comboHits = computeComboPreviewTimers(entry.comboPreview ?? null, timeToSkill)
+      if (comboHits.length > 0) {
+        comboHits.forEach((hitTime, hitIndex) => {
+          pushMarker(
+            `plan-${index}-combo-${hitIndex}`,
+            hitTime,
+            hitIndex === 0 ? entry.comboPreview?.label : undefined,
+          )
+        })
+      }
+    }
+
+    processedEntries += 1
+  }
+
+  return markers
 })
 
 const showBattleDuration = computed(() => {
@@ -1202,11 +1315,18 @@ onBeforeUnmount(() => {
   75% { transform: translateX(2px) rotate(1deg); }
 }
 
-/* 破绽率显示样式 */
-.break-chance-display {
+/* 破绽率与闪避率 */
+.break-dodge-row {
   display: flex;
   align-items: center;
   justify-content: flex-end;
+  gap: 16px;
+  margin-top: 6px;
+}
+
+.break-chance-display {
+  display: flex;
+  align-items: center;
   gap: 6px;
   font-size: 12px;
   font-weight: 600;
@@ -1222,6 +1342,24 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-shadow: 0 0 8px currentColor, 0 1px 2px rgba(0, 0, 0, 0.5);
   transition: color 0.3s ease, text-shadow 0.3s ease;
+}
+
+.dodge-rate-banner {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.dodge-rate-label {
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.dodge-rate-value {
+  font-weight: 700;
+  text-shadow: 0 0 6px rgba(126, 225, 255, 0.8);
 }
 </style>
 
@@ -1252,9 +1390,17 @@ onBeforeUnmount(() => {
             <span class="resource-hp" :style="{ width: `${Math.floor(hpRate * 100)}%` }" />
           </div>
           <div class="text-small text-muted" style="margin-top: 4px;">HP {{ battle.monsterHp }} / {{ monster.hp ?? '—' }}</div>
-          <div class="break-chance-display" style="margin-top: 6px;">
-            <span class="break-chance-label">破绽率</span>
-            <span class="break-chance-value" :style="{ color: getBreakChanceColor(breakChance) }">{{ breakChanceText }}</span>
+          <div class="break-dodge-row">
+            <div class="break-chance-display">
+              <span class="break-chance-label">破绽率</span>
+              <span class="break-chance-value" :style="{ color: getBreakChanceColor(breakChance) }">{{ breakChanceText }}</span>
+            </div>
+            <div class="dodge-rate-banner">
+              <span class="dodge-rate-label">闪避成功率</span>
+              <span class="dodge-rate-value" :style="{ color: getDodgeChanceColor(dodgeSuccessChance.value) }">
+                {{ dodgeSuccessChanceText }}
+              </span>
+            </div>
           </div>
         </div>
       </header>
@@ -1360,7 +1506,7 @@ onBeforeUnmount(() => {
         :time-to-attack="isMonsterAttackActive ? battle.monsterNextSkillTimer : null"
         :pending-dodge="battle.pendingDodge"
         :action-lock-until="battle.actionLockUntil"
-        :followup="monsterFollowupHint"
+        :attack-times="timelineAttackTimes"
       />
 
       <div class="battle-action-row">

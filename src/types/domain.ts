@@ -329,6 +329,7 @@ export interface Monster {
   portraits?: string[]
   skillProfile?: MonsterSkillProfile
   skillSelector?: MonsterAISelector
+  skillPlanDepth?: number
 }
 
 export interface ItemStack {
@@ -477,6 +478,13 @@ export interface MonsterFollowupState {
   lastUpdatedAt: number
 }
 
+export interface MonsterComboPreviewInfo {
+  skillId?: string
+  label: string
+  baseDelay: number
+  hits: MonsterSkillHit[]
+}
+
 export type BattleResolution = 'idle' | 'victory' | 'defeat'
 
 export interface BattleOutcome {
@@ -486,10 +494,18 @@ export interface BattleOutcome {
   drops?: LootResult[]
 }
 
+export interface MonsterSkillPlanEntry {
+  skill: MonsterSkillDefinition | null
+  scheduledAt: number
+  prepDuration: number
+  comboPreview?: MonsterComboPreviewInfo | null
+}
+
 export interface BattleState {
   monster: Monster | null
   monsterHp: number
   monsterQi: number
+  monsterRngSeed: number
   rngSeed: number
   floatTexts: FloatText[]
   flashEffects: FlashEffect[]
@@ -507,10 +523,15 @@ export interface BattleState {
   monsterNextSkillTotal: number
   monsterCurrentSkill: MonsterSkillDefinition | null
   monsterSkillCooldowns: Record<string, number>
+  monsterSkillPlan: MonsterSkillPlanEntry[]
+  monsterActionOffsetMs?: number
   skillCooldowns: number[]
   itemCooldowns: Record<string, number>
+  monsterFollowupPreview: MonsterFollowupState | null
   actionLockUntil: number | null
   pendingDodge: PendingDodgeState | null
+  dodgeAttempts: number
+  dodgeSuccesses: number
   pendingItemUse: PendingItemUseState | null
   monsterFollowup: MonsterFollowupState | null
   skillCharges: Array<SkillChargeState | null>

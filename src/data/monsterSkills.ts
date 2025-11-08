@@ -92,11 +92,11 @@ function isSkillReady(skillId: string, skillStates: Record<string, number>): boo
 }
 
 const monsterAiMap: Record<string, MonsterAISelector> = {
-  [GOLDEN_SHEEP_ID]: ({ skillStates, rng }) => {
+  [GOLDEN_SHEEP_ID]: ({ skillStates }) => {
     const doubleStabReady = isSkillReady(GOLDEN_SHEEP_DOUBLE_STAB_ID, skillStates)
     const basicReady = isSkillReady(DEFAULT_SKILL_ID, skillStates)
     if (!basicReady && !doubleStabReady) return null
-    if (doubleStabReady && rng() < 0.2) {
+    if (doubleStabReady) {
       return GOLDEN_SHEEP_DOUBLE_STAB_ID
     }
     return basicReady ? DEFAULT_SKILL_ID : null

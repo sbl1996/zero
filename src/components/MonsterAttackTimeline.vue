@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
-import type { MonsterFollowupStage, PendingDodgeState } from '@/types/domain'
+import type { PendingDodgeState } from '@/types/domain'
 
 const HALF_SPAN_SECONDS = 3
 const TOTAL_SPAN_SECONDS = HALF_SPAN_SECONDS * 2
@@ -14,7 +14,7 @@ const props = defineProps<{
   timeToAttack: number | null
   pendingDodge: PendingDodgeState | null
   actionLockUntil: number | null
-  followup: { time: number, label?: string, phase?: MonsterFollowupStage, delay?: number, hits?: number[] } | null
+  attackTimes?: { key: string, seconds: number, label?: string }[]
 }>()
 
 const getNowMs = () => (typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -132,33 +132,49 @@ function segmentToStyle(startSeconds: number, endSeconds: number) {
   }
 }
 
-const attackMarkerStyle = computed(() => {
-  if (!props.active || props.timeToAttack === null) return null
-  const positionPercent = timeToPercent(props.timeToAttack)
-  return {
-    left: `${positionPercent}%`,
-  }
-})
+type TimelineAttackMarker = {
+  key: string
+  style: Record<string, string>
+  severity: string
+  label?: string
+}
 
-const followupLabel = computed(() => props.followup?.label ?? '追击')
-
-const followupPhase = computed<MonsterFollowupStage | null>(() => props.followup?.phase ?? null)
-
-const followupAttackClasses = computed(() => {
-  const phase = followupPhase.value
-  return {
-    'timeline-rail__attack': true,
-    'timeline-rail__attack--followup': true,
-    'is-telegraph': phase === 'telegraph',
-    'is-active': phase === 'active',
-  }
-})
-
-const attackSeverityClass = computed(() => {
-  if (!props.active || props.timeToAttack === null) return 'is-idle'
-  if (props.timeToAttack <= 0.3) return 'is-danger'
-  if (props.timeToAttack <= 0.6) return 'is-warning'
+function resolveAttackSeverity(seconds: number | null): string {
+  if (seconds === null || !Number.isFinite(seconds)) return 'is-idle'
+  if (seconds <= 0.3) return 'is-danger'
+  if (seconds <= 0.6) return 'is-warning'
   return 'is-ready'
+}
+
+const attackMarkers = computed<TimelineAttackMarker[]>(() => {
+  if (!props.active) return []
+  const markers: TimelineAttackMarker[] = []
+
+  const addMarker = (key: string, seconds: number | null | undefined, label?: string) => {
+    if (seconds === null || seconds === undefined) return
+    const numeric = Number(seconds)
+    if (!Number.isFinite(numeric)) return
+    const style = {
+      left: `${timeToPercent(numeric)}%`,
+    }
+    markers.push({
+      key,
+      style,
+      severity: resolveAttackSeverity(numeric),
+      label,
+    })
+  }
+
+  if (props.timeToAttack !== null) {
+    addMarker('current', props.timeToAttack)
+  }
+
+  const attackSources = Array.isArray(props.attackTimes) ? props.attackTimes : []
+  attackSources.forEach((entry) => {
+    addMarker(entry.key, entry.seconds, entry.label)
+  })
+
+  return markers
 })
 
 const dodgeHintSegmentStyle = computed(() => {
@@ -183,25 +199,6 @@ const dodgeHintClasses = computed(() => {
     classes['is-distant'] = true
   }
   return classes
-})
-
-const followupMarkers = computed(() => {
-  if (!props.active) return []
-  const hint = props.followup
-  if (!hint) return []
-  const rawTimes = Array.isArray(hint.hits) && hint.hits.length > 0
-    ? hint.hits
-    : (Number.isFinite(hint.time) ? [hint.time] : [])
-  return rawTimes
-    .map((value) => Math.max(0, Number(value)))
-    .filter((value) => Number.isFinite(value))
-    .map((time, index) => ({
-      key: `followup-${index}`,
-      style: {
-        left: `${timeToPercent(time)}%`,
-      },
-      showLabel: index === 0,
-    }))
 })
 
 const recentAttackStyle = computed(() => {
@@ -244,20 +241,13 @@ const timelineClasses = computed(() => ({
         :style="dodgeHintSegmentStyle"
       />
       <div
-        v-if="attackMarkerStyle"
-        class="timeline-rail__attack"
-        :class="attackSeverityClass"
-        :style="attackMarkerStyle"
-      >
-        <span class="timeline-rail__attack-glow" />
-      </div>
-      <div
-        v-for="marker in followupMarkers"
+        v-for="marker in attackMarkers"
         :key="marker.key"
-        :class="followupAttackClasses"
+        class="timeline-rail__attack"
+        :class="marker.severity"
         :style="marker.style"
       >
-        <span v-if="marker.showLabel" class="timeline-rail__attack-label">{{ followupLabel }}</span>
+        <span v-if="marker.label" class="timeline-rail__attack-label">{{ marker.label }}</span>
         <span class="timeline-rail__attack-glow" />
       </div>
       <div
@@ -471,27 +461,6 @@ const timelineClasses = computed(() => ({
 .timeline-rail__attack.is-idle .timeline-rail__attack-glow {
   opacity: 0.4;
   box-shadow: none;
-}
-
-.timeline-rail__attack--followup {
-  z-index: 4;
-}
-
-.timeline-rail__attack--followup .timeline-rail__attack-glow {
-  background: linear-gradient(180deg, rgba(255, 227, 150, 0.95), rgba(255, 181, 70, 0.55));
-  box-shadow:
-    0 0 18px rgba(255, 186, 90, 0.7),
-    -4px 0 12px rgba(255, 225, 170, 0.45),
-    4px 0 12px rgba(255, 185, 120, 0.35);
-  position: relative;
-}
-
-.timeline-rail__attack--followup.is-active .timeline-rail__attack-glow {
-  background: linear-gradient(180deg, rgba(255, 120, 120, 0.98), rgba(255, 80, 80, 0.6));
-  box-shadow:
-    0 0 20px rgba(255, 106, 106, 0.75),
-    -4px 0 14px rgba(255, 180, 180, 0.5),
-    4px 0 14px rgba(255, 142, 142, 0.4);
 }
 
 .timeline-rail__attack--past .timeline-rail__attack-glow {

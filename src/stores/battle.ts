@@ -2,7 +2,7 @@ import { defineStore } from 'pinia'
 import { dmgAttack, getDefRefForRealm, resolveWeaknessDamage } from '@/composables/useDamage'
 import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS } from '@/composables/useLeveling'
 import { resolveSkillAftercast, resolveSkillChargeTime, resolveSkillCooldown, resolveQiCost } from '@/composables/useSkills'
-import { makeRng, randRange } from '@/composables/useRng'
+import { makeRng, randRange, randBool } from '@/composables/useRng'
 import { bossUnlockMap } from '@/data/monsters'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import { ITEMS } from '@/data/items'
@@ -19,6 +19,7 @@ import { useProgressStore } from './progress'
 import { useUiStore } from './ui'
 import { useQuestStore } from './quests'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
+import { resolveDodgeSuccessChance } from '@/composables/useDodge'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
 import type {
   BattleState,
@@ -33,6 +34,8 @@ import type {
   MonsterSkillDefinition,
   MonsterSkillHit,
   MonsterSkillProfile,
+  MonsterSkillPlanEntry,
+  MonsterComboPreviewInfo,
   FloatText,
   PendingItemUseState,
   SkillChargeState,
@@ -62,6 +65,7 @@ const FALLBACK_SKILL_COOLDOWN = 2
 export const ITEM_COOLDOWN = 10
 const SKILL_SLOT_COUNT = 4
 const MAX_MONSTER_ACTIONS_PER_TICK = 4
+const DEFAULT_MONSTER_SKILL_PLAN_DEPTH = 3
 const AUTO_REMATCH_BASE_DELAY = 800
 const AUTO_REMATCH_MIN_INTERVAL = 5000
 const DODGE_SKILL_ID = 'qi_dodge'
@@ -199,6 +203,25 @@ function resolveMonsterQi(_monster: Monster) {
   return 0
 }
 
+function createComboPreviewInfo(skill: MonsterSkillDefinition | null | undefined): MonsterComboPreviewInfo | null {
+  if (!skill || skill.hits.length <= 1) return null
+  const hits = skill.hits
+  const baseHit = hits[0]
+  const extraHits = hits.slice(1)
+  if (!baseHit || extraHits.length === 0) return null
+  return {
+    skillId: skill.id,
+    label: skill.comboLabel ?? `×${hits.length}`,
+    baseDelay: baseHit.delay ?? 0,
+    hits: extraHits,
+  }
+}
+
+function getEntryTimeToExecutionSeconds(entry: MonsterSkillPlanEntry | null, referenceMs: number): number {
+  if (!entry) return 0
+  return Math.max(0, (entry.scheduledAt - referenceMs) / 1000)
+}
+
 function resolveMonsterAtk(monster: Monster): number {
   return monster.stats.ATK
 }
@@ -273,6 +296,37 @@ function resolveInitialMonsterDelay(monster: Monster, profile: MonsterSkillProfi
   return Math.max(profile.basic.cooldown ?? 0, 0)
 }
 
+function resolveMonsterSkillPlanDepth(monster: Monster | null): number {
+  if (!monster) return DEFAULT_MONSTER_SKILL_PLAN_DEPTH
+  return Math.max(1, monster.skillPlanDepth ?? DEFAULT_MONSTER_SKILL_PLAN_DEPTH)
+}
+
+function getSkillAftercastSeconds(skill: MonsterSkillDefinition | null): number {
+  if (!skill) return 0
+  return Math.max(0, skill.aftercast ?? 0)
+}
+
+function simulateCooldownsAfterPlan(
+  plan: MonsterSkillPlanEntry[],
+  baseCooldowns: Record<string, number>,
+  referenceMs: number,
+): Record<string, number> {
+  let snapshot = { ...baseCooldowns }
+  let previousScheduledMs = referenceMs
+  for (let index = 0; index < plan.length; index += 1) {
+    const entry = plan[index]
+    if (!entry) continue
+    const scheduledAt = entry.scheduledAt
+    const spanSeconds = Math.max(0, (scheduledAt - previousScheduledMs) / 1000)
+    snapshot = buildSkillStateSnapshot(snapshot, spanSeconds)
+    if (entry.skill) {
+      snapshot[entry.skill.id] = entry.skill.cooldown
+    }
+    previousScheduledMs = scheduledAt
+  }
+  return snapshot
+}
+
 function resolveItemUseDurationMs(itemId: string, _player: ReturnType<typeof usePlayerStore>): number {
   const definition = ITEM_MAP.get(itemId)
   let base = DEFAULT_ITEM_USE_DURATION_MS
@@ -291,6 +345,7 @@ function initialState(): BattleState {
     monster: null,
     monsterHp: 0,
     monsterQi: 0,
+    monsterRngSeed: Date.now() >>> 0,
     rngSeed: Date.now() >>> 0,
     floatTexts: [],
     flashEffects: [],
@@ -308,10 +363,15 @@ function initialState(): BattleState {
     monsterNextSkillTotal: 0,
     monsterCurrentSkill: null,
     monsterSkillCooldowns: {},
+    monsterSkillPlan: [],
+    monsterActionOffsetMs: 0,
     skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
     itemCooldowns: {},
+    monsterFollowupPreview: null,
     actionLockUntil: null,
     pendingDodge: null,
+    dodgeAttempts: 0,
+    dodgeSuccesses: 0,
     pendingItemUse: null,
     monsterFollowup: null,
     skillCharges: Array(SKILL_SLOT_COUNT).fill(null),
@@ -387,8 +447,13 @@ export const useBattleStore = defineStore('battle', {
       this.monsterSkillCooldowns = {}
       this.actionLockUntil = null
       this.pendingDodge = null
+      this.dodgeAttempts = 0
+      this.dodgeSuccesses = 0
+      this.dodgeAttempts = 0
+      this.dodgeSuccesses = 0
       this.pendingItemUse = null
       this.monsterFollowup = null
+      this.monsterFollowupPreview = null
       this.skillCharges = Array(slotCount).fill(null)
       this.activeSkillChargeSlot = null
       this.monsterNextSkill = null
@@ -411,6 +476,8 @@ export const useBattleStore = defineStore('battle', {
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
+      this.monsterSkillPlan = []
+      this.syncMonsterSkillPlanPreview()
       // 保留lastOutcome和loot以便在结算页面显示
       // this.lastOutcome = null
       // this.loot = []
@@ -424,7 +491,9 @@ export const useBattleStore = defineStore('battle', {
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
-      this.rngSeed = (seed ?? Date.now()) >>> 0
+      const initialSeed = (seed ?? Date.now()) >>> 0
+      this.rngSeed = initialSeed
+      this.monsterRngSeed = initialSeed
       this.lastOutcome = null
       this.loot = []
       this.battleStartedAt = Date.now()
@@ -444,6 +513,7 @@ export const useBattleStore = defineStore('battle', {
       this.pendingDodge = null
       this.pendingItemUse = null
       this.monsterFollowup = null
+      this.monsterFollowupPreview = null
       this.skillCharges = Array(slotCount).fill(null)
       this.activeSkillChargeSlot = null
       this.monsterNextSkill = null
@@ -460,79 +530,136 @@ export const useBattleStore = defineStore('battle', {
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
       const initialDelay = resolveInitialMonsterDelay(monster, profile)
-      this.planNextMonsterSkill(initialDelay)
+      this.monsterSkillPlan = []
+      this.extendMonsterSkillPlan(initialDelay)
       this.startLoop()
     },
-    planNextMonsterSkill(delaySeconds: number) {
-      if (!this.monster || this.concluded !== 'idle') return
-      const delay = Math.max(0, Number.isFinite(delaySeconds) ? delaySeconds : 0)
-      const cooldownFloor = resolveMonsterCooldownFloor(this.monsterSkillCooldowns)
-      const totalDelay = Math.max(delay, cooldownFloor)
-      this.monsterNextSkillTimer = totalDelay
-      this.monsterNextSkillTotal = totalDelay
-      const skill = this.selectMonsterSkill(totalDelay)
-      this.monsterNextSkill = skill
-      this.setupMonsterComboTelegraph(skill, totalDelay)
+    syncMonsterSkillPlanPreview() {
+      const nextEntry = this.monsterSkillPlan[0] ?? null
+      if (!nextEntry) {
+        this.monsterNextSkill = null
+        this.monsterNextSkillTimer = 0
+        this.monsterNextSkillTotal = 0
+        this.monsterFollowupPreview = null
+        return
+      }
+      const now = this.lastTickAt || getNow()
+      const timeToNext = getEntryTimeToExecutionSeconds(nextEntry, now)
+      this.monsterNextSkill = nextEntry.skill
+      this.monsterNextSkillTimer = timeToNext
+      this.monsterNextSkillTotal = nextEntry.prepDuration ?? timeToNext
+      this.setupMonsterComboTelegraph(nextEntry.skill, timeToNext)
     },
-    selectMonsterSkill(delaySeconds: number): MonsterSkillDefinition | null {
+    extendMonsterSkillPlan(initialDelayHint = 0) {
+      if (!this.monster || this.concluded !== 'idle') {
+        this.monsterSkillPlan = []
+        this.syncMonsterSkillPlanPreview()
+        return
+      }
+      const depth = resolveMonsterSkillPlanDepth(this.monster)
+      if (depth <= 0) {
+        this.monsterSkillPlan = []
+        this.syncMonsterSkillPlanPreview()
+        return
+      }
+      const now = this.lastTickAt || getNow()
+      const plan = this.monsterSkillPlan
+        .filter((entry): entry is MonsterSkillPlanEntry => Boolean(entry))
+        .filter((entry) => entry.scheduledAt >= now)
+        .slice()
+        .sort((a, b) => a.scheduledAt - b.scheduledAt)
+      let cooldowns = simulateCooldownsAfterPlan(plan, this.monsterSkillCooldowns, now)
+      const lastEntry = plan.length > 0 ? plan[plan.length - 1]! : null
+      let lastStartSeconds = lastEntry ? getEntryTimeToExecutionSeconds(lastEntry, now) : 0
+      let delayHint = lastEntry
+        ? getSkillAftercastSeconds(lastEntry.skill)
+        : Math.max(0, Number.isFinite(initialDelayHint) ? initialDelayHint : 0)
+
+      while (plan.length < depth) {
+        const cooldownFloor = resolveMonsterCooldownFloor(cooldowns)
+        const entryDelay = Math.max(delayHint, cooldownFloor)
+        const scheduledSeconds = lastStartSeconds + entryDelay
+        const skill = this.selectMonsterSkill(entryDelay, cooldowns)
+        const scheduledAt = now + scheduledSeconds * 1000
+        const comboPreview = createComboPreviewInfo(skill)
+        plan.push({
+          skill,
+          scheduledAt,
+          prepDuration: scheduledSeconds,
+          comboPreview,
+        })
+        cooldowns = buildSkillStateSnapshot(cooldowns, entryDelay)
+        if (skill) {
+          cooldowns[skill.id] = skill.cooldown
+        }
+        lastStartSeconds = scheduledSeconds
+        delayHint = getSkillAftercastSeconds(skill)
+      }
+
+      this.monsterSkillPlan = plan
+      this.syncMonsterSkillPlanPreview()
+    },
+    selectMonsterSkill(delaySeconds: number, baseCooldowns?: Record<string, number>): MonsterSkillDefinition | null {
       const monster = this.monster
       if (!monster) return null
       const selector = monster.skillSelector ?? resolveMonsterSkillSelector(monster)
       const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
-      const skillStates = buildSkillStateSnapshot(this.monsterSkillCooldowns, delaySeconds)
-      const rng = makeRng(this.rngSeed ^ 0x3c6ef372)
-      this.rngSeed = (this.rngSeed + 0xa4093822) >>> 0
+      const skillStates = buildSkillStateSnapshot(baseCooldowns ?? this.monsterSkillCooldowns, delaySeconds)
+      const rng = makeRng(this.monsterRngSeed ^ 0x3c6ef372)
+      this.monsterRngSeed = (this.monsterRngSeed + 0xa4093822) >>> 0
       const choice = selector({ monster, skillStates, rng })
       if (!choice) return null
       return findMonsterSkill(profile, choice)
     },
     setupMonsterComboTelegraph(skill: MonsterSkillDefinition | null, delaySeconds: number) {
-      if (!skill || skill.hits.length <= 1) {
-        if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
-          this.monsterFollowup = null
-        }
+      const comboPreview = createComboPreviewInfo(skill)
+      if (!skill || !comboPreview) {
+        this.monsterFollowupPreview = null
         return
       }
       const hits = skill.hits
       const baseHit = hits[0]
-      const extraHits = hits.slice(1)
-      if (!baseHit || extraHits.length === 0) {
-        if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
-          this.monsterFollowup = null
-        }
-        return
-      }
-      const firstExtraDelay = extraHits[0]?.delay ?? 0
-      const baseDelay = baseHit.delay ?? 0
-      const timer = Math.max(0, Math.max(delaySeconds, 0) + Math.max(firstExtraDelay - baseDelay, 0))
+      const firstExtraDelay = comboPreview.hits[0]?.delay ?? 0
+      const timer = Math.max(
+        0,
+        Math.max(delaySeconds, 0) + Math.max(firstExtraDelay - comboPreview.baseDelay, 0),
+      )
       const now = this.lastTickAt || getNow()
-      this.monsterFollowup = {
+      this.monsterFollowupPreview = {
         source: skill.id,
         skillId: skill.id,
         stage: 'telegraph',
         timer,
         delay: firstExtraDelay,
-        baseMultiplier: baseHit.multiplier ?? 1,
-        hits: extraHits,
+        baseMultiplier: baseHit?.multiplier ?? 1,
+        hits: comboPreview.hits,
         nextHitIndex: 0,
-        lastHitDelay: baseDelay,
-        label: skill.comboLabel ?? `×${hits.length}`,
+        lastHitDelay: comboPreview.baseDelay,
+        label: comboPreview.label,
         lastUpdatedAt: now,
       }
     },
     executeReadyMonsterSkill(): boolean {
       if (!this.monster || this.concluded !== 'idle') return false
-      let skill = this.monsterNextSkill
-      if (!skill) {
-        skill = this.selectMonsterSkill(0)
+      if (this.monsterSkillPlan.length === 0) {
+        this.extendMonsterSkillPlan()
+        return false
       }
-      if (!skill) return false
-      this.monsterNextSkill = null
-      this.monsterNextSkillTimer = 0
-      this.monsterNextSkillTotal = 0
-      this.monsterCurrentSkill = skill
-      this.monsterSkillCooldowns[skill.id] = skill.cooldown
-      this.monsterAttack(skill)
+      const currentEntry = this.monsterSkillPlan[0]
+      if (!currentEntry) return false
+      const now = this.lastTickAt || getNow()
+      if (currentEntry.scheduledAt > now) return false
+      this.monsterSkillPlan = this.monsterSkillPlan.slice(1)
+      const resolvedSkill = currentEntry.skill ?? this.selectMonsterSkill(0)
+      if (!resolvedSkill) {
+        this.monsterCurrentSkill = null
+        this.extendMonsterSkillPlan(getSkillAftercastSeconds(currentEntry.skill))
+        return false
+      }
+      this.monsterCurrentSkill = resolvedSkill
+      this.monsterSkillCooldowns[resolvedSkill.id] = resolvedSkill.cooldown
+      this.monsterAttack(resolvedSkill)
+      this.extendMonsterSkillPlan(getSkillAftercastSeconds(resolvedSkill))
       return true
     },
     activateMonsterComboSequence(
@@ -541,46 +668,33 @@ export const useBattleStore = defineStore('battle', {
       extraHits: MonsterSkillHit[],
     ) {
       if (!skill || extraHits.length === 0) {
-        if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
-          this.monsterFollowup = null
+        if (this.monsterFollowupPreview && (!this.monsterFollowupPreview.skillId || this.monsterFollowupPreview.skillId === skill?.id)) {
+          this.monsterFollowupPreview = null
         }
         return
       }
       const now = this.lastTickAt || getNow()
       const baseDelay = baseHit.delay ?? 0
       const nextHit = extraHits[0]
-      if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph' && this.monsterFollowup.skillId === skill.id) {
-        this.monsterFollowup.stage = 'active'
-        this.monsterFollowup.nextHitIndex = 0
-        this.monsterFollowup.hits = extraHits
-        this.monsterFollowup.timer = nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0
-        this.monsterFollowup.lastHitDelay = baseDelay
-        this.monsterFollowup.baseMultiplier = baseHit.multiplier ?? 1
-        this.monsterFollowup.lastUpdatedAt = now
-      } else {
-        this.monsterFollowup = {
-          source: skill.id,
-          skillId: skill.id,
-          stage: 'active',
-          timer: nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0,
-          delay: nextHit?.delay ?? 0,
-          baseMultiplier: baseHit.multiplier ?? 1,
-          hits: extraHits,
-          nextHitIndex: 0,
-          lastHitDelay: baseDelay,
-          label: skill.comboLabel ?? `×${extraHits.length + 1}`,
-          lastUpdatedAt: now,
-        }
+      this.monsterFollowup = {
+        source: skill.id,
+        skillId: skill.id,
+        stage: 'active',
+        timer: nextHit ? Math.max(nextHit.delay - baseDelay, 0) : 0,
+        delay: nextHit?.delay ?? 0,
+        baseMultiplier: baseHit.multiplier ?? 1,
+        hits: extraHits,
+        nextHitIndex: 0,
+        lastHitDelay: baseDelay,
+        label: skill.comboLabel ?? `×${extraHits.length + 1}`,
+        lastUpdatedAt: now,
+      }
+      if (this.monsterFollowupPreview && this.monsterFollowupPreview.skillId === skill.id) {
+        this.monsterFollowupPreview = null
       }
     },
-    onMonsterSkillResolved(skill: MonsterSkillDefinition | null) {
-      if (!skill) {
-        this.monsterCurrentSkill = null
-        return
-      }
-      const delay = Math.max(0, skill.aftercast ?? 0)
+    onMonsterSkillResolved(_skill: MonsterSkillDefinition | null) {
       this.monsterCurrentSkill = null
-      this.planNextMonsterSkill(delay)
     },
     clearRematchTimer() {
       if (this.rematchTimer !== null) {
@@ -705,16 +819,26 @@ export const useBattleStore = defineStore('battle', {
         }
       }
 
-      if (this.monsterNextSkillTimer > 0) {
-        this.monsterNextSkillTimer = Math.max(0, this.monsterNextSkillTimer - delta)
+      const nextEntry = this.monsterSkillPlan[0] ?? null
+      if (nextEntry) {
+        const timeToNext = getEntryTimeToExecutionSeconds(nextEntry, now)
+        this.monsterNextSkillTimer = timeToNext
+        this.monsterNextSkillTotal = nextEntry.prepDuration ?? timeToNext
+        this.monsterNextSkill = nextEntry.skill
+      } else {
+        this.monsterNextSkillTimer = 0
+        this.monsterNextSkillTotal = 0
+        this.monsterNextSkill = null
       }
       let actionsResolved = 0
-      while (this.monster && this.concluded === 'idle' && this.monsterNextSkillTimer <= 0) {
+      while (this.monster && this.concluded === 'idle') {
+        const headEntry = this.monsterSkillPlan[0]
+        if (!headEntry || headEntry.scheduledAt > now) break
         const executed = this.executeReadyMonsterSkill()
         if (!executed) break
         actionsResolved += 1
         if (actionsResolved >= MAX_MONSTER_ACTIONS_PER_TICK) break
-        if (this.monsterNextSkillTimer > 0) break
+        if (this.monsterSkillPlan.length === 0) break
       }
 
       const followup = this.monsterFollowup
@@ -732,6 +856,21 @@ export const useBattleStore = defineStore('battle', {
         }
         if (followup.stage === 'active' && followup.timer <= 0) {
           this.resolveMonsterFollowupAttack()
+        }
+      }
+
+      const preview = this.monsterFollowupPreview
+      if (preview && this.concluded === 'idle' && this.monster) {
+        const reference = Number.isFinite(preview.lastUpdatedAt) ? preview.lastUpdatedAt : this.lastTickAt
+        let elapsedSeconds = 0
+        if (typeof reference === 'number' && Number.isFinite(reference)) {
+          elapsedSeconds = Math.max(0, (now - reference) / 1000)
+        } else {
+          elapsedSeconds = Math.max(0, delta)
+        }
+        if (elapsedSeconds > 0) {
+          preview.timer = Math.max(0, preview.timer - elapsedSeconds)
+          preview.lastUpdatedAt = now
         }
       }
 
@@ -903,6 +1042,8 @@ export const useBattleStore = defineStore('battle', {
       this.monsterFollowup = null
       this.skillCharges = Array(slotCount).fill(null)
       this.activeSkillChargeSlot = null
+      this.monsterSkillPlan = []
+      this.syncMonsterSkillPlanPreview()
       player.setRecoveryMode('idle')
       if (result === 'victory') {
         if (currentMonster) {
@@ -1411,7 +1552,6 @@ export const useBattleStore = defineStore('battle', {
       })
       if (usage) {
         if (usage.blockedByRealm && !this.skillRealmNotified[skillId]) {
-          this.pushFloat('已达当前上限', 'miss')
           this.skillRealmNotified[skillId] = true
         }
         if (usage.leveledUp) {
@@ -1425,6 +1565,7 @@ export const useBattleStore = defineStore('battle', {
       this.qiOperation = cloneQiOperationState(player.res.operation)
 
       if (skillId === DODGE_SKILL_ID) {
+        this.dodgeAttempts += 1
         const attemptTime = getNow()
         const refundTarget = player.res.qiMax * DODGE_REFUND_PERCENT
         const refund = Math.min(refundTarget, Math.max(qiCost, 0))
@@ -1559,10 +1700,11 @@ export const useBattleStore = defineStore('battle', {
       const hits = currentSkill?.hits ?? []
       const baseHit = hits[0]
       let baseMultiplier = baseHit?.multiplier ?? 1
+      if (currentSkill?.id && this.monsterFollowupPreview && this.monsterFollowupPreview.skillId === currentSkill.id) {
+        this.monsterFollowupPreview = null
+      }
       if (hits.length > 1 && baseHit) {
         this.activateMonsterComboSequence(currentSkill, baseHit, hits.slice(1))
-      } else if (this.monsterFollowup && this.monsterFollowup.stage === 'telegraph') {
-        this.monsterFollowup = null
       }
       const rng = makeRng(this.rngSeed ^ 0x517cc1b7)
       this.rngSeed = (this.rngSeed + 0x7f4a7c15) >>> 0
@@ -1577,6 +1719,8 @@ export const useBattleStore = defineStore('battle', {
       const player = usePlayerStore()
       const stats = player.finalStats
       const now = getNow()
+      const agiAttacker = resolveMonsterAgi(this.monster)
+      const agiDefender = stats.totals.AGI ?? 0
 
       let dodged = false
       const dodgeAttempt = this.pendingDodge
@@ -1584,21 +1728,24 @@ export const useBattleStore = defineStore('battle', {
         const windowStart = dodgeAttempt.attemptedAt
         const windowEnd = dodgeAttempt.invincibleUntil
         if (now >= windowStart && now <= windowEnd) {
-          dodged = true
-          this.pushFloat('闪避!', 'miss')
-          if (!dodgeAttempt.refundGranted) {
-            const refund = Math.max(dodgeAttempt.refundAmount, 0)
-            if (refund > 0) {
-              const beforeQi = player.res.qi
-              player.restoreQi(refund)
-              const gained = Math.max(player.res.qi - beforeQi, 0)
-              if (gained > 0) {
-                this.recordQiRestored(gained)
-                this.pushFloat(`斗气+${Math.round(gained)}`, 'heal')
+          const chance = resolveDodgeSuccessChance(agiAttacker, agiDefender)
+          if (chance > 0 && randBool(rng, chance)) {
+            dodged = true
+            this.pushFloat('闪避!', 'miss')
+            if (!dodgeAttempt.refundGranted) {
+              const refund = Math.max(dodgeAttempt.refundAmount, 0)
+              if (refund > 0) {
+                const beforeQi = player.res.qi
+                player.restoreQi(refund)
+                const gained = Math.max(player.res.qi - beforeQi, 0)
+                if (gained > 0) {
+                  this.recordQiRestored(gained)
+                  this.pushFloat(`斗气+${Math.round(gained)}`, 'heal')
+                }
               }
+              this.recordCultivationAction('perfectDodge', 1)
+              dodgeAttempt.refundGranted = true
             }
-            this.recordCultivationAction('perfectDodge', 1)
-            dodgeAttempt.refundGranted = true
           }
         }
         if (now >= windowEnd) {
@@ -1609,6 +1756,7 @@ export const useBattleStore = defineStore('battle', {
       }
 
       if (dodged) {
+        this.dodgeSuccesses += 1
         this.playerQi = player.res.qi
         this.playerQiMax = player.res.qiMax
         this.qiOperation = cloneQiOperationState(player.res.operation)
@@ -1625,8 +1773,6 @@ export const useBattleStore = defineStore('battle', {
         defRef,
         defenderTough: 1,
       })
-      const agiAttacker = resolveMonsterAgi(this.monster)
-      const agiDefender = stats.totals.AGI ?? 0
       const weakness = resolveWeaknessDamage(damageResult.damage, agiAttacker, agiDefender, randRange(rng, 0, 1))
 
       const multiplier = Math.max(damageMultiplier, 0)
