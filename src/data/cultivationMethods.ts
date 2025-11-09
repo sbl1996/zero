@@ -20,36 +20,36 @@ export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
     id: 'star_soul',
     name: '星魂斗气',
     focus: toFocus({ atk: 0.4, def: 0.4, agi: 0.2 }),
-    description: '星魂一脉的基础功法，侧重兼顾攻防的斗气运转。',
+    description: '星魂一脉的古老传承，凝聚星辰之力运转斗气，攻守兼备，如星辉般稳定而坚韧。',
     effects: [
-      '均衡流派，为前期稳固根基的常见选择。',
+      '均衡流派，进可攻退可守。',
     ],
   },
   {
-    id: 'undying',
-    name: '不死斗气',
+    id: 'vajra',
+    name: '金刚斗气',
     focus: toFocus({ atk: 0.45, def: 0.5, agi: 0.05 }),
-    description: '以护躯强横著称，牺牲速度换取更强的防御承受力。',
+    description: '传承自北方玄武神兽的不世绝学，取其长寿不灭、固若金汤之神髓，成就万劫不磨之身。',
     effects: [
-      '偏向防御的运转方式，提升持久战表现。',
+      '防御大师的选择，拥有惊人的耐受力。',
     ],
   },
   {
     id: 'tiger_stripe',
     name: '虎纹斗气',
     focus: toFocus({ atk: 0.5, def: 0.1, agi: 0.4 }),
-    description: '猛虎般的爆发式斗气，强调攻击与敏捷的双重突击。',
+    description: '传承自西方白虎神兽的杀伐绝学，取其庚金之锐利、白虎之威猛，剑锋所指，所向披靡。',
     effects: [
-      '爆发型功法，适合迅猛连击与快速收割。',
+      '爆发流的极致，擅长快速突进与连击爆发。',
     ],
   },
   {
     id: 'purple_flame',
     name: '紫焰斗气',
     focus: toFocus({ atk: 0.3, def: 0.3, agi: 0.15, recovery: 0.25 }),
-    description: '紫焰淬体，兼顾攻防与恢复的混合流派。',
+    description: '传承自南方朱雀神兽的不灭神火，取其浴火重生之玄妙，焚尽万邪，生生不息。',
     effects: [
-      '紫焰被动：基础恢复 +20，运转时斗气回复随预热增强。',
+      '不灭紫焰：斗气恢复速度翻倍。',
     ],
   },
 ]

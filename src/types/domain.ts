@@ -121,7 +121,7 @@ export interface BasePowerState {
   lastUpdatedAt: number | null
 }
 
-export type CultivationMethodId = 'star_soul' | 'undying' | 'tiger_stripe' | 'purple_flame'
+export type CultivationMethodId = 'star_soul' | 'vajra' | 'tiger_stripe' | 'purple_flame'
 
 export interface QiFocusProfile {
   atk: number
@@ -282,7 +282,7 @@ export interface MonsterRewards {
   gold: number
   exp?: number
   lootTableId?: string
-  coreDrop?: { tier: number }
+  coreDrop?: { tier: number; chance: number }
 }
 
 export interface MonsterSkillHit {
@@ -551,7 +551,8 @@ export interface BattleState {
   }
   skillRealmNotified: Record<string, boolean>
   skillCooldownBonuses: Record<string, { expiresAt: number; reductionPercent: number }>
-  monsterVulnerability: { percent: number; expiresAt: number } | null
+  playerSuperArmor: { expiresAt: number; durationMs: number } | null
+  monsterVulnerability: { percent: number; expiresAt: number; durationMs: number } | null
 }
 
 export type SkillChargeStatus = 'charging' | 'charged' | 'rewinding'

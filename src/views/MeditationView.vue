@@ -275,7 +275,6 @@ async function useCoreShard(tier: number) {
     setCoreFeedback('未能引导晶核之力。', false)
     return
   }
-  setCoreFeedback(`引动${option.name}，本源 +${option.bonusPerSecond.toFixed(1)}/s`, true)
 }
 
 function closeLevelUpModal() {
@@ -422,7 +421,7 @@ onBeforeUnmount(() => {
             <div class="stat-item">
               <span class="stat-label">本源增长</span>
               <span class="stat-value">
-                {{ isMeditating ? meditationBpRate.toFixed(3) : '0.000' }}/s
+                {{ isMeditating ? meditationBpRate.toFixed(2) : '0.00' }}/s
               </span>
             </div>
             <div class="stat-item">
@@ -493,12 +492,12 @@ onBeforeUnmount(() => {
             </div>
           </button>
         </div>
-        <p v-else class="core-empty">尚无晶核库存，可在战斗胜利后探索。</p>
+        <p v-else class="core-empty">尚无晶核库存。</p>
       </div>
     <div class="breakthrough-panel">
         <header class="breakthrough-header">
           <h3>境界突破</h3>
-          <p>瓶颈期可尝试强行冲击，或借助破境符提升成功率。突破会重置区间并清空溢出。</p>
+          <p>瓶颈期可尝试强行冲击，或借助宝物提升成功率。突破会重置区间并清空溢出。</p>
         </header>
         <div class="breakthrough-status">
           <div class="status-item">

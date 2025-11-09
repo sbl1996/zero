@@ -221,7 +221,7 @@ function equipToFirstEmpty(skillId: string) {
           <option v-for="option in skillOptions" :key="option.id || 'empty'" :value="option.id">{{ option.name }}</option>
         </select>
       </div>
-      <div class="text-small text-muted">提示：技能槽位可重复装备相同技能，但建议尝试不同的战术组合。</div>
+      <div class="text-small text-muted">提示：技能槽位重复装备的相同技能会共享冷却时间。</div>
     </div>
 
     <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">

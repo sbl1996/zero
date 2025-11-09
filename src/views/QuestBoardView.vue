@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
-import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import { ITEMS } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import { getSkillDefinition } from '@/data/skills'
@@ -227,7 +226,6 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="quest-board">
-    <PlayerStatusPanel class="quest-board__status" />
     <section class="panel quest-board__panel">
       <transition name="reward-toast">
         <div v-if="rewardNotice" class="quest-board__reward-card" role="status" aria-live="polite">
@@ -470,10 +468,9 @@ onBeforeUnmount(() => {
   --qb-active-text: #ecf4ff;
   --qb-available-bg: rgba(255, 210, 120, 0.32);
   --qb-available-text: #fff4d0;
-  display: grid;
-  grid-template-columns: 320px 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 16px;
-  align-items: start;
 }
 
 .quest-board__panel {
@@ -486,16 +483,6 @@ onBeforeUnmount(() => {
   border: 1px solid rgba(255, 255, 255, 0.05);
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   margin: 0;
-}
-
-.quest-board__status {
-  align-self: start;
-  margin: 0;
-  padding: 24px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
 .quest-board__panel {

@@ -5,6 +5,7 @@ import { resolveSkillAftercast, resolveSkillChargeTime, resolveSkillCooldown, re
 import { makeRng, randRange, randBool } from '@/composables/useRng'
 import { bossUnlockMap } from '@/data/monsters'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
+import { CORE_SHARD_BASE_ID, getCoreShardConfig } from '@/data/cultivationCores'
 import { ITEMS } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
@@ -71,6 +72,7 @@ const AUTO_REMATCH_MIN_INTERVAL = 5000
 const DODGE_SKILL_ID = 'qi_dodge'
 const DODGE_REFUND_PERCENT = 0.04
 const DEFAULT_ITEM_USE_DURATION_MS = 1000
+const CORE_DROP_RNG_MAGIC = 0xc2b2ae35
 
 const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
   iron: 1,
@@ -387,6 +389,7 @@ function initialState(): BattleState {
     },
     skillRealmNotified: {},
     skillCooldownBonuses: {},
+    playerSuperArmor: null,
     monsterVulnerability: null,
   }
 }
@@ -476,6 +479,8 @@ export const useBattleStore = defineStore('battle', {
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
+      this.playerSuperArmor = null
+      this.playerSuperArmor = null
       this.monsterSkillPlan = []
       this.syncMonsterSkillPlanPreview()
       // 保留lastOutcome和loot以便在结算页面显示
@@ -529,6 +534,7 @@ export const useBattleStore = defineStore('battle', {
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
+      this.playerSuperArmor = null
       const initialDelay = resolveInitialMonsterDelay(monster, profile)
       this.monsterSkillPlan = []
       this.extendMonsterSkillPlan(initialDelay)
@@ -772,6 +778,14 @@ export const useBattleStore = defineStore('battle', {
 
       const now = getNow()
       const last = this.lastTickAt || now
+      const nowMs = Date.now()
+
+      if (this.playerSuperArmor && nowMs > this.playerSuperArmor.expiresAt) {
+        this.playerSuperArmor = null
+      }
+      if (this.monsterVulnerability && nowMs > this.monsterVulnerability.expiresAt) {
+        this.monsterVulnerability = null
+      }
       let delta = (now - last) / 1000
       if (!Number.isFinite(delta) || delta < 0) {
         delta = 0
@@ -891,17 +905,37 @@ export const useBattleStore = defineStore('battle', {
       let y = 0.5
 
       if (kind === 'hitP') {
+        const sameKindTexts = this.floatTexts.filter(text => text.kind === kind)
+        const offsetIndex = sameKindTexts.length
+        const verticalOffset = offsetIndex * 0.06 // 每个同类型提示垂直偏移6%
         x = randomInRange(0.18, 0.38)
-        y = randomInRange(0.38, 0.68)
+        y = randomInRange(0.38, 0.68) - verticalOffset * 0.5
       } else if (kind === 'hitE') {
+        const sameKindTexts = this.floatTexts.filter(text => text.kind === kind)
+        const offsetIndex = sameKindTexts.length
+        const verticalOffset = offsetIndex * 0.06
         x = randomInRange(0.62, 0.82)
-        y = randomInRange(0.24, 0.54)
+        y = randomInRange(0.24, 0.54) - verticalOffset * 0.5
       } else if (kind === 'heal') {
+        const sameKindTexts = this.floatTexts.filter(text => text.kind === kind)
+        const offsetIndex = sameKindTexts.length
+        const verticalOffset = offsetIndex * 0.06
         x = randomInRange(0.22, 0.42)
-        y = randomInRange(0.22, 0.5)
+        y = randomInRange(0.22, 0.5) - verticalOffset * 0.5
       } else if (kind === 'loot') {
+        const sameKindTexts = this.floatTexts.filter(text => text.kind === kind)
+        const offsetIndex = sameKindTexts.length
+        const verticalOffset = offsetIndex * 0.06
         x = randomInRange(0.38, 0.62)
-        y = randomInRange(0.18, 0.32)
+        y = randomInRange(0.18, 0.32) - verticalOffset * 0.5
+      } else if (kind === 'miss') {
+        // miss 类型提示的位置计算在 BattleView.vue 的 floatTextStyle 函数中处理
+        // 这里使用默认位置，具体位置由视图层根据内容类型决定
+        const sameKindTexts = this.floatTexts.filter(text => text.kind === kind)
+        const offsetIndex = sameKindTexts.length
+        const verticalOffset = offsetIndex * 0.06
+        x = 0.5
+        y = 0.5 - verticalOffset * 0.3
       }
 
       this.floatTexts.push({ id, x, y, value, kind, variant })
@@ -1010,6 +1044,32 @@ export const useBattleStore = defineStore('battle', {
       }
 
       return lootResults
+    },
+    awardCoreDrop(monster: Monster): ItemLootResult | null {
+      const drop = monster.rewards.coreDrop
+      if (!drop) return null
+      const chance = Math.max(0, Math.min(1, drop.chance ?? 0))
+      if (chance <= 0) return null
+      const rng = makeRng(this.rngSeed ^ CORE_DROP_RNG_MAGIC)
+      this.rngSeed = (this.rngSeed + CORE_DROP_RNG_MAGIC) >>> 0
+      if (rng() >= chance) {
+        return null
+      }
+      const rawTier = Number(drop.tier)
+      if (!Number.isFinite(rawTier)) return null
+      const tier = Math.min(9, Math.max(1, Math.floor(rawTier)))
+      const config = getCoreShardConfig(tier)
+      const itemId = config?.id ?? `${CORE_SHARD_BASE_ID}${tier}`
+      const itemName = config?.name ?? `${tier}级晶核`
+      const inventory = useInventoryStore()
+      inventory.addItem(itemId, 1)
+      this.pushFloat(`获得 ${itemName} x1`, 'loot')
+      return {
+        kind: 'item',
+        itemId,
+        name: itemName,
+        quantity: 1,
+      }
     },
     conclude(result: 'victory' | 'defeat', loot: LootResult[] = []) {
       const currentMonster = this.monster
@@ -1487,7 +1547,7 @@ export const useBattleStore = defineStore('battle', {
       if (dmg > 0) {
         this.applyPlayerDamage(dmg, skill.flash, { weakness: weaknessTriggered })
         this.recordCultivationAction('attackHit', 1)
-        if (skillId === 'star_realm_star_soul_break') {
+        if (skillId === 'star_realm_dragon_blood_break') {
           this.recordCultivationAction('finisherHit', 1)
         }
       } else {
@@ -1532,14 +1592,22 @@ export const useBattleStore = defineStore('battle', {
       }
 
       if (result.applyVulnerability && result.applyVulnerability.percent > 0 && hit) {
+        const durationMs = Math.max(result.applyVulnerability.durationMs, 0)
         this.monsterVulnerability = {
           percent: Math.max(result.applyVulnerability.percent, 0),
-          expiresAt: nowMs + Math.max(result.applyVulnerability.durationMs, 0),
+          expiresAt: nowMs + durationMs,
+          durationMs,
         }
+        // 直接显示防御性状态效果，使用固定位置避免重叠
         this.pushFloat('目标易伤', 'miss')
       }
 
       if (result.superArmorMs && result.superArmorMs > 0) {
+        const durationMs = Math.max(result.superArmorMs, 0)
+        this.playerSuperArmor = {
+          expiresAt: nowMs + durationMs,
+          durationMs,
+        }
         this.pushFloat('霸体', 'miss')
       }
 
@@ -1627,7 +1695,11 @@ export const useBattleStore = defineStore('battle', {
         }
       }
 
+      const coreLoot = this.awardCoreDrop(this.monster)
       const loot = this.applyVictoryLoot(this.monster, player)
+      if (coreLoot) {
+        loot.unshift(coreLoot)
+      }
 
       this.conclude('victory', loot)
     },

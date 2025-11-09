@@ -32,7 +32,6 @@
         {
           "id": "to-fringe",
           "name": "青苔原",
-          "description": "前往青苔遍布的初级狩猎地。",
           "position": { "x": 6, "y": 26 },
           "routeName": "map",
           "routeParams": { "mapId": "fringe" },
@@ -41,7 +40,6 @@
         {
           "id": "to-astral-crown",
           "name": "星界王座",
-          "description": "面对星界终局试炼。",
           "position": { "x": 48, "y": 8 },
           "routeName": "map",
           "routeParams": { "mapId": "astral-crown" },
@@ -50,7 +48,6 @@
         {
           "id": "to-green-elysium",
           "name": "绿野仙境",
-          "description": "前往永恒晨光照耀的神秘花园。",
           "position": { "x": 85, "y": 15 },
           "routeName": "map",
           "routeParams": { "mapId": "green-elysium" },
@@ -62,7 +59,7 @@
       "id": "fringe",
       "name": "青苔原",
       "image": "map-fringe.webp",
-      "description": "连绵低丘覆盖湿润苔藓，旧风车在晚风里悠悠转动。野猪与商队混杂的足迹遍布泥地，破旧营火还冒着淡淡炊烟。",
+      "description": "这片荒凉的废地遍布断垣与枯树，风声空荡，据说被神祝福的生物在某处静静守候。",
       "category": "wild",
       "locations": []
     },

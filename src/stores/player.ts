@@ -18,10 +18,12 @@ import {
 import type { RealmBodyFoundation } from '@/composables/useLeveling'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
 import { getStartingEquipment } from '@/data/equipment'
+import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
 import { applySkillUsage, createDefaultSkillProgress } from '@/composables/useSkills'
 import type { SkillUsageResult } from '@/composables/useSkills'
 import { ITEMS } from '@/data/items'
 import type {
+  CultivationMethodId,
   AttributeBreakdown,
   BreakthroughMethod,
   Equipment,
@@ -87,7 +89,7 @@ type CultivationActionKey = keyof typeof CULTIVATION_ACTION_WEIGHTS
 
 const REALM_SKILL_UNLOCKS: Array<{ tier: number; skillId: string }> = [
   { tier: 2, skillId: 'fallen_dragon_smash' },
-  { tier: 3, skillId: 'star_realm_star_soul_break' },
+  { tier: 3, skillId: 'star_realm_dragon_blood_break' },
 ]
 
 type AttributeSummaryKey = 'HP' | 'QiMax' | 'ATK' | 'DEF' | 'AGI' | 'REC'
@@ -199,15 +201,14 @@ function buildStats(state: Player, equip: EquipSummary, fValue: number): Stats {
   const method = state.cultivation.method
   const qiBase = computeQiAttributes(state.cultivation.bp.current, method)
 
-  const bodyRecBonus = method.id === 'purple_flame' ? 20 : 0
-
+  
   const body: Stats['body'] = {
     HP: state.baseBodyHp + equip.addHP,
     QiMax: Math.round(0.5 * state.cultivation.bp.current) + equip.addQiMax,
     ATK: state.baseStats.ATK + equip.addATK,
     DEF: state.baseStats.DEF + equip.addDEF,
     AGI: state.baseStats.AGI + equip.addAGI,
-    REC: state.baseStats.REC + equip.addREC + bodyRecBonus,
+    REC: state.baseStats.REC + equip.addREC,
   }
 
   const qi: Stats['qi'] = {
@@ -296,6 +297,7 @@ export const usePlayerStore = defineStore('player', {
       hpMax: state.stats.caps.hpMax,
       qiMax: state.stats.caps.qiMax,
     }),
+    hasCharacter: (state) => Boolean(state.name && state.name.trim().length > 0),
   },
   actions: {
     ensureSkillProgress(skillId: string): SkillProgress {
@@ -374,6 +376,24 @@ export const usePlayerStore = defineStore('player', {
     },
     reset() {
       Object.assign(this, makeInitialPlayer())
+    },
+    setCultivationMethod(methodId: CultivationMethodId, options: { maintainRatios?: boolean } = {}) {
+      const def = getCultivationMethodDefinition(methodId)
+      if (!def) return
+      this.cultivation.method = {
+        id: def.id,
+        name: def.name,
+        focus: { ...def.focus },
+      }
+      const maintainRatios = options.maintainRatios ?? false
+      this.refreshDerived({ maintainRatios })
+    },
+    initializeCharacter(payload: { name: string; methodId: CultivationMethodId }) {
+      const trimmedName = payload.name.trim()
+      this.name = trimmedName
+      this.setCultivationMethod(payload.methodId, { maintainRatios: false })
+      this.res.hp = this.res.hpMax
+      this.res.qi = this.res.qiMax
     },
     refreshDerived(options: { maintainRatios?: boolean } = {}) {
       recalcDerivedState(this, options)

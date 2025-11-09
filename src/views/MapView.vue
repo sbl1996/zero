@@ -128,7 +128,7 @@
               </div>
             </template>
             <template v-else>
-              将鼠标移至怪物名称查看情报
+              {{ currentMap.description || '探索此地，寻找挑战与机遇。' }}
             </template>
           </footer>
           <div v-else class="monster-detail placeholder">

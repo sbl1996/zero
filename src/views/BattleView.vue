@@ -20,6 +20,7 @@ import type {
   Monster,
   MonsterFollowupState,
   MonsterComboPreviewInfo,
+  MonsterSpecialization,
 } from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import QuickItemBar from '@/components/QuickItemBar.vue'
@@ -56,6 +57,44 @@ const monsterAttackProgress = computed(() => {
   if (!Number.isFinite(total) || total <= 0) return 0
   const remaining = Math.max(0, battle.monsterNextSkillTimer)
   return Math.max(0, Math.min(1, remaining / total))
+})
+
+const buffTickTrigger = computed(() => battle.lastTickAt)
+
+type BuffDisplayInfo = {
+  text: string
+  ratio: number
+}
+
+const playerBuffInfo = computed<BuffDisplayInfo | null>(() => {
+  const state = battle.playerSuperArmor
+  void buffTickTrigger.value
+  if (!state) return null
+  const remainingMs = state.expiresAt - Date.now()
+  if (remainingMs <= 0) return null
+  const ratio = state.durationMs > 0
+    ? Math.max(0, Math.min(1, remainingMs / state.durationMs))
+    : 0
+  return {
+    text: '霸体',
+    ratio,
+  }
+})
+
+const enemyBuffInfo = computed<BuffDisplayInfo | null>(() => {
+  const status = battle.monsterVulnerability
+  void buffTickTrigger.value
+  if (!status) return null
+  const remainingMs = status.expiresAt - Date.now()
+  if (remainingMs <= 0) return null
+  const ratio = status.durationMs > 0
+    ? Math.max(0, Math.min(1, remainingMs / status.durationMs))
+    : 0
+  const percentLabel = `${Math.round(status.percent * 100)}%`
+  return {
+    text: `易伤 +${percentLabel}`,
+    ratio,
+  }
 })
 
 // 计算破绽率
@@ -260,6 +299,34 @@ const activeItemHotkeys = new Set<string>()
 function describeMonsterRealm(monster: Monster | null | undefined): string {
   if (!monster?.realmTier) return '未知'
   return formatRealmTierLabel(monster.realmTier)
+}
+
+function getSpecializationLabel(specialization: MonsterSpecialization): string {
+  const labels: Record<MonsterSpecialization, string> = {
+    balanced: '均衡',
+    attacker: '攻击',
+    defender: '防御',
+    agile: '敏捷',
+    bruiser: '重装',
+    skirmisher: '游击',
+    mystic: '奥术',
+    crazy: '疯狂'
+  }
+  return labels[specialization] || '未知'
+}
+
+function getSpecializationColor(specialization: MonsterSpecialization): { bg: string; text: string; border: string } {
+  const colors: Record<MonsterSpecialization, { bg: string; text: string; border: string }> = {
+    balanced: { bg: 'rgba(156, 163, 175, 0.7)', text: '#f3f4f6', border: 'rgba(156, 163, 175, 0.9)' },    // 灰色 - 平衡
+    attacker: { bg: 'rgba(239, 68, 68, 0.7)', text: '#fef2f2', border: 'rgba(239, 68, 68, 0.9)' },        // 红色 - 攻击
+    defender: { bg: 'rgba(59, 130, 246, 0.7)', text: '#eff6ff', border: 'rgba(59, 130, 246, 0.9)' },       // 蓝色 - 防御
+    agile: { bg: 'rgba(34, 197, 94, 0.7)', text: '#f0fdf4', border: 'rgba(34, 197, 94, 0.9)' },          // 绿色 - 敏捷
+    bruiser: { bg: 'rgba(168, 85, 247, 0.7)', text: '#faf5ff', border: 'rgba(168, 85, 247, 0.9)' },        // 紫色 - 重装
+    skirmisher: { bg: 'rgba(251, 146, 60, 0.7)', text: '#fff7ed', border: 'rgba(251, 146, 60, 0.9)' },     // 橙色 - 游击
+    mystic: { bg: 'rgba(139, 92, 246, 0.7)', text: '#f5f3ff', border: 'rgba(139, 92, 246, 0.9)' },        // 深紫色 - 奥术
+    crazy: { bg: 'rgba(217, 70, 239, 0.7)', text: '#fdf4ff', border: 'rgba(217, 70, 239, 0.9)' }          // 粉色 - 疯狂
+  }
+  return colors[specialization] || { bg: 'rgba(107, 114, 128, 0.7)', text: '#f9fafb', border: 'rgba(107, 114, 128, 0.9)' }
 }
 
 function formatBattleDuration(durationMs: number): string {
@@ -520,7 +587,23 @@ const missFloatStyle: StyleMap = {
 
 function floatTextStyle(text: FloatText): StyleMap {
   if (text.kind === 'miss') {
-    return missFloatStyle
+    // 对于状态效果类提示（霸体、易伤等），使用自定义位置
+    const statusEffects = ['霸体', '易伤', '目标易伤', '闪避', '格挡', '反击', '吸血']
+    const isStatusEffect = statusEffects.some(effect => text.value.includes(effect))
+
+    if (isStatusEffect) {
+      // 状态效果使用自定义位置，但保持miss样式
+      return {
+        left: `${text.x * 100}%`,
+        top: `${text.y * 100}%`,
+        animation: 'none',
+        transform: 'translate(-50%, -50%)',
+        fontSize: '26px',
+      }
+    } else {
+      // 其他miss类型提示（比如未命中等）使用中央位置
+      return missFloatStyle
+    }
   }
   return {
     left: `${text.x * 100}%`,
@@ -1361,6 +1444,70 @@ onBeforeUnmount(() => {
   font-weight: 700;
   text-shadow: 0 0 6px rgba(126, 225, 255, 0.8);
 }
+
+.float-area {
+  position: relative;
+}
+
+.buff-overlay {
+  position: absolute;
+  top: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #f4f6fb;
+  padding: 4px 10px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+  --buff-progress: 1;
+}
+
+.buff-overlay--player {
+  left: 12px;
+  text-align: left;
+}
+
+.buff-overlay--enemy {
+  right: 12px;
+  text-align: right;
+}
+
+.buff-overlay::after {
+  content: '';
+  position: absolute;
+  bottom: 4px;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  border-radius: 1px;
+  background: currentColor;
+  transform-origin: left;
+  transform: scaleX(var(--buff-progress, 1));
+  transition: transform 0.1s linear;
+}
+
+.buff-overlay--enemy::after {
+  transform-origin: right;
+}
+
+.monster-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  padding: 0 0.35rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  color: #ffe1e6;
+  background: rgba(255, 80, 120, 0.6);
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.monster-badge.specialization-badge {
+  border: 1px solid;
+}
 </style>
 
 <template>
@@ -1381,8 +1528,20 @@ onBeforeUnmount(() => {
     <section class="panel" style="display: flex; flex-direction: column; gap: 20px;">
       <header class="flex flex-between" style="align-items: flex-start;">
         <div>
-          <h2 class="section-title" style="margin: 0 0 4px;">{{ monster.name }}</h2>
-          <div class="text-muted text-small">境界 {{ describeMonsterRealm(monster) }} ｜ 攻击 {{ monster.stats.ATK }} ｜ 防御 {{ monster.stats.DEF }}</div>
+          <h2 class="section-title" style="margin: 0 0 4px;">
+            {{ monster.name }}
+            <span v-if="monster.isBoss" class="monster-badge">BOSS</span>
+            <span v-else
+              class="monster-badge specialization-badge"
+              :style="{
+                background: getSpecializationColor(monster.specialization).bg,
+                color: getSpecializationColor(monster.specialization).text,
+                borderColor: getSpecializationColor(monster.specialization).border
+              }">
+              {{ getSpecializationLabel(monster.specialization) }}
+            </span>
+          </h2>
+          <div class="text-muted text-small">境界 {{ describeMonsterRealm(monster) }} ｜ 攻击 {{ monster.stats.ATK }} ｜ 防御 {{ monster.stats.DEF }} ｜ 敏捷 {{ monster.stats.AGI }}</div>
           <div class="text-small text-muted" style="margin-top: 6px;">奖励：{{ formatMonsterRewards(monster) }}</div>
         </div>
         <div class="text-right" style="margin-top: 10px;">
@@ -1397,7 +1556,7 @@ onBeforeUnmount(() => {
             </div>
             <div class="dodge-rate-banner">
               <span class="dodge-rate-label">闪避成功率</span>
-              <span class="dodge-rate-value" :style="{ color: getDodgeChanceColor(dodgeSuccessChance.value) }">
+              <span class="dodge-rate-value" :style="{ color: getDodgeChanceColor(dodgeSuccessChance) }">
                 {{ dodgeSuccessChanceText }}
               </span>
             </div>
@@ -1405,6 +1564,20 @@ onBeforeUnmount(() => {
         </div>
       </header>
       <div class="float-area">
+        <div
+          v-if="playerBuffInfo"
+          class="buff-overlay buff-overlay--player"
+          :style="{ '--buff-progress': playerBuffInfo.ratio }"
+        >
+          {{ playerBuffInfo.text }}
+        </div>
+        <div
+          v-if="enemyBuffInfo"
+          class="buff-overlay buff-overlay--enemy"
+          :style="{ '--buff-progress': enemyBuffInfo.ratio }"
+        >
+          {{ enemyBuffInfo.text }}
+        </div>
         <div
           class="battle-portraits"
           :class="{

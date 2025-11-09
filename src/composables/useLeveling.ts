@@ -43,8 +43,6 @@ export const PASSIVE_MEDITATION_BP_PER_SECOND = 0.1
 const HP_RECOVERY_MEDITATION_MULTIPLIER = 3
 const HP_RECOVERY_BATTLE_MULTIPLIER = 0.5
 const HP_RECOVERY_BOSS_MULTIPLIER = 0.25
-const PURPLE_RECOVERY_FLAT = 20
-const PURPLE_RECOVERY_BONUS_SCALE = 0.2
 
 const REALM_PHASE_SEQUENCE: RealmPhase[] = ['initial', 'middle', 'high', 'peak', 'limit']
 const REALM_OVERFLOW_CAP_RATIO = 0.2
@@ -113,7 +111,7 @@ const ENVIRONMENT_MULTIPLIER: Record<CultivationEnvironment, number> = {
   training: 0.8,
   wild: 0.4,
   town: 0.3,
-  meditation: 20,
+  meditation: 1.0,
   idle: 0.2,
 }
 
@@ -286,26 +284,16 @@ function createDefaultCultivationState(): PlayerCultivationState {
     overflow: 0,
   }
   const range = getRealmBpRange(realm)
-  const defaultMethod = getCultivationMethodDefinition('star_soul')
+  const defaultMethod = getCultivationMethodDefinition('star_soul')!
 
   return {
     realm,
     bp: createDefaultBasePowerState(range),
-    method: defaultMethod
-      ? {
-          id: defaultMethod.id,
-          focus: { ...defaultMethod.focus },
-          name: defaultMethod.name,
-        }
-      : {
-          id: 'star_soul',
-          focus: {
-            atk: 0.4,
-            def: 0.4,
-            agi: 0.2,
-          },
-          name: '星魂斗气',
-        },
+    method: {
+      id: defaultMethod.id,
+      focus: { ...defaultMethod.focus },
+      name: defaultMethod.name,
+    },
     breakthrough: {
       pending: false,
       cooldownUntil: null,
@@ -398,9 +386,9 @@ export function computeRecoveryRates(params: {
 
   const isPurple = method.id === 'purple_flame'
   const baseRec = stats.totals.REC
-  const recForRecovery = isPurple ? baseRec + PURPLE_RECOVERY_FLAT : baseRec
+  const recForRecovery = baseRec
   const baseQiRate = (BASE_RECOVERY_OFFSET + BASE_RECOVERY_SLOPE * recForRecovery) * qiStateMultiplier * qiFMultiplier
-  const qiBonus = isPurple ? 1 + PURPLE_RECOVERY_BONUS_SCALE * clamp(operation.fValue, 0, 1) : 1
+  const qiBonus = isPurple ? 2 : 1
   const qiPerSecond = baseQiRate * qiBonus
 
   let hpPerSecond = HP_RECOVERY_PER_REC * recForRecovery
@@ -546,6 +534,7 @@ export function createDefaultPlayer(): Player {
   const starterSkill = 'dragon_breath_slash'
 
   return {
+    name: '',
     gold: 0,
     baseBodyHp: BASE_BODY_HP,
     baseStats: { ...DEFAULT_ATTRIBUTE_ALLOCATION },

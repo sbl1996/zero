@@ -71,8 +71,23 @@ DEF_final = Body_DEF + F(t)*Qi_DEF
 AGI_final = Body_AGI + F(t)*Qi_AGI
 ```
 
-**功法侧重**：
-星魂 0.40/0.40/0.20；不死 0.45/0.50/0.05；虎纹 0.50/0.10/0.40；**紫焰** 0.30/0.30/0.15 + **恢复系 0.25**（§4）
+**功法列表**：
+* 星魂斗气（star_soul）
+  * 描述：星魂一脉的古老传承，凝聚星辰之力运转斗气，攻守兼备，如星辉般稳定而坚韧。
+  * 属性分配：0.40/0.40/0.20
+* 金刚斗气（vajra）
+  * 描述：传承自北方玄武神兽的不世绝学，取其长寿不灭、固若金汤之神髓，成就万劫不磨之身。
+  * 属性分配：0.45/0.50/0.05
+* 虎纹斗气（tiger_stripe）
+  * 描述：传承自西方白虎神兽的杀伐绝学，取其庚金之锐利、白虎之威猛，剑锋所指，所向披靡。
+  * 属性分配：0.50/0.10/0.40
+  * 特性：
+    * 猛虎下山：在对方技能后摇时击中敌人
+* 紫焰斗气（purple_flame）
+  * 描述：传承自南方朱雀神兽的不灭神火，取其浴火重生之玄妙，焚尽万邪，生生不息。
+  * 属性分配：0.30/0.30/0.15 + **恢复 0.25**
+  * 特性：
+    * 不灭紫焰：斗气恢复速度翻倍。
 
 ### 1.4 修炼、瓶颈与突破
 
@@ -87,7 +102,7 @@ K_bp=0.1, K_env：1.0
 * 所有消耗斗气的行为可获得BP，公式如下（过于复杂，暂不启用）
 ```
 ΔBP = K_bp * { K_env * (α * Qi_spent + β * Qi_restored) + K_actions }
-K_bp=1e-5, α=1.0, β=0.5（紫焰 β=0.6）
+K_bp=1e-5, α=1.0, β=0.5
 K_env：普通1.0 / Boss1.2 / 木桩0.8 / 野外0.4 / 城内0.3 / 冥想0.2；战后余劲15min ×1.5
 K_actions：普攻150 / 受击300 / 完美闪避800 / 终招1200 / 重伤坚持200（境界自适应缩放）
 ```
@@ -156,7 +171,7 @@ F_mult：运转=F(t) / 非运转&冥想=1.0
 
 | 特化             | 说明        | (ATK, DEF, AGI) 系数 |
 | -------------- | --------- | ------------------ |
-| Balanced（均衡）   | 类星魂的通用型   | (0.40, 0.40, 0.20) |
+| Balanced（均衡）   | 通用型，攻守兼备  | (0.40, 0.40, 0.20) |
 | Attacker（攻击）   | 高输出，低防中速  | (0.55, 0.25, 0.20) |
 | Defender（防御）   | 高减伤，输出偏低  | (0.30, 0.55, 0.15) |
 | Agile（敏捷）      | 高速、破绽威胁   | (0.35, 0.20, 0.45) |
@@ -327,17 +342,19 @@ MaxLV_by_Realm:
 * 龙息斩 (dragon_breath_slash)
   * 消耗Qi 2%，冷却2s，后摇0.2s
   * 基础倍率1.0
-  * 等级1-10：每级+2%伤害、-2%CD；L3 破绽伤加成 +5%；L6 消耗×0.8；L10 命中后2s内下一次**陨龙击**CD -25%
+  * 等级1-10：每级+2%倍率、-2%CD；L3 破绽伤加成 +5%；L6 消耗×0.8；L10 命中后2s内下一次**陨龙击**CD -25%
 
 * 陨龙击 (fallen_dragon_smash)
   * 消耗Qi 4%，冷却5s，蓄力0.2s，后摇0.2s
   * 基础倍率1.6
-  * 等级1-10：每级+4%伤害、-2%CD；L3 破绽伤加成 +10%；L6 消耗×0.8
+  * 等级1-10：每级+4%倍率、-2%CD；L3 破绽伤加成 +10%；L6 消耗×0.8
 
-* 星界龙血破 (star_realm_star_soul_break)
-  * 消耗Qi 10%，冷却20s，蓄力0.5s，后摇0.2s
-  * 基础倍率3.6
-  * 等级1-10：每级+8%伤害、-2%CD；L3 触发时获得0.5s霸体；L6 消耗×0.8；L10 命中50%概率给10s易伤+10%
+* 星界龙血破 (star_realm_dragon_blood_break)
+  * 消耗Qi 10%，冷却16s，蓄力0.5s，后摇0.2s
+  * 基础倍率4.5
+  * 等级1-10：每级+15%倍率、-2%CD；触发时获得0.5s霸体；命中给8s易伤+10%
+
+* 注：每级增加的倍率为绝对倍率加成，一级开始就有加成，即1级陨龙击倍率为1.6+0.04=1.64。
 
 ---
 
@@ -639,44 +656,44 @@ MaxLV_by_Realm:
 ### 装备列表
 | 槽位 | id | 英文名称 | 等级需求 | 主属性 | 副属性 | 价格(GOLD) |
 |------|---|---|---:|---|---|---:|
-| 右手武器 | iron-sword | 铁剑 | 1 | ATK 25 | +3 ATK | 300 |
-| 双手武器 | iron-maul | 铁锤 | 1 | ATK 45 | +4 ATK | 500 |
+| 右手武器 | iron-sword | 铁剑 | 1 | ATK 10 | +3 ATK | 300 |
+| 双手武器 | iron-maul | 铁锤 | 1 | ATK 16 | +4 ATK | 500 |
 | 左手盾 | iron-shield | 铁盾 | 1 | DEF 10 | +2 DEF | 250 |
 | 铠甲 | iron-plate | 铁甲 | 1 | DEF 15 | +2 DEF, +20 HP | 400 |
 | 头盔 | iron-helm | 铁盔 | 1 | DEF 8 | +1 DEF | 200 |
 | 戒指 | iron-ring | 铁戒指 | 1 | HP 30 | +5 HP | 220 |
-| 右手武器 | steel-blade | 钢刃 | 10 | ATK 40 | +3 ATK | 600 |
-| 双手武器 | steel-greatsword | 巨型钢剑 | 10 | ATK 72 | +4 ATK | 1000 |
+| 右手武器 | steel-blade | 钢刃 | 10 | ATK 18 | +3 ATK | 600 |
+| 双手武器 | steel-greatsword | 巨型钢剑 | 10 | ATK 30 | +4 ATK | 1000 |
 | 左手盾 | steel-bulwark | 钢盾 | 10 | DEF 16 | +2 DEF | 500 |
 | 铠甲 | steel-cuirass | 钢甲 | 10 | DEF 24 | +2 DEF, +20 HP | 800 |
 | 头盔 | steel-helm | 钢盔 | 10 | DEF 13 | +1 DEF | 400 |
 | 戒指 | amber-ring | 琥珀戒 | 10 | HP 48 | +5 HP | 440 |
-| 右手武器 | knight-blade | 骑士刃 | 20 | ATK 55 | +3 ATK | 1050 |
-| 双手武器 | knight-warhammer | 骑士战锤 | 20 | ATK 99 | +4 ATK | 1750 |
+| 右手武器 | knight-blade | 骑士刃 | 20 | ATK 24 | +3 ATK | 1050 |
+| 双手武器 | knight-warhammer | 骑士战锤 | 20 | ATK 40 | +4 ATK | 1750 |
 | 左手盾 | knight-tower-shield | 骑士塔盾 | 20 | DEF 22 | +2 DEF | 875 |
 | 铠甲 | knight-armor | 骑士甲 | 20 | DEF 33 | +2 DEF, +20 HP | 1400 |
 | 头盔 | knight-helm | 骑士盔 | 20 | DEF 18 | +1 DEF | 700 |
 | 戒指 | ruby-ring | 红玉戒 | 20 | HP 66 | +5 HP | 770 |
-| 右手武器 | mithril-saber | 秘银军刀 | 30 | ATK 78 | +3 ATK | 1800 |
-| 双手武器 | mithril-claymore | 秘银巨剑 | 30 | ATK 140 | +4 ATK | 3000 |
+| 右手武器 | mithril-saber | 秘银军刀 | 30 | ATK 32 | +3 ATK | 1800 |
+| 双手武器 | mithril-claymore | 秘银巨剑 | 30 | ATK 56 | +4 ATK | 3000 |
 | 左手盾 | mithril-aegis | 秘银盾 | 30 | DEF 31 | +2 DEF | 1500 |
 | 铠甲 | mithril-hauberk | 秘银甲 | 30 | DEF 46 | +2 DEF, +20 HP | 2400 |
 | 头盔 | mithril-coif | 秘银盔 | 30 | DEF 25 | +1 DEF | 1200 |
 | 戒指 | sapphire-ring | 蓝宝石戒 | 30 | HP 93 | +5 HP | 1320 |
-| 右手武器 | runed-edge | 符文之锋 | 40 | ATK 105 | +3 ATK | 2700 |
-| 双手武器 | runed-greataxe | 符文巨斧 | 40 | ATK 189 | +4 ATK | 4500 |
+| 右手武器 | runed-edge | 符文之锋 | 40 | ATK 40 | +3 ATK | 2700 |
+| 双手武器 | runed-greataxe | 符文巨斧 | 40 | ATK 75 | +4 ATK | 4500 |
 | 左手盾 | runed-bulwark | 符文壁垒 | 40 | DEF 42 | +2 DEF | 2250 |
 | 铠甲 | runed-cuirass | 符文甲 | 40 | DEF 63 | +2 DEF, +20 HP | 3600 |
 | 头盔 | runed-helm | 符文头盔 | 40 | DEF 34 | +1 DEF | 1800 |
 | 戒指 | topaz-ring | 黄玉戒 | 40 | HP 126 | +5 HP | 1980 |
-| 右手武器 | dragonbone-fang | 龙骨之牙 | 50 | ATK 130 | +3 ATK | 3900 |
-| 双手武器 | dragonslayer | 屠龙者 | 50 | ATK 234 | +4 ATK | 6500 |
+| 右手武器 | dragonbone-fang | 龙骨之牙 | 50 | ATK 54 | +3 ATK | 3900 |
+| 双手武器 | dragonslayer | 屠龙者 | 50 | ATK 96 | +4 ATK | 6500 |
 | 左手盾 | dragonbone-shield | 龙骨盾 | 50 | DEF 52 | +2 DEF | 3250 |
 | 铠甲 | dragonscale-armor | 龙鳞甲 | 50 | DEF 78 | +2 DEF, +20 HP | 5200 |
 | 头盔 | dragonbone-helm | 龙骨盔 | 50 | DEF 42 | +1 DEF | 2600 |
 | 戒指 | emerald-ring | 祖母绿戒 | 50 | HP 156 | +5 HP | 2860 |
-| 右手武器 | radiant-sword | 辟光剑 | 60 | ATK 160 | +3 ATK | 5400 |
-| 双手武器 | starbreaker | 碎星者 | 60 | ATK 288 | +4 ATK | 9000 |
+| 右手武器 | radiant-sword | 辟光剑 | 60 | ATK 64 | +3 ATK | 5400 |
+| 双手武器 | starbreaker | 碎星者 | 60 | ATK 116 | +4 ATK | 9000 |
 | 左手盾 | celestial-bulwark | 天穹壁垒 | 60 | DEF 64 | +2 DEF | 4500 |
 | 铠甲 | starlit-plate | 星辉甲 | 60 | DEF 96 | +2 DEF, +20 HP | 7200 |
 | 头盔 | starcrest | 星冕 | 60 | DEF 51 | +1 DEF | 3600 |

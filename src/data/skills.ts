@@ -42,19 +42,19 @@ function resolveSkillIcon(skillId: string): string {
 
 const META_DRAGON_BREATH = getSkillMeta('dragon_breath_slash')
 const META_FALLEN_DRAGON = getSkillMeta('fallen_dragon_smash')
-const META_STAR_REALM = getSkillMeta('star_realm_star_soul_break')
+const META_STAR_REALM = getSkillMeta('star_realm_dragon_blood_break')
 const META_QI_DODGE = getSkillMeta('qi_dodge')
 
 const DRAGON_BREATH_BASE_MULTIPLIER = 1
 const DRAGON_BREATH_PER_LEVEL = 0.02
 const FALLEN_DRAGON_BASE_MULTIPLIER = 1.6
 const FALLEN_DRAGON_PER_LEVEL = 0.04
-const STAR_REALM_BASE_MULTIPLIER = 3.5
-const STAR_REALM_PER_LEVEL = 0.08
+const STAR_REALM_BASE_MULTIPLIER = 4.5
+const STAR_REALM_PER_LEVEL = 0.15
 
 function resolveDamageMultiplier(base: number, perLevelIncrease: number, level: number): number {
   const lvl = Math.max(level, 1)
-  return base * (1 + perLevelIncrease * (lvl - 1))
+  return base + perLevelIncrease * lvl
 }
 
 function formatMultiplier(multiplier: number): string {
@@ -86,13 +86,9 @@ function describeFallenDragon(level: number): string {
 
 function describeStarRealm(level: number): string {
   const multiplier = formatMultiplier(resolveDamageMultiplier(STAR_REALM_BASE_MULTIPLIER, STAR_REALM_PER_LEVEL, level))
-  const segments = [`蓄力 0.5s 的终极爆发斩击（倍率 ${multiplier}），包含 0.2s 后摇。`]
-  if (level >= 3) {
-    segments.push('Lv.3：施放时获得 0.5s 霸体（免疫伤害）。')
-  }
-  if (level >= 10) {
-    segments.push('Lv.10：命中时有 50% 几率使目标受到 10% 易伤，持续 10 秒。')
-  }
+  const segments = [`蓄力0.5s的终极爆发斩击（倍率 ${multiplier}），包含0.2s后摇。`]
+  segments.push('施放时获得0.5s霸体（免疫伤害）。')
+  segments.push('命中时使目标受到10%易伤，持续8秒。')
   return segments.join(' ')
 }
 
@@ -103,7 +99,6 @@ export const SKILLS: SkillDefinition[] = [
     description: describeDragonBreath(1),
     cost: { type: 'qi', percentOfQiMax: 0.02 },
     flash: 'attack',
-    cooldown: 2,
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_DRAGON_BREATH.id),
     maxLevel: 10,
@@ -162,7 +157,6 @@ export const SKILLS: SkillDefinition[] = [
     description: describeFallenDragon(1),
     cost: { type: 'qi', percentOfQiMax: 0.04 },
     flash: 'skill',
-    cooldown: 5,
     chargeTime: 0.2,
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_FALLEN_DRAGON.id),
@@ -215,7 +209,6 @@ export const SKILLS: SkillDefinition[] = [
     description: describeStarRealm(1),
     cost: { type: 'qi', percentOfQiMax: 0.1 },
     flash: 'ult',
-    cooldown: 20,
     chargeTime: 0.5,
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_STAR_REALM.id),
@@ -224,9 +217,9 @@ export const SKILLS: SkillDefinition[] = [
       const l = Math.max(level, 1)
       const reduction = 0.02 * (l - 1)
       const multiplier = Math.max(0.2, 1 - reduction)
-      return Math.max(5, 20 * multiplier)
+      return Math.max(5, 16 * multiplier)
     },
-    getCostMultiplier: (level) => (level >= 6 ? 0.8 : 1),
+    getCostMultiplier: (_level) => 1.0,
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(STAR_REALM_BASE_MULTIPLIER, STAR_REALM_PER_LEVEL, level),
     getDescription: describeStarRealm,
@@ -254,13 +247,10 @@ export const SKILLS: SkillDefinition[] = [
       const totalDamage = Math.round(weakness.damage)
       const hit = totalDamage > 0
       let applyVulnerability: SkillResult['applyVulnerability'] = undefined
-      if (level >= 10 && hit) {
-        const roll = randRange(rng, 0, 1)
-        if (roll <= 0.5) {
-          applyVulnerability = {
-            percent: 0.10,
-            durationMs: 10000,
-          }
+      if (hit) {
+        applyVulnerability = {
+          percent: 0.10,
+          durationMs: 8000,
         }
       }
       return {
@@ -268,7 +258,7 @@ export const SKILLS: SkillDefinition[] = [
         coreDamage,
         weaknessTriggered: weakness.triggered,
         hit,
-        superArmorMs: level >= 3 ? 500 : undefined,
+        superArmorMs: 500,
         applyVulnerability,
       }
     },
@@ -279,11 +269,11 @@ export const SKILLS: SkillDefinition[] = [
     description: META_QI_DODGE.description,
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
-    cooldown: 0.7,
     aftercastTime: 0.3,
     icon: resolveSkillIcon(META_QI_DODGE.id),
     tags: ['utility'],
     maxLevel: 1,
+    getCooldown: () => 0.7,
     execute: () => ({ hit: false }),
   },
 ]

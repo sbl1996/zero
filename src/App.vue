@@ -1,6 +1,6 @@
 <template>
   <div class="app-shell">
-    <header class="app-header">
+    <header v-if="hasCharacter" class="app-header">
       <h1 class="app-title">零 ZERO</h1>
       <nav class="app-nav">
         <RouterLink to="/map" class="nav-link" active-class="active">地图</RouterLink>
@@ -16,6 +16,7 @@
     </main>
   </div>
   <button
+    v-if="hasCharacter"
     class="cheat-toggle"
     type="button"
     :class="{ active: showCheatPanel }"
@@ -24,7 +25,7 @@
   >
     金手指
   </button>
-  <CheatPanel />
+  <CheatPanel v-if="hasCharacter" />
 </template>
 
 <script setup lang="ts">
@@ -32,9 +33,12 @@ import { RouterLink, RouterView } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import CheatPanel from '@/components/CheatPanel.vue'
 import { useUiStore } from '@/stores/ui'
+import { usePlayerStore } from '@/stores/player'
 
 const ui = useUiStore()
+const player = usePlayerStore()
 const { showCheatPanel } = storeToRefs(ui)
+const { hasCharacter } = storeToRefs(player)
 
 function toggleCheatPanel() {
   ui.toggleCheatPanel()
