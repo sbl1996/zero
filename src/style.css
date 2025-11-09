@@ -537,8 +537,11 @@ button {
 }
 
 .battle-actions button:disabled {
-  opacity: 0.45;
   cursor: not-allowed;
+}
+
+.battle-actions button.on-cooldown {
+  filter: grayscale(0.55) brightness(0.9);
 }
 
 .quick-item-bar {

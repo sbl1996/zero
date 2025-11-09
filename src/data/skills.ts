@@ -167,7 +167,7 @@ export const SKILLS: SkillDefinition[] = [
       const multiplier = Math.max(0.2, 1 - reduction)
       return Math.max(1, 5 * multiplier)
     },
-    getCostMultiplier: (level) => (level >= 6 ? 0.8 : 1),
+    getCostMultiplier: (_level) => 1.0,
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(FALLEN_DRAGON_BASE_MULTIPLIER, FALLEN_DRAGON_PER_LEVEL, level),
     getDescription: describeFallenDragon,
@@ -179,7 +179,6 @@ export const SKILLS: SkillDefinition[] = [
         level,
       )
       const damageScale = damageMultiplier / FALLEN_DRAGON_BASE_MULTIPLIER
-      const weaknessBonus = level >= 3 ? 0.10 : 0
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
@@ -194,11 +193,6 @@ export const SKILLS: SkillDefinition[] = [
       const coreBase = Math.max(result.coreDamage * damageScale, 0)
       let coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       let totalDamage = Math.round(weakness.damage)
-      if (weakness.triggered && weaknessBonus > 0) {
-        const mult = 1 + weaknessBonus
-        totalDamage = Math.round(totalDamage * mult)
-        coreDamage = Math.round(coreDamage * mult)
-      }
       const hit = totalDamage > 0
       return { damage: totalDamage, coreDamage, weaknessTriggered: weakness.triggered, hit }
     },

@@ -7,6 +7,7 @@ export const useUiStore = defineStore('ui', {
     showCheatPanel: false,
     autoRematchAfterVictory: false,
     enableHoldAutoCast: false,
+    showSkillCooldownGrayscale: true,
   }),
   actions: {
     toggleAttributes(value?: boolean) {
@@ -20,6 +21,9 @@ export const useUiStore = defineStore('ui', {
     },
     toggleAutoRematch(value?: boolean) {
       this.autoRematchAfterVictory = value ?? !this.autoRematchAfterVictory
+    },
+    toggleCooldownGrayscale(value?: boolean) {
+      this.showSkillCooldownGrayscale = value ?? !this.showSkillCooldownGrayscale
     },
   },
 })

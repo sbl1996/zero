@@ -7,7 +7,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
 import { useInventoryStore } from '@/stores/inventory'
 import { getSkillDefinition } from '@/data/skills'
-import { resolveSkillChargeTime } from '@/composables/useSkills'
+import { resolveSkillChargeTime, resolveSkillCooldown } from '@/composables/useSkills'
 import { quickConsumableIds } from '@/data/items'
 import { resolveDodgeSuccessChance } from '@/composables/useDodge'
 import { getMonsterMap } from '@/data/monsters'
@@ -34,7 +34,7 @@ const uiStore = useUiStore()
 const inventory = useInventoryStore()
 
 const { res } = storeToRefs(playerStore)
-const { enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(uiStore)
+const { enableHoldAutoCast, autoRematchAfterVictory, showSkillCooldownGrayscale } = storeToRefs(uiStore)
 
 const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
@@ -349,6 +349,7 @@ const getNowMs = () => {
   return Date.now()
 }
 
+const SKILL_COOLDOWN_DISPLAY_FALLBACK = 2
 const skillSlots = computed(() => {
   const inBattle = battle.inBattle
   const concluded = battle.concluded
@@ -401,10 +402,11 @@ const skillSlots = computed(() => {
     })()
 
     const cooldown = skill ? (battle.skillCooldowns[index] ?? 0) : 0
-    const cooldownDuration = skill?.cooldown ?? 0
+    const cooldownDuration = skill
+      ? resolveSkillCooldown(skill, level, SKILL_COOLDOWN_DISPLAY_FALLBACK)
+      : 0
     const cooldownPercent = cooldownDuration > 0 ? Math.min(Math.max(cooldown / cooldownDuration, 0), 1) : 0
     const cooldownAngle = Math.round(cooldownPercent * 360 * 100) / 100
-    const cooldownDisplay = cooldown > 0 ? `${cooldown.toFixed(1)}s` : ''
     const cooldownStyle = cooldownPercent > 0 ? {
       '--cooldown-angle': `${cooldownAngle}deg`,
       '--cooldown-progress': `${cooldownPercent}`,
@@ -457,7 +459,6 @@ const skillSlots = computed(() => {
       costType,
       cooldown,
       cooldownLabel: cooldown > 0 ? `冷却：${cooldown.toFixed(1)}s` : '',
-      cooldownDisplay,
       cooldownStyle,
       cooldownPercent,
       isOnCooldown: cooldown > 0,
@@ -1006,25 +1007,21 @@ onBeforeUnmount(() => {
   inset: 0;
   border-radius: inherit;
   background: conic-gradient(
-    from 0deg,
-    rgba(64, 70, 82, 0) 0deg,
-    rgba(64, 70, 82, 0) calc(360deg - var(--cooldown-angle, 0deg)),
-    rgba(64, 70, 82, 0.85) calc(360deg - var(--cooldown-angle, 0deg)),
-    rgba(64, 70, 82, 0.85) 360deg
+    from -90deg,
+    rgba(10, 16, 30, 0.78) 0deg,
+    rgba(10, 16, 30, 0.78) calc(var(--cooldown-progress, 0) * 360deg),
+    rgba(245, 213, 124, 0) calc(var(--cooldown-progress, 0) * 360deg),
+    rgba(245, 213, 124, 0) 360deg
   );
   opacity: 0;
   transition: opacity 160ms ease, background 120ms linear;
-  z-index: 0;
-  mix-blend-mode: saturation;
+  z-index: 1;
+  transform: rotate(90deg) scaleY(-1);
+  transform-origin: 50% 50%;
 }
 
 .battle-actions button.on-cooldown::before {
   opacity: 1;
-}
-
-.battle-actions button.on-cooldown {
-  border-color: rgba(148, 158, 172, 0.95);
-  filter: grayscale(0.9) brightness(0.95);
 }
 
 .battle-actions button.requires-charge {
@@ -1117,19 +1114,6 @@ onBeforeUnmount(() => {
 
 .skill-slot-label--empty {
   color: rgba(255, 255, 255, 0.5);
-}
-
-.skill-cooldown {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  font-size: 18px;
-  font-weight: 600;
-  color: #f6fbff;
-  text-shadow: 0 0 12px rgba(16, 28, 66, 0.8), 0 0 2px rgba(255, 255, 255, 0.7);
-  letter-spacing: 1px;
-  pointer-events: none;
 }
 
 .skill-hotkey {
@@ -1682,7 +1666,7 @@ onBeforeUnmount(() => {
         :attack-times="timelineAttackTimes"
       />
 
-      <div class="battle-action-row">
+      <div class="battle-action-row" :class="{ 'cooldown-mask-only': !showSkillCooldownGrayscale }">
         <div class="battle-actions">
           <div
             v-for="slot in skillSlots"
@@ -1749,7 +1733,6 @@ onBeforeUnmount(() => {
                   {{ slot.hotkeyLabel }}
                 </span>
               </div>
-              <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>
               <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
               <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
             </button>

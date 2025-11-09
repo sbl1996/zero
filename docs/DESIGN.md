@@ -347,7 +347,7 @@ MaxLV_by_Realm:
 * 陨龙击 (fallen_dragon_smash)
   * 消耗Qi 4%，冷却5s，蓄力0.2s，后摇0.2s
   * 基础倍率1.6
-  * 等级1-10：每级+4%倍率、-2%CD；L3 破绽伤加成 +10%；L6 消耗×0.8
+  * 等级1-10：每级+4%倍率、-2%CD；造成 0.1s 眩晕。
 
 * 星界龙血破 (star_realm_dragon_blood_break)
   * 消耗Qi 10%，冷却16s，蓄力0.5s，后摇0.2s
