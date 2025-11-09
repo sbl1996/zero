@@ -365,6 +365,10 @@ function goEnhance(entry: BackpackEquipmentEntry) {
 }
 
 function handleEquip(equipment: Equipment) {
+  if (!isRealmRequirementMet(getEquipmentRequiredRealmTier(equipment))) {
+    showFeedback('境界不足，无法穿戴', false)
+    return
+  }
   withActionLock(() => {
     const result = requestEquip(equipment.id)
     if (result.ok) {
@@ -466,6 +470,14 @@ const filteredEntries = computed(() => {
   })
 })
 
+const currentRealmIndex = computed(() => realmTierIndex(player.cultivation.realm.tier))
+
+function isRealmRequirementMet(required?: RealmTier): boolean {
+  if (!required) return true
+  const requirement = realmTierIndex(required)
+  return requirement <= currentRealmIndex.value
+}
+
 function entryTypeLabel(type: BackpackEntryType): string {
   switch (type) {
     case 'consumable':
@@ -553,6 +565,13 @@ function entryTypeLabel(type: BackpackEntryType): string {
               <div class="text-small">部位：{{ entry.slotLabel }}</div>
               <div v-if="entry.requiredRealmTier" class="text-small text-muted">
                 需求境界：{{ formatRealmTierLabel(entry.requiredRealmTier) }}
+                <span
+                  v-if="!isRealmRequirementMet(entry.requiredRealmTier)"
+                  class="text-warning text-small"
+                  style="margin-left: 6px;"
+                >
+                  境界不足，无法穿戴
+                </span>
               </div>
               <div class="text-small">等级：+{{ entry.level }}</div>
               <div class="text-small" style="margin-top: 6px;" :title="getMainStatTooltip(entry.equipment)">
@@ -575,7 +594,8 @@ function entryTypeLabel(type: BackpackEntryType): string {
                   <button
                     class="equip-button"
                     type="button"
-                    :disabled="actionLocked"
+                    :disabled="actionLocked || !isRealmRequirementMet(entry.requiredRealmTier)"
+                    :title="!isRealmRequirementMet(entry.requiredRealmTier) ? '境界不足，无法穿戴' : ''"
                     @click="handleEquip(entry.equipment)"
                   >穿戴</button>
                   <button

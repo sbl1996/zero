@@ -1487,7 +1487,7 @@ export const useBattleStore = defineStore('battle', {
       if (dmg > 0) {
         this.applyPlayerDamage(dmg, skill.flash, { weakness: weaknessTriggered })
         this.recordCultivationAction('attackHit', 1)
-        if (skillId === 'star_realm_dragon_blood_break') {
+        if (skillId === 'star_realm_star_soul_break') {
           this.recordCultivationAction('finisherHit', 1)
         }
       } else {

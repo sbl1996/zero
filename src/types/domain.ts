@@ -121,7 +121,7 @@ export interface BasePowerState {
   lastUpdatedAt: number | null
 }
 
-export type CultivationMethodId = 'dragon_blood' | 'undying' | 'tiger_stripe' | 'purple_flame'
+export type CultivationMethodId = 'star_soul' | 'undying' | 'tiger_stripe' | 'purple_flame'
 
 export interface QiFocusProfile {
   atk: number

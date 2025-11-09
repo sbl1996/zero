@@ -286,7 +286,7 @@ function createDefaultCultivationState(): PlayerCultivationState {
     overflow: 0,
   }
   const range = getRealmBpRange(realm)
-  const defaultMethod = getCultivationMethodDefinition('dragon_blood')
+  const defaultMethod = getCultivationMethodDefinition('star_soul')
 
   return {
     realm,
@@ -298,7 +298,7 @@ function createDefaultCultivationState(): PlayerCultivationState {
           name: defaultMethod.name,
         }
       : {
-          id: 'dragon_blood',
+          id: 'star_soul',
           focus: {
             atk: 0.4,
             def: 0.4,

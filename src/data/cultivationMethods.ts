@@ -17,7 +17,7 @@ const toFocus = (focus: QiFocusProfile): QiFocusProfile => ({
 
 export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
   {
-    id: 'dragon_blood',
+    id: 'star_soul',
     name: '星魂斗气',
     focus: toFocus({ atk: 0.4, def: 0.4, agi: 0.2 }),
     description: '星魂一脉的基础功法，侧重兼顾攻防的斗气运转。',

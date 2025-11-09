@@ -42,7 +42,7 @@ function resolveSkillIcon(skillId: string): string {
 
 const META_DRAGON_BREATH = getSkillMeta('dragon_breath_slash')
 const META_FALLEN_DRAGON = getSkillMeta('fallen_dragon_smash')
-const META_STAR_REALM = getSkillMeta('star_realm_dragon_blood_break')
+const META_STAR_REALM = getSkillMeta('star_realm_star_soul_break')
 const META_QI_DODGE = getSkillMeta('qi_dodge')
 
 const DRAGON_BREATH_BASE_MULTIPLIER = 1

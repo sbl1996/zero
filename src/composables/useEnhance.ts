@@ -17,7 +17,15 @@ interface MainEnhanceTier {
 
 const MAIN_ENHANCE_TABLE: MainEnhanceTier[] = [
   { id: 'blessGem', minLevel: 0, maxLevel: 4, successChance: 0.95, dropOnFail: 0, goldCost: 500 },
-  { id: 'soulGem', minLevel: 5, maxLevel: 9, successChance: 0.8, dropOnFail: 1, goldCost: 2000 },
+  {
+    id: 'soulGem',
+    minLevel: 5,
+    maxLevel: 9,
+    successChance: 0.8,
+    dropOnFail: 1,
+    goldCost: 2000,
+    floor: 5,
+  },
   {
     id: 'miracleGem',
     minLevel: 10,

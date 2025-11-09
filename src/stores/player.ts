@@ -87,7 +87,7 @@ type CultivationActionKey = keyof typeof CULTIVATION_ACTION_WEIGHTS
 
 const REALM_SKILL_UNLOCKS: Array<{ tier: number; skillId: string }> = [
   { tier: 2, skillId: 'fallen_dragon_smash' },
-  { tier: 3, skillId: 'star_realm_dragon_blood_break' },
+  { tier: 3, skillId: 'star_realm_star_soul_break' },
 ]
 
 type AttributeSummaryKey = 'HP' | 'QiMax' | 'ATK' | 'DEF' | 'AGI' | 'REC'
