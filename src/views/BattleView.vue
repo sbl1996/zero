@@ -66,11 +66,19 @@ type BuffDisplayInfo = {
   ratio: number
 }
 
+// 使用与battle store相同的时间函数
+function getNow(): number {
+  if (typeof performance !== 'undefined' && typeof performance.now === 'function') {
+    return performance.now()
+  }
+  return Date.now()
+}
+
 const playerBuffInfo = computed<BuffDisplayInfo | null>(() => {
   const state = battle.playerSuperArmor
   void buffTickTrigger.value
   if (!state) return null
-  const remainingMs = state.expiresAt - Date.now()
+  const remainingMs = state.expiresAt - getNow()
   if (remainingMs <= 0) return null
   const ratio = state.durationMs > 0
     ? Math.max(0, Math.min(1, remainingMs / state.durationMs))
@@ -87,7 +95,7 @@ const enemyBuffInfo = computed<BuffDisplayInfo[]>(() => {
   
   const vulnerability = battle.monsterVulnerability
   if (vulnerability) {
-    const remainingMs = vulnerability.expiresAt - Date.now()
+    const remainingMs = vulnerability.expiresAt - getNow()
     if (remainingMs > 0) {
       const ratio = vulnerability.durationMs > 0
         ? Math.max(0, Math.min(1, remainingMs / vulnerability.durationMs))
@@ -102,7 +110,7 @@ const enemyBuffInfo = computed<BuffDisplayInfo[]>(() => {
   
   const charging = battle.monsterChargingDebuff
   if (charging) {
-    const remainingMs = charging.expiresAt - Date.now()
+    const remainingMs = charging.expiresAt - getNow()
     if (remainingMs > 0) {
       const ratio = charging.durationMs > 0
         ? Math.max(0, Math.min(1, remainingMs / charging.durationMs))
@@ -1488,10 +1496,13 @@ onBeforeUnmount(() => {
   color: #f4f6fb;
   padding: 4px 10px;
   border-radius: 8px;
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 0 6px rgba(0, 0, 0, 0.4);
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  box-shadow: 0 0 8px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
   --buff-progress: 1;
+  z-index: 15;
+  pointer-events: none;
 }
 
 .buff-overlay--player {
@@ -1502,7 +1513,7 @@ onBeforeUnmount(() => {
 .buff-overlay--enemy {
   right: 12px;
   text-align: right;
-  top: calc(60px + var(--buff-index, 0) * 38px);
+  top: calc(8px + var(--buff-index, 0) * 38px);
 }
 
 .buff-overlay::after {
