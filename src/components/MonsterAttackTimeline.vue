@@ -14,7 +14,7 @@ const props = defineProps<{
   timeToAttack: number | null
   pendingDodge: PendingDodgeState | null
   actionLockUntil: number | null
-  attackTimes?: { key: string, seconds: number, label?: string }[]
+  attackTimes?: { key: string, seconds: number, label?: string, special?: string }[]
 }>()
 
 const getNowMs = () => (typeof performance !== 'undefined' && typeof performance.now === 'function'
@@ -137,6 +137,7 @@ type TimelineAttackMarker = {
   style: Record<string, string>
   severity: string
   label?: string
+  special?: string
 }
 
 function resolveAttackSeverity(seconds: number | null): string {
@@ -150,7 +151,7 @@ const attackMarkers = computed<TimelineAttackMarker[]>(() => {
   if (!props.active) return []
   const markers: TimelineAttackMarker[] = []
 
-  const addMarker = (key: string, seconds: number | null | undefined, label?: string) => {
+  const addMarker = (key: string, seconds: number | null | undefined, label?: string, special?: string) => {
     if (seconds === null || seconds === undefined) return
     const numeric = Number(seconds)
     if (!Number.isFinite(numeric)) return
@@ -162,6 +163,7 @@ const attackMarkers = computed<TimelineAttackMarker[]>(() => {
       style,
       severity: resolveAttackSeverity(numeric),
       label,
+      special,
     })
   }
 
@@ -171,7 +173,7 @@ const attackMarkers = computed<TimelineAttackMarker[]>(() => {
 
   const attackSources = Array.isArray(props.attackTimes) ? props.attackTimes : []
   attackSources.forEach((entry) => {
-    addMarker(entry.key, entry.seconds, entry.label)
+    addMarker(entry.key, entry.seconds, entry.label, entry.special)
   })
 
   return markers
@@ -244,7 +246,7 @@ const timelineClasses = computed(() => ({
         v-for="marker in attackMarkers"
         :key="marker.key"
         class="timeline-rail__attack"
-        :class="marker.severity"
+        :class="[marker.severity, marker.special ? `is-${marker.special}` : '']"
         :style="marker.style"
       >
         <span v-if="marker.label" class="timeline-rail__attack-label">{{ marker.label }}</span>
@@ -467,6 +469,11 @@ const timelineClasses = computed(() => ({
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(180, 200, 255, 0.2));
   box-shadow: 0 0 12px rgba(180, 200, 255, 0.35);
   opacity: 0.7;
+}
+
+.timeline-rail__attack.is-charge .timeline-rail__attack-glow {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.9), rgba(255, 255, 255, 0.5));
+  box-shadow: 0 0 14px rgba(255, 255, 255, 0.7);
 }
 
 .timeline-scale {

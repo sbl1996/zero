@@ -81,20 +81,40 @@ const playerBuffInfo = computed<BuffDisplayInfo | null>(() => {
   }
 })
 
-const enemyBuffInfo = computed<BuffDisplayInfo | null>(() => {
-  const status = battle.monsterVulnerability
+const enemyBuffInfo = computed<BuffDisplayInfo[]>(() => {
   void buffTickTrigger.value
-  if (!status) return null
-  const remainingMs = status.expiresAt - Date.now()
-  if (remainingMs <= 0) return null
-  const ratio = status.durationMs > 0
-    ? Math.max(0, Math.min(1, remainingMs / status.durationMs))
-    : 0
-  const percentLabel = `${Math.round(status.percent * 100)}%`
-  return {
-    text: `易伤 +${percentLabel}`,
-    ratio,
+  const buffs: BuffDisplayInfo[] = []
+  
+  const vulnerability = battle.monsterVulnerability
+  if (vulnerability) {
+    const remainingMs = vulnerability.expiresAt - Date.now()
+    if (remainingMs > 0) {
+      const ratio = vulnerability.durationMs > 0
+        ? Math.max(0, Math.min(1, remainingMs / vulnerability.durationMs))
+        : 0
+      const percentLabel = `${Math.round(vulnerability.percent * 100)}%`
+      buffs.push({
+        text: `易伤 +${percentLabel}`,
+        ratio,
+      })
+    }
   }
+  
+  const charging = battle.monsterChargingDebuff
+  if (charging) {
+    const remainingMs = charging.expiresAt - Date.now()
+    if (remainingMs > 0) {
+      const ratio = charging.durationMs > 0
+        ? Math.max(0, Math.min(1, remainingMs / charging.durationMs))
+        : 0
+      buffs.push({
+        text: '蓄力',
+        ratio,
+      })
+    }
+  }
+  
+  return buffs
 })
 
 // 计算破绽率
@@ -185,16 +205,28 @@ function computeComboPreviewTimers(
 }
 
 const timelineAttackTimes = computed(() => {
-  type TimelineAttackTime = { key: string, seconds: number, label?: string }
+  type TimelineAttackTime = { key: string, seconds: number, label?: string, special?: string }
   const markers: TimelineAttackTime[] = []
-  const seenTime = new Set<number>()
+  const seenTime = new Map<number, string>()
 
-  const pushMarker = (key: string, seconds: number, label?: string) => {
+  const pushMarker = (key: string, seconds: number, label?: string, special?: string) => {
     if (!Number.isFinite(seconds)) return
     const rounded = Math.round(seconds * 1000)
-    if (seenTime.has(rounded)) return
-    seenTime.add(rounded)
-    markers.push({ key, seconds, label })
+    const existingKey = seenTime.get(rounded)
+    if (existingKey === key) return
+    if (existingKey) {
+      // 如果时间冲突，优先保留 charging-attack 标记
+      if (existingKey === 'charging-attack') return
+      if (key === 'charging-attack') {
+        // 移除旧标记
+        const idx = markers.findIndex(m => m.key === existingKey)
+        if (idx >= 0) markers.splice(idx, 1)
+      } else {
+        return
+      }
+    }
+    seenTime.set(rounded, key)
+    markers.push({ key, seconds, label, special })
   }
 
   const followup = battle.monsterFollowup
@@ -212,6 +244,17 @@ const timelineAttackTimes = computed(() => {
     })
   }
 
+  // 如果正在蓄力，显示蓄力完成时的攻击标记
+  const chargingSkill = battle.monsterChargingSkill
+  if (chargingSkill) {
+    const remainingSeconds = Math.max(0, battle.monsterNextSkillTimer)
+    pushMarker(
+      'charging-attack',
+      remainingSeconds,
+      '攻击！',
+    )
+  }
+
   const plan = battle.monsterSkillPlan ?? []
   if (plan.length === 0) return markers
   const referenceMs = battle.lastTickAt ?? getNowMs()
@@ -223,41 +266,45 @@ const timelineAttackTimes = computed(() => {
     if (!entry) continue
     const timeToSkill = Math.max(0, (entry.scheduledAt - referenceMs) / 1000)
     if (!Number.isFinite(timeToSkill)) continue
-    const isTelegraphedEntry = Boolean(
-      preview &&
-      preview.stage === 'telegraph' &&
-      entry.skill &&
-      preview.skillId &&
-      entry.skill.id === preview.skillId,
-    )
 
-    if (index === 0) {
-      const comboHits = computeComboPreviewTimers(entry.comboPreview ?? null, timeToSkill)
-      if (!isTelegraphedEntry && comboHits.length > 0) {
-        comboHits.forEach((hitTime, hitIndex) => {
-          pushMarker(
-            `plan-${index}-combo-${hitIndex}`,
-            hitTime,
-            hitIndex === 0 ? entry.comboPreview?.label : undefined,
-          )
-        })
-      }
-    } else {
+    const chargeTime = entry.skill?.chargeSeconds
+    if (chargeTime && chargeTime > 0) {
+      // 显示蓄力开始标记
+      pushMarker(
+        `plan-${index}-charge-start`,
+        timeToSkill,
+        '蓄力',
+        'charge',
+      )
+      // 显示实际攻击时间（蓄力结束）
+      pushMarker(
+        `plan-${index}-attack`,
+        timeToSkill + chargeTime,
+        '攻击！',
+      )
+    }
+
+    // 当正在蓄力时，plan[0]是蓄力后的下一个攻击，需要显示
+    // 当没有蓄力时，plan[0]是当前即将执行的攻击，只显示combo不显示主标记
+    const shouldShowMainMarker = index > 0 || (index === 0 && chargingSkill !== null)
+    
+    if (shouldShowMainMarker && !chargeTime) {
       pushMarker(
         `plan-${index}`,
         timeToSkill,
         entry.skill?.name,
       )
-      const comboHits = computeComboPreviewTimers(entry.comboPreview ?? null, timeToSkill)
-      if (comboHits.length > 0) {
-        comboHits.forEach((hitTime, hitIndex) => {
-          pushMarker(
-            `plan-${index}-combo-${hitIndex}`,
-            hitTime,
-            hitIndex === 0 ? entry.comboPreview?.label : undefined,
-          )
-        })
-      }
+    }
+    
+    const comboHits = computeComboPreviewTimers(entry.comboPreview ?? null, timeToSkill)
+    if (comboHits.length > 0) {
+      comboHits.forEach((hitTime, hitIndex) => {
+        pushMarker(
+          `plan-${index}-combo-${hitIndex}`,
+          hitTime,
+          hitIndex === 0 ? entry.comboPreview?.label : undefined,
+        )
+      })
     }
 
     processedEntries += 1
@@ -1455,6 +1502,7 @@ onBeforeUnmount(() => {
 .buff-overlay--enemy {
   right: 12px;
   text-align: right;
+  top: calc(60px + var(--buff-index, 0) * 38px);
 }
 
 .buff-overlay::after {
@@ -1556,11 +1604,12 @@ onBeforeUnmount(() => {
           {{ playerBuffInfo.text }}
         </div>
         <div
-          v-if="enemyBuffInfo"
+          v-for="(buff, index) in enemyBuffInfo"
+          :key="index"
           class="buff-overlay buff-overlay--enemy"
-          :style="{ '--buff-progress': enemyBuffInfo.ratio }"
+          :style="{ '--buff-progress': buff.ratio, '--buff-index': index }"
         >
-          {{ enemyBuffInfo.text }}
+          {{ buff.text }}
         </div>
         <div
           class="battle-portraits"

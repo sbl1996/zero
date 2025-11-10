@@ -295,8 +295,16 @@ export interface MonsterSkillDefinition {
   name: string
   cooldown: number
   aftercast: number
+  chargeSeconds?: number
   hits: MonsterSkillHit[]
   comboLabel?: string
+}
+
+export interface MonsterSkillChargeState {
+  skill: MonsterSkillDefinition
+  chargeSeconds: number
+  startedAt: number
+  endsAt: number
 }
 
 export interface MonsterSkillProfile {
@@ -395,6 +403,7 @@ export interface SkillResult {
     durationMs: number
   }
   superArmorMs?: number
+  monsterStunMs?: number
 }
 
 export interface SkillContext {
@@ -524,7 +533,9 @@ export interface BattleState {
   monsterCurrentSkill: MonsterSkillDefinition | null
   monsterSkillCooldowns: Record<string, number>
   monsterSkillPlan: MonsterSkillPlanEntry[]
+  monsterChargingSkill: MonsterSkillChargeState | null
   monsterActionOffsetMs?: number
+  monsterStunUntil: number | null
   skillCooldowns: number[]
   itemCooldowns: Record<string, number>
   monsterFollowupPreview: MonsterFollowupState | null
@@ -553,6 +564,7 @@ export interface BattleState {
   skillCooldownBonuses: Record<string, { expiresAt: number; reductionPercent: number }>
   playerSuperArmor: { expiresAt: number; durationMs: number } | null
   monsterVulnerability: { percent: number; expiresAt: number; durationMs: number } | null
+  monsterChargingDebuff: { expiresAt: number; durationMs: number } | null
 }
 
 export type SkillChargeStatus = 'charging' | 'charged' | 'rewinding'

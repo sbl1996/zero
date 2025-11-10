@@ -194,7 +194,13 @@ export const SKILLS: SkillDefinition[] = [
       let coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       let totalDamage = Math.round(weakness.damage)
       const hit = totalDamage > 0
-      return { damage: totalDamage, coreDamage, weaknessTriggered: weakness.triggered, hit }
+      return {
+        damage: totalDamage,
+        coreDamage,
+        weaknessTriggered: weakness.triggered,
+        hit,
+        monsterStunMs: 100,
+      }
     },
   },
   {

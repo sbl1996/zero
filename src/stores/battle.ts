@@ -366,7 +366,9 @@ function initialState(): BattleState {
     monsterCurrentSkill: null,
     monsterSkillCooldowns: {},
     monsterSkillPlan: [],
+    monsterChargingSkill: null,
     monsterActionOffsetMs: 0,
+    monsterStunUntil: null,
     skillCooldowns: Array(SKILL_SLOT_COUNT).fill(0),
     itemCooldowns: {},
     monsterFollowupPreview: null,
@@ -391,6 +393,7 @@ function initialState(): BattleState {
     skillCooldownBonuses: {},
     playerSuperArmor: null,
     monsterVulnerability: null,
+    monsterChargingDebuff: null,
   }
 }
 
@@ -463,6 +466,7 @@ export const useBattleStore = defineStore('battle', {
       this.monsterNextSkillTimer = 0
       this.monsterNextSkillTotal = 0
       this.monsterCurrentSkill = null
+      this.monsterChargingSkill = null
       this.lastTickAt = 0
       this.battleStartedAt = null
       this.battleEndedAt = null
@@ -479,8 +483,9 @@ export const useBattleStore = defineStore('battle', {
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
+      this.monsterChargingDebuff = null
       this.playerSuperArmor = null
-      this.playerSuperArmor = null
+      this.monsterStunUntil = null
       this.monsterSkillPlan = []
       this.syncMonsterSkillPlanPreview()
       // 保留lastOutcome和loot以便在结算页面显示
@@ -525,6 +530,7 @@ export const useBattleStore = defineStore('battle', {
       this.monsterNextSkillTimer = 0
       this.monsterNextSkillTotal = 0
       this.monsterCurrentSkill = null
+      this.monsterChargingSkill = null
       this.lastTickAt = getNow()
       this.skillChain = {
         lastSkillId: null,
@@ -534,13 +540,26 @@ export const useBattleStore = defineStore('battle', {
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
       this.monsterVulnerability = null
+      this.monsterChargingDebuff = null
       this.playerSuperArmor = null
+      this.monsterStunUntil = null
       const initialDelay = resolveInitialMonsterDelay(monster, profile)
       this.monsterSkillPlan = []
       this.extendMonsterSkillPlan(initialDelay)
       this.startLoop()
     },
     syncMonsterSkillPlanPreview() {
+      const now = this.lastTickAt || getNow()
+      if (this.monsterChargingSkill) {
+        const remainingSeconds = Math.max(0, (this.monsterChargingSkill.endsAt - now) / 1000)
+        this.monsterNextSkill = this.monsterChargingSkill.skill
+        this.monsterNextSkillTimer = remainingSeconds
+        this.monsterNextSkillTotal = this.monsterChargingSkill.chargeSeconds
+        if (this.monsterFollowupPreview && this.monsterFollowupPreview.skillId === this.monsterChargingSkill.skill.id) {
+          this.monsterFollowupPreview = null
+        }
+        return
+      }
       const nextEntry = this.monsterSkillPlan[0] ?? null
       if (!nextEntry) {
         this.monsterNextSkill = null
@@ -549,12 +568,55 @@ export const useBattleStore = defineStore('battle', {
         this.monsterFollowupPreview = null
         return
       }
-      const now = this.lastTickAt || getNow()
       const timeToNext = getEntryTimeToExecutionSeconds(nextEntry, now)
       this.monsterNextSkill = nextEntry.skill
       this.monsterNextSkillTimer = timeToNext
       this.monsterNextSkillTotal = nextEntry.prepDuration ?? timeToNext
       this.setupMonsterComboTelegraph(nextEntry.skill, timeToNext)
+    },
+    startMonsterSkillCharge(skill: MonsterSkillDefinition, chargeSeconds: number, nowMs: number) {
+      const secs = Math.max(0, chargeSeconds)
+      if (secs <= 0) return
+      this.monsterChargingSkill = {
+        skill,
+        chargeSeconds: secs,
+        startedAt: nowMs,
+        endsAt: nowMs + secs * 1000,
+      }
+      if (this.monsterFollowupPreview && this.monsterFollowupPreview.skillId === skill.id) {
+        this.monsterFollowupPreview = null
+      }
+      this.syncMonsterSkillPlanPreview()
+      // Add charging buff to monster
+      const durationMs = secs * 1000
+      this.monsterChargingDebuff = {
+        expiresAt: nowMs + durationMs,
+        durationMs,
+      }
+      // 蓄力技能的后摇从蓄力结束开始，所以这里传入蓄力时间+后摇时间
+      this.extendMonsterSkillPlan(secs + getSkillAftercastSeconds(skill))
+    },
+    cancelMonsterSkillCharge() {
+      if (!this.monsterChargingSkill) return
+      this.monsterChargingSkill = null
+      this.monsterCurrentSkill = null
+      // Remove charging buff when charge is cancelled
+      this.monsterChargingDebuff = null
+    },
+    completeMonsterSkillCharge(_nowMs: number) {
+      const charge = this.monsterChargingSkill
+      if (!charge) return
+      this.monsterChargingSkill = null
+      // Remove charging buff when charge is completed
+      this.monsterChargingDebuff = null
+      if (!this.monster || this.concluded !== 'idle') return
+      this.monsterAttack(charge.skill)
+    },
+    tickMonsterSkillCharge(nowMs: number) {
+      if (!this.monsterChargingSkill) return
+      if (nowMs >= this.monsterChargingSkill.endsAt) {
+        this.completeMonsterSkillCharge(nowMs)
+      }
     },
     extendMonsterSkillPlan(initialDelayHint = 0) {
       if (!this.monster || this.concluded !== 'idle') {
@@ -664,6 +726,11 @@ export const useBattleStore = defineStore('battle', {
       }
       this.monsterCurrentSkill = resolvedSkill
       this.monsterSkillCooldowns[resolvedSkill.id] = resolvedSkill.cooldown
+      const chargeSeconds = Math.max(0, resolvedSkill.chargeSeconds ?? 0)
+      if (chargeSeconds > 0) {
+        this.startMonsterSkillCharge(resolvedSkill, chargeSeconds, now)
+        return true
+      }
       this.monsterAttack(resolvedSkill)
       this.extendMonsterSkillPlan(getSkillAftercastSeconds(resolvedSkill))
       return true
@@ -778,13 +845,26 @@ export const useBattleStore = defineStore('battle', {
 
       const now = getNow()
       const last = this.lastTickAt || now
-      const nowMs = Date.now()
 
-      if (this.playerSuperArmor && nowMs > this.playerSuperArmor.expiresAt) {
+      if (this.playerSuperArmor && now > this.playerSuperArmor.expiresAt) {
         this.playerSuperArmor = null
       }
-      if (this.monsterVulnerability && nowMs > this.monsterVulnerability.expiresAt) {
+      if (this.monsterVulnerability && now > this.monsterVulnerability.expiresAt) {
         this.monsterVulnerability = null
+      }
+      if (this.monsterChargingDebuff && now > this.monsterChargingDebuff.expiresAt) {
+        this.monsterChargingDebuff = null
+      }
+      let monsterStunned = false
+      if (this.monsterStunUntil !== null) {
+        if (now < this.monsterStunUntil) {
+          monsterStunned = true
+        } else {
+          this.monsterStunUntil = null
+        }
+      }
+      if (!monsterStunned) {
+        this.tickMonsterSkillCharge(now)
       }
       let delta = (now - last) / 1000
       if (!Number.isFinite(delta) || delta < 0) {
@@ -834,7 +914,11 @@ export const useBattleStore = defineStore('battle', {
       }
 
       const nextEntry = this.monsterSkillPlan[0] ?? null
-      if (nextEntry) {
+      if (this.monsterChargingSkill) {
+        // 更新蓄力剩余时间
+        const remainingSeconds = Math.max(0, (this.monsterChargingSkill.endsAt - now) / 1000)
+        this.monsterNextSkillTimer = remainingSeconds
+      } else if (nextEntry) {
         const timeToNext = getEntryTimeToExecutionSeconds(nextEntry, now)
         this.monsterNextSkillTimer = timeToNext
         this.monsterNextSkillTotal = nextEntry.prepDuration ?? timeToNext
@@ -844,19 +928,21 @@ export const useBattleStore = defineStore('battle', {
         this.monsterNextSkillTotal = 0
         this.monsterNextSkill = null
       }
-      let actionsResolved = 0
-      while (this.monster && this.concluded === 'idle') {
-        const headEntry = this.monsterSkillPlan[0]
-        if (!headEntry || headEntry.scheduledAt > now) break
-        const executed = this.executeReadyMonsterSkill()
-        if (!executed) break
-        actionsResolved += 1
-        if (actionsResolved >= MAX_MONSTER_ACTIONS_PER_TICK) break
-        if (this.monsterSkillPlan.length === 0) break
+      if (!monsterStunned && !this.monsterChargingSkill) {
+        let actionsResolved = 0
+        while (this.monster && this.concluded === 'idle') {
+          const headEntry = this.monsterSkillPlan[0]
+          if (!headEntry || headEntry.scheduledAt > now) break
+          const executed = this.executeReadyMonsterSkill()
+          if (!executed) break
+          actionsResolved += 1
+          if (actionsResolved >= MAX_MONSTER_ACTIONS_PER_TICK) break
+          if (this.monsterSkillPlan.length === 0) break
+        }
       }
 
       const followup = this.monsterFollowup
-      if (followup && this.concluded === 'idle' && this.monster) {
+      if (!monsterStunned && followup && this.concluded === 'idle' && this.monster) {
         const reference = Number.isFinite(followup.lastUpdatedAt) ? followup.lastUpdatedAt : this.lastTickAt
         let elapsedSeconds = 0
         if (typeof reference === 'number' && Number.isFinite(reference)) {
@@ -874,7 +960,7 @@ export const useBattleStore = defineStore('battle', {
       }
 
       const preview = this.monsterFollowupPreview
-      if (preview && this.concluded === 'idle' && this.monster) {
+      if (!monsterStunned && preview && this.concluded === 'idle' && this.monster) {
         const reference = Number.isFinite(preview.lastUpdatedAt) ? preview.lastUpdatedAt : this.lastTickAt
         let elapsedSeconds = 0
         if (typeof reference === 'number' && Number.isFinite(reference)) {
@@ -1095,6 +1181,7 @@ export const useBattleStore = defineStore('battle', {
       this.monsterNextSkillTimer = 0
       this.monsterNextSkillTotal = 0
       this.monsterCurrentSkill = null
+      this.monsterChargingSkill = null
       this.lastTickAt = 0
       this.actionLockUntil = null
       this.pendingDodge = null
@@ -1172,7 +1259,7 @@ export const useBattleStore = defineStore('battle', {
 
       const progress = player.ensureSkillProgress(skillId)
       const level = Math.max(progress.level, 1)
-      const nowReal = Date.now()
+      const nowReal = getNow()
       this.cleanupSkillCooldownBonuses(nowReal)
 
       const chargeTime = resolveSkillChargeTime(skill, level)
@@ -1336,7 +1423,7 @@ export const useBattleStore = defineStore('battle', {
         if (qiCost > 0) this.recordQiSpent(qiCost)
       }
 
-      const nowReal = Date.now()
+      const nowReal = getNow()
       this.cleanupSkillCooldownBonuses(nowReal)
       const cooldown = this.resolveEffectiveSkillCooldown(state.skillId, skill, state.level, nowReal)
       const loadout = player.skills.loadout
@@ -1526,7 +1613,7 @@ export const useBattleStore = defineStore('battle', {
         progress: player.skills.progress[skillId] ?? undefined,
       })
 
-      const nowMs = Date.now()
+      const nowMs = getNow()
       const activeVulnerability = this.monsterVulnerability
       let dmg = Math.max(0, Math.round(result.damage ?? 0))
       const weaknessTriggered = Boolean(result.weaknessTriggered)
@@ -1600,6 +1687,10 @@ export const useBattleStore = defineStore('battle', {
         }
         // 直接显示防御性状态效果，使用固定位置避免重叠
         this.pushFloat('目标易伤', 'miss')
+      }
+
+      if (result.monsterStunMs && result.monsterStunMs > 0 && hit) {
+        this.applyMonsterStun(result.monsterStunMs)
       }
 
       if (result.superArmorMs && result.superArmorMs > 0) {
@@ -1765,6 +1856,43 @@ export const useBattleStore = defineStore('battle', {
       const variant: FloatText['variant'] = options?.weakness ? 'weakness' : undefined
       this.pushFloat(`-${dmg}`, 'hitE', variant)
       this.triggerFlash(source)
+    },
+    applyMonsterStun(durationMs: number) {
+      if (!this.monster || this.concluded !== 'idle' || durationMs <= 0) return
+      const now = getNow()
+      const until = now + durationMs
+      const wasCharging = Boolean(this.monsterChargingSkill)
+      this.monsterStunUntil = this.monsterStunUntil === null ? until : Math.max(this.monsterStunUntil, until)
+      this.monsterCurrentSkill = null
+      if (this.monsterFollowup) {
+        this.monsterFollowup = null
+      }
+      if (this.monsterFollowupPreview) {
+        this.monsterFollowupPreview = null
+      }
+      if (wasCharging) {
+        this.cancelMonsterSkillCharge()
+      }
+      if (this.monsterSkillPlan.length > 0) {
+        const earliest = this.monsterSkillPlan.reduce(
+          (minTime, entry) => Math.min(minTime, entry.scheduledAt),
+          Number.POSITIVE_INFINITY,
+        )
+        const requiredAt = now + durationMs
+        const offset = Math.max(0, requiredAt - earliest)
+        if (offset > 0) {
+          this.monsterSkillPlan = this.monsterSkillPlan.map(entry => ({
+            ...entry,
+            scheduledAt: entry.scheduledAt + offset,
+          }))
+        }
+      }
+      if (wasCharging) {
+        this.extendMonsterSkillPlan()
+      } else {
+        this.syncMonsterSkillPlanPreview()
+      }
+      this.pushFloat('眩晕', 'miss')
     },
     monsterAttack(skill?: MonsterSkillDefinition) {
       if (!this.monster || this.concluded !== 'idle') return

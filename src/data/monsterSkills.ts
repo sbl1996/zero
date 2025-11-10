@@ -10,6 +10,8 @@ const GOLDEN_SHEEP_ID = 'boss-golden-sheep'
 const GOLDEN_SHEEP_DOUBLE_STAB_ID = 'monster.golden_sheep_double_stab'
 const WIND_RAPTOR_ID = 'boss-wind-raptor'
 const WIND_RAPTOR_BLADE_DANCE_ID = 'monster.wind_raptor_blade_dance'
+const DRAGON_WHELP_ID = 'boss-dragon-whelp'
+const DRAGON_FLAME_ID = 'monster.dragon_flame'
 
 function cloneSkillDefinition(definition: MonsterSkillDefinition): MonsterSkillDefinition {
   return {
@@ -71,9 +73,24 @@ const WIND_RAPTOR_BLADE_DANCE: MonsterSkillDefinition = {
   comboLabel: '×3',
 }
 
+const DRAGON_FLAME: MonsterSkillDefinition = {
+  id: DRAGON_FLAME_ID,
+  name: '龙炎',
+  cooldown: 10,
+  aftercast: 2.0,
+  chargeSeconds: 0.5,
+  hits: [
+    {
+      delay: 0,
+      multiplier: 5,
+    },
+  ],
+}
+
 const extraSkillMap: Record<string, MonsterSkillDefinition[]> = {
   [GOLDEN_SHEEP_ID]: [GOLDEN_SHEEP_DOUBLE_STAB],
   [WIND_RAPTOR_ID]: [WIND_RAPTOR_BLADE_DANCE],
+  [DRAGON_WHELP_ID]: [DRAGON_FLAME],
 }
 
 export function resolveMonsterSkillProfile(monster: Monster): MonsterSkillProfile {
@@ -106,6 +123,13 @@ const monsterAiMap: Record<string, MonsterAISelector> = {
     const basicReady = isSkillReady(DEFAULT_SKILL_ID, skillStates)
     if (!bladeDanceReady && !basicReady) return null
     if (bladeDanceReady) return WIND_RAPTOR_BLADE_DANCE_ID
+    return basicReady ? DEFAULT_SKILL_ID : null
+  },
+  [DRAGON_WHELP_ID]: ({ skillStates }) => {
+    const flameReady = isSkillReady(DRAGON_FLAME_ID, skillStates)
+    const basicReady = isSkillReady(DEFAULT_SKILL_ID, skillStates)
+    if (!flameReady && !basicReady) return null
+    if (flameReady) return DRAGON_FLAME_ID
     return basicReady ? DEFAULT_SKILL_ID : null
   },
 }
