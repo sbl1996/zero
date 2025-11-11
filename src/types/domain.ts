@@ -444,7 +444,7 @@ export interface FloatText {
   y: number
   value: string
   kind: 'hitP' | 'hitE' | 'heal' | 'miss' | 'loot'
-  variant?: 'weakness'
+  variant?: 'weakness' | 'playerBuff' | 'enemyBuff'
 }
 
 export interface FlashEffect {

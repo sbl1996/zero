@@ -506,7 +506,7 @@ export const useBattleStore = defineStore('battle', {
       this.monsterRngSeed = initialSeed
       this.lastOutcome = null
       this.loot = []
-      this.battleStartedAt = Date.now()
+      this.battleStartedAt = getNow()
       this.battleEndedAt = null
       const player = usePlayerStore()
       this.resetCultivationMetrics()
@@ -1015,13 +1015,29 @@ export const useBattleStore = defineStore('battle', {
         x = randomInRange(0.38, 0.62)
         y = randomInRange(0.18, 0.32) - verticalOffset * 0.5
       } else if (kind === 'miss') {
-        // miss 类型提示的位置计算在 BattleView.vue 的 floatTextStyle 函数中处理
-        // 这里使用默认位置，具体位置由视图层根据内容类型决定
-        const sameKindTexts = this.floatTexts.filter(text => text.kind === kind)
-        const offsetIndex = sameKindTexts.length
-        const verticalOffset = offsetIndex * 0.06
-        x = 0.5
-        y = 0.5 - verticalOffset * 0.3
+        // 根据variant区分我方buff和敌方buff
+        if (variant === 'playerBuff') {
+          // 我方buff：靠近左侧（玩家侧）
+          const sameKindTexts = this.floatTexts.filter(text => text.kind === kind && text.variant === 'playerBuff')
+          const offsetIndex = sameKindTexts.length
+          const verticalOffset = offsetIndex * 0.08
+          x = randomInRange(0.25, 0.40)
+          y = randomInRange(0.45, 0.60) - verticalOffset * 0.5
+        } else if (variant === 'enemyBuff') {
+          // 敌方buff：靠近右侧（敌人侧）
+          const sameKindTexts = this.floatTexts.filter(text => text.kind === kind && text.variant === 'enemyBuff')
+          const offsetIndex = sameKindTexts.length
+          const verticalOffset = offsetIndex * 0.08
+          x = randomInRange(0.60, 0.75)
+          y = randomInRange(0.30, 0.45) - verticalOffset * 0.5
+        } else {
+          // 其他miss类型提示（原有逻辑）
+          const sameKindTexts = this.floatTexts.filter(text => text.kind === kind && !text.variant)
+          const offsetIndex = sameKindTexts.length
+          const verticalOffset = offsetIndex * 0.06
+          x = 0.5
+          y = 0.5 - verticalOffset * 0.3
+        }
       }
 
       this.floatTexts.push({ id, x, y, value, kind, variant })
@@ -1042,7 +1058,7 @@ export const useBattleStore = defineStore('battle', {
     },
     scheduleRematch(monster: Monster) {
       this.clearRematchTimer()
-      const now = Date.now()
+      const now = getNow()
       let delay = AUTO_REMATCH_BASE_DELAY
       if (this.lastAutoRematchAt !== null) {
         const elapsed = now - this.lastAutoRematchAt
@@ -1053,7 +1069,7 @@ export const useBattleStore = defineStore('battle', {
       this.rematchTimer = setTimeout(() => {
         this.rematchTimer = null
         this.start(monster)
-        this.lastAutoRematchAt = Date.now()
+        this.lastAutoRematchAt = getNow()
       }, delay)
     },
     applyVictoryLoot(monster: Monster, player: ReturnType<typeof usePlayerStore>): LootResult[] {
@@ -1164,7 +1180,7 @@ export const useBattleStore = defineStore('battle', {
       const player = usePlayerStore()
       const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
       this.concluded = result
-      this.battleEndedAt = Date.now()
+      this.battleEndedAt = getNow()
       this.loot = loot
       if (currentMonster) {
         this.lastOutcome = {
@@ -1685,8 +1701,7 @@ export const useBattleStore = defineStore('battle', {
           expiresAt: nowMs + durationMs,
           durationMs,
         }
-        // 直接显示防御性状态效果，使用固定位置避免重叠
-        this.pushFloat('目标易伤', 'miss')
+        this.pushFloat('目标易伤', 'miss', 'enemyBuff')
       }
 
       if (result.monsterStunMs && result.monsterStunMs > 0 && hit) {
@@ -1699,7 +1714,7 @@ export const useBattleStore = defineStore('battle', {
           expiresAt: nowMs + durationMs,
           durationMs,
         }
-        this.pushFloat('霸体', 'miss')
+        this.pushFloat('霸体', 'miss', 'playerBuff')
       }
 
       const usage = player.recordSkillUsage(skill, {
@@ -1957,6 +1972,15 @@ export const useBattleStore = defineStore('battle', {
 
       if (dodged) {
         this.dodgeSuccesses += 1
+        this.playerQi = player.res.qi
+        this.playerQiMax = player.res.qiMax
+        this.qiOperation = cloneQiOperationState(player.res.operation)
+        return
+      }
+
+      // Check for super armor (invincibility)
+      if (this.playerSuperArmor && now <= this.playerSuperArmor.expiresAt) {
+        this.pushFloat('霸体!', 'miss')
         this.playerQi = player.res.qi
         this.playerQiMax = player.res.qiMax
         this.qiOperation = cloneQiOperationState(player.res.operation)

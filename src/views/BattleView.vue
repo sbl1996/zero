@@ -818,7 +818,7 @@ function startSkillHold(slotIndex: number, event?: MouseEvent | TouchEvent) {
   if (!enableHoldAutoCast.value) return
 
   // Record when the hold started
-  autoCastHoldStart.value.set(slotIndex, Date.now())
+  autoCastHoldStart.value.set(slotIndex, getNowMs())
 
   // Set up timer to start auto-casting after delay and prevent default only for long holds
   setTimeout(() => {
