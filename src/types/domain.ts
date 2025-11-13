@@ -320,6 +320,8 @@ export interface MonsterAIContext {
 
 export type MonsterAISelector = (context: MonsterAIContext) => string | null
 
+export type MonsterAttackInterval = [number] | [number, number]
+
 export interface Monster {
   id: string
   name: string
@@ -331,7 +333,7 @@ export interface Monster {
   stats: MonsterBattleStats
   rewards: MonsterRewards
   toughness: number
-  attackInterval: number
+  attackInterval: MonsterAttackInterval
   isBoss: boolean
   penetration?: PenetrationProfile
   portraits?: string[]

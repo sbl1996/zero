@@ -215,26 +215,20 @@ function computeComboPreviewTimers(
 const timelineAttackTimes = computed(() => {
   type TimelineAttackTime = { key: string, seconds: number, label?: string, special?: string }
   const markers: TimelineAttackTime[] = []
-  const seenTime = new Map<number, string>()
 
   const pushMarker = (key: string, seconds: number, label?: string, special?: string) => {
     if (!Number.isFinite(seconds)) return
-    const rounded = Math.round(seconds * 1000)
-    const existingKey = seenTime.get(rounded)
-    if (existingKey === key) return
-    if (existingKey) {
-      // 如果时间冲突，优先保留 charging-attack 标记
-      if (existingKey === 'charging-attack') return
-      if (key === 'charging-attack') {
-        // 移除旧标记
-        const idx = markers.findIndex(m => m.key === existingKey)
-        if (idx >= 0) markers.splice(idx, 1)
-      } else {
-        return
-      }
-    }
-    seenTime.set(rounded, key)
     markers.push({ key, seconds, label, special })
+  }
+
+  const pushChargeMarkers = (
+    startKey: string,
+    startSeconds: number,
+    attackKey: string,
+    attackSeconds: number,
+  ) => {
+    pushMarker(startKey, startSeconds, '蓄力', 'charge')
+    pushMarker(attackKey, attackSeconds, '伤害')
   }
 
   const followup = battle.monsterFollowup
@@ -256,10 +250,13 @@ const timelineAttackTimes = computed(() => {
   const chargingSkill = battle.monsterChargingSkill
   if (chargingSkill) {
     const remainingSeconds = Math.max(0, battle.monsterNextSkillTimer)
-    pushMarker(
+    const chargeTime = chargingSkill.chargeSeconds
+    // 添加蓄力段落标记
+    pushChargeMarkers(
+      'charging-charge-start',
+      remainingSeconds - chargeTime,
       'charging-attack',
       remainingSeconds,
-      '攻击！',
     )
   }
 
@@ -276,27 +273,16 @@ const timelineAttackTimes = computed(() => {
     if (!Number.isFinite(timeToSkill)) continue
 
     const chargeTime = entry.skill?.chargeSeconds
-    if (chargeTime && chargeTime > 0) {
+    if (chargeTime !== undefined && chargeTime > 0) {
       // 显示蓄力开始标记
-      pushMarker(
+      pushChargeMarkers(
         `plan-${index}-charge-start`,
         timeToSkill,
-        '蓄力',
-        'charge',
-      )
-      // 显示实际攻击时间（蓄力结束）
-      pushMarker(
         `plan-${index}-attack`,
         timeToSkill + chargeTime,
-        '攻击！',
       )
-    }
-
-    // 当正在蓄力时，plan[0]是蓄力后的下一个攻击，需要显示
-    // 当没有蓄力时，plan[0]是当前即将执行的攻击，只显示combo不显示主标记
-    const shouldShowMainMarker = index > 0 || (index === 0 && chargingSkill !== null)
-    
-    if (shouldShowMainMarker && !chargeTime) {
+    } else {
+      // 显示攻击标记：总是显示非蓄力技能的标签
       pushMarker(
         `plan-${index}`,
         timeToSkill,

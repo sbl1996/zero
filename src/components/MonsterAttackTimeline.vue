@@ -27,6 +27,8 @@ const hasWindow = typeof window !== 'undefined'
 const hasRAF = hasWindow && typeof window.requestAnimationFrame === 'function'
 const hasCancelRAF = hasWindow && typeof window.cancelAnimationFrame === 'function'
 const lastAttackAt = ref<number | null>(null)
+const lastAttackWasCharge = ref(false)
+const nextAttackIsCharge = ref(false)
 const previousTimer = ref<number | null>(null)
 
 const shouldAnimate = computed(() => {
@@ -95,6 +97,10 @@ watch(() => props.timeToAttack, (currentSeconds) => {
   if (props.active && prev !== null && Number.isFinite(prev)) {
     if (currentSeconds > prev + ATTACK_RESET_THRESHOLD) {
       lastAttackAt.value = getNowMs()
+      // 记录刚刚发生的攻击是否是蓄力攻击
+      lastAttackWasCharge.value = nextAttackIsCharge.value
+      // 重置下一次攻击标志
+      nextAttackIsCharge.value = false
     }
   }
 
@@ -121,7 +127,10 @@ function timeToPercent(seconds: number) {
 function segmentToStyle(startSeconds: number, endSeconds: number) {
   const leftSeconds = clampToSpan(startSeconds)
   const rightSeconds = clampToSpan(endSeconds)
-  if (rightSeconds <= -HALF_SPAN_SECONDS || leftSeconds >= HALF_SPAN_SECONDS) return null
+  // 只要右边界在可视范围内，就显示矩形
+  if (rightSeconds <= -HALF_SPAN_SECONDS) return null
+  // 只要左边界在可视范围内，就显示矩形
+  if (leftSeconds >= HALF_SPAN_SECONDS) return null
   const leftPercent = timeToPercent(leftSeconds)
   const rightPercent = timeToPercent(rightSeconds)
   const width = rightPercent - leftPercent
@@ -140,12 +149,81 @@ type TimelineAttackMarker = {
   special?: string
 }
 
+type TimelineChargeSegment = {
+  key: string
+  style: Record<string, string>
+  startLabel?: string
+  endLabel?: string
+}
+
 function resolveAttackSeverity(seconds: number | null): string {
   if (seconds === null || !Number.isFinite(seconds)) return 'is-idle'
   if (seconds <= 0.3) return 'is-danger'
   if (seconds <= 0.6) return 'is-warning'
   return 'is-ready'
 }
+
+const chargeSegments = computed<TimelineChargeSegment[]>(() => {
+  if (!props.active) return []
+  const segments: TimelineChargeSegment[] = []
+  
+  const attackSources = Array.isArray(props.attackTimes) ? props.attackTimes : []
+  const chargeStarts = attackSources.filter(a => a.special === 'charge')
+  
+  chargeStarts.forEach(start => {
+    // 提取前缀：处理 'charging-charge-start' -> 'charging' 和 'plan-0-charge-start' -> 'plan-0'
+    let keyPrefix = start.key
+    if (keyPrefix.endsWith('-charge-start')) {
+      keyPrefix = keyPrefix.slice(0, -13) // 移除 '-charge-start'
+    }
+    const end = attackSources.find(a => a.key === `${keyPrefix}-attack`)
+    
+    if (end && Number.isFinite(start.seconds) && Number.isFinite(end.seconds)) {
+      const style = segmentToStyle(start.seconds, end.seconds)
+      if (style) {
+        segments.push({
+          key: start.key,
+          style,
+          startLabel: start.label,
+          endLabel: end.label,
+        })
+      }
+    }
+  })
+  
+  return segments
+})
+
+const chargePairs = computed(() => {
+  if (!props.active) return new Set<string>()
+  const pairs = new Set<string>()
+  
+  const attackSources = Array.isArray(props.attackTimes) ? props.attackTimes : []
+  const chargeStarts = attackSources.filter(a => a.special === 'charge')
+  
+  // 检查第一个计划的攻击（最接近现在的）是否是蓄力攻击
+  // 只有 plan-0-charge-start 或 charging-charge-start 才表示即将到来的是蓄力攻击
+  const nextIsCharge = chargeStarts.some(s => 
+    s.key === 'plan-0-charge-start' || s.key === 'charging-charge-start'
+  )
+  nextAttackIsCharge.value = nextIsCharge
+  
+  chargeStarts.forEach(start => {
+    // 提取前缀：处理 'charging-charge-start' -> 'charging' 和 'plan-0-charge-start' -> 'plan-0'
+    let keyPrefix = start.key
+    if (keyPrefix.endsWith('-charge-start')) {
+      keyPrefix = keyPrefix.slice(0, -13) // 移除 '-charge-start'
+    }
+    const end = attackSources.find(a => a.key === `${keyPrefix}-attack`)
+    
+    if (end) {
+      pairs.add(start.key)
+      pairs.add(`${keyPrefix}-attack`)
+    }
+  })
+  
+  return pairs
+})
 
 const attackMarkers = computed<TimelineAttackMarker[]>(() => {
   if (!props.active) return []
@@ -155,6 +233,17 @@ const attackMarkers = computed<TimelineAttackMarker[]>(() => {
     if (seconds === null || seconds === undefined) return
     const numeric = Number(seconds)
     if (!Number.isFinite(numeric)) return
+    
+    // 过滤掉属于蓄力段的标记（包括未来和过去的），它们会通过 chargeSegments 显示
+    if (chargePairs.value.has(key)) {
+      return
+    }
+    
+    // 如果是过去的 charge-start 或包含 -charge-start 或 -attack 的标记，也过滤掉
+    if (key.includes('-charge-start') || (key.includes('-attack') && special === undefined && label === '伤害')) {
+      return
+    }
+    
     const style = {
       left: `${timeToPercent(numeric)}%`,
     }
@@ -168,7 +257,11 @@ const attackMarkers = computed<TimelineAttackMarker[]>(() => {
   }
 
   if (props.timeToAttack !== null) {
-    addMarker('current', props.timeToAttack)
+    // 如果正在蓄力，current 标记会与蓄力矩形的结束位置重合，不需要显示
+    const isCharging = chargePairs.value.size > 0
+    if (!isCharging) {
+      addMarker('current', props.timeToAttack)
+    }
   }
 
   const attackSources = Array.isArray(props.attackTimes) ? props.attackTimes : []
@@ -206,6 +299,8 @@ const dodgeHintClasses = computed(() => {
 const recentAttackStyle = computed(() => {
   const occurredAt = lastAttackAt.value
   if (occurredAt === null) return null
+  // 如果最近的攻击是蓄力攻击，不显示竖条（由矩形框代替）
+  if (lastAttackWasCharge.value) return null
   const elapsed = (nowMs.value - occurredAt) / 1000
   if (elapsed < 0 || elapsed > HALF_SPAN_SECONDS) return null
   const leftPercent = timeToPercent(-elapsed)
@@ -218,6 +313,7 @@ watch(nowMs, () => {
   const occurredAt = lastAttackAt.value
   if (occurredAt !== null && nowMs.value - occurredAt > HALF_SPAN_MS) {
     lastAttackAt.value = null
+    lastAttackWasCharge.value = false
   }
 })
 
@@ -242,6 +338,15 @@ const timelineClasses = computed(() => ({
         :class="dodgeHintClasses"
         :style="dodgeHintSegmentStyle"
       />
+      <div
+        v-for="segment in chargeSegments"
+        :key="segment.key"
+        class="timeline-rail__charge-segment"
+        :style="segment.style"
+      >
+        <span v-if="segment.startLabel" class="timeline-rail__charge-label timeline-rail__charge-label--start">{{ segment.startLabel }}</span>
+        <span v-if="segment.endLabel" class="timeline-rail__charge-label timeline-rail__charge-label--end">{{ segment.endLabel }}</span>
+      </div>
       <div
         v-for="marker in attackMarkers"
         :key="marker.key"
@@ -308,7 +413,8 @@ const timelineClasses = computed(() => ({
   position: relative;
   height: 32px;
   border-radius: 999px;
-  overflow: hidden;
+  overflow: visible;
+  margin-top: 18px;
 }
 
 .timeline-rail__fill {
@@ -317,6 +423,7 @@ const timelineClasses = computed(() => ({
   background: linear-gradient(90deg, rgba(38, 46, 60, 0.85), rgba(18, 26, 34, 0.85));
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: inherit;
+  z-index: 0;
 }
 
 .timeline-rail__ticks {
@@ -429,11 +536,68 @@ const timelineClasses = computed(() => ({
 .timeline-rail__attack-label {
   position: absolute;
   top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
   font-size: 10px;
   letter-spacing: 0.08em;
   color: rgba(255, 224, 151, 0.95);
   text-shadow: 0 0 6px rgba(0, 0, 0, 0.65);
   white-space: nowrap;
+}
+
+.timeline-rail__charge-segment {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  border-radius: 10px;
+  background: linear-gradient(90deg, 
+    rgba(255, 200, 100, 0.2) 0%,
+    rgba(255, 210, 110, 0.4) 20%,
+    rgba(255, 180, 80, 0.55) 50%,
+    rgba(255, 160, 70, 0.4) 80%,
+    rgba(255, 140, 60, 0.2) 100%
+  );
+  border: none;
+  box-shadow: 
+    0 0 16px rgba(255, 180, 80, 0.25),
+    0 0 24px rgba(255, 160, 60, 0.12),
+    inset 0 1px 2px rgba(255, 255, 255, 0.15);
+  pointer-events: none;
+  z-index: 4;
+  animation: charge-segment-pulse 1.5s ease-in-out infinite alternate;
+}
+
+.timeline-rail__charge-segment::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg,
+    rgba(255, 255, 255, 0.15) 0%,
+    rgba(255, 255, 255, 0.25) 50%,
+    rgba(255, 255, 255, 0.15) 100%
+  );
+  mix-blend-mode: overlay;
+}
+
+.timeline-rail__charge-label {
+  position: absolute;
+  top: -22px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  color: rgba(255, 200, 100, 0.95);
+  text-shadow: 0 0 6px rgba(0, 0, 0, 0.65);
+  white-space: nowrap;
+  font-weight: 600;
+  transform: translateX(-50%);
+}
+
+.timeline-rail__charge-label--start {
+  left: 0;
+}
+
+.timeline-rail__charge-label--end {
+  left: 100%;
 }
 
 .timeline-rail__attack-glow {
@@ -496,6 +660,21 @@ const timelineClasses = computed(() => ({
     box-shadow:
       0 0 22px rgba(190, 236, 255, 0.6),
       0 0 30px rgba(86, 201, 255, 0.45);
+  }
+}
+
+@keyframes charge-segment-pulse {
+  from {
+    box-shadow: 
+      0 0 10px rgba(255, 180, 80, 0.35),
+      0 0 18px rgba(255, 160, 60, 0.2),
+      inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  to {
+    box-shadow: 
+      0 0 16px rgba(255, 180, 80, 0.5),
+      0 0 24px rgba(255, 160, 60, 0.35),
+      inset 0 1px 0 rgba(255, 255, 255, 0.4);
   }
 }
 </style>

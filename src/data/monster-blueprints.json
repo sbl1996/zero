@@ -117,7 +117,8 @@
     "bp": 800,
     "specialization": "balanced",
     "rewards": { "gold": 610 },
-    "rank": "boss"
+    "rank": "boss",
+    "attackInterval": [1.2, 2.0]
   },
   {
     "id": "m-specter",
@@ -156,7 +157,7 @@
     "rewards": { "gold": 535 },
     "rank": "boss",
     "toughness": 1.6,
-    "attackInterval": 1.8
+    "attackInterval": [1.8]
   },
   {
     "id": "m-nightstalker",
@@ -269,7 +270,7 @@
     "rewards": { "gold": 765 },
     "rank": "boss",
     "toughness": 1.6,
-    "attackInterval": 1.5
+    "attackInterval": [1.5]
   },
   {
     "id": "m-chimera",
@@ -346,7 +347,7 @@
     "rewards": { "gold": 923 },
     "rank": "boss",
     "toughness": 1.8,
-    "attackInterval": 1.8
+    "attackInterval": [1.8]
   },
   {
     "id": "m-faerie",
@@ -394,6 +395,6 @@
     "rewards": { "gold": 970 },
     "rank": "boss",
     "toughness": 1.6,
-    "attackInterval": 1.7
+    "attackInterval": [1.7]
   }
 ]

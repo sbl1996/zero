@@ -3,9 +3,10 @@ import type {
   MonsterAISelector,
   MonsterSkillDefinition,
   MonsterSkillProfile,
+  MonsterAttackInterval,
 } from '@/types/domain'
 
-const DEFAULT_SKILL_ID = 'monster.normal_attack'
+export const DEFAULT_SKILL_ID = 'monster.normal_attack'
 const GOLDEN_SHEEP_ID = 'boss-golden-sheep'
 const GOLDEN_SHEEP_DOUBLE_STAB_ID = 'monster.golden_sheep_double_stab'
 const WIND_RAPTOR_ID = 'boss-wind-raptor'
@@ -20,9 +21,27 @@ function cloneSkillDefinition(definition: MonsterSkillDefinition): MonsterSkillD
   }
 }
 
+export function rollAttackInterval(interval?: MonsterAttackInterval | null, rng: () => number = Math.random): number {
+  if (!interval) {
+    return BASIC_MONSTER_ATTACK.cooldown
+  }
+  if (interval.length === 1) {
+    return interval[0]
+  }
+  const [rawMin, rawMax] = interval
+  const min = typeof rawMin === 'number' ? rawMin : BASIC_MONSTER_ATTACK.cooldown
+  const max = typeof rawMax === 'number' ? rawMax : min
+  if (max <= min) {
+    return Math.max(min, 0)
+  }
+  const rawRoll = typeof rng === 'function' ? rng() : Math.random()
+  const ratio = Number.isFinite(rawRoll) ? Math.min(Math.max(rawRoll, 0), 1) : Math.random()
+  return min + (max - min) * ratio
+}
+
 const BASIC_MONSTER_ATTACK: MonsterSkillDefinition = {
   id: DEFAULT_SKILL_ID,
-  name: '普通攻击',
+  name: '普攻',
   cooldown: 1.6,
   aftercast: 0.4,
   hits: [
@@ -96,8 +115,8 @@ const extraSkillMap: Record<string, MonsterSkillDefinition[]> = {
 export function resolveMonsterSkillProfile(monster: Monster): MonsterSkillProfile {
   const extras = (extraSkillMap[monster.id] ?? []).map(cloneSkillDefinition)
   const basic = cloneSkillDefinition(BASIC_MONSTER_ATTACK)
-  const attackInterval = monster.attackInterval > 0 ? monster.attackInterval : BASIC_MONSTER_ATTACK.cooldown
-  basic.cooldown = attackInterval
+  const [baseInterval] = monster.attackInterval ?? []
+  basic.cooldown = Number.isFinite(baseInterval) && baseInterval > 0 ? baseInterval : BASIC_MONSTER_ATTACK.cooldown
   return {
     basic,
     extras,

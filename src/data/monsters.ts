@@ -1,6 +1,9 @@
-import type { Monster, MonsterRank, MonsterSpecialization } from '@/types/domain'
+import type { Monster, MonsterAttackInterval, MonsterRank, MonsterSpecialization } from '@/types/domain'
 import { monsterPositions } from '@/data/maps'
-import { resolveMonsterSkillProfile, resolveMonsterSkillSelector } from '@/data/monsterSkills'
+import {
+  resolveMonsterSkillProfile,
+  resolveMonsterSkillSelector,
+} from '@/data/monsterSkills'
 import monsterBlueprintsRaw from './monster-blueprints.json'
 
 // 怪物到地图的映射
@@ -58,15 +61,35 @@ interface MonsterBlueprint {
   }
   rank?: MonsterRank
   toughness?: number
-  attackInterval?: number
+  attackInterval?: MonsterAttackInterval
   portraits?: Monster['portraits']
 }
 
 const MONSTER_BLUEPRINTS = monsterBlueprintsRaw as MonsterBlueprint[]
+const DEFAULT_ATTACK_INTERVAL: MonsterAttackInterval = [1.4, 1.8]
 const CORE_DROP_CHANCE_BY_RANK: Record<MonsterRank, number> = {
   normal: 0.2,
   elite: 0.45,
   boss: 0.9,
+}
+
+function sanitizeAttackInterval(interval?: MonsterAttackInterval): MonsterAttackInterval {
+  if (!interval || !Array.isArray(interval)) {
+    return DEFAULT_ATTACK_INTERVAL
+  }
+  if (interval.length === 1) {
+    return interval
+  }
+  const [first, second] = interval
+  const min = Math.min(first, second)
+  const max = Math.max(first, second)
+  if (max <= 0) {
+    return DEFAULT_ATTACK_INTERVAL
+  }
+  if (min === max) {
+    return [min]
+  }
+  return [min, max]
 }
 
 function computeDerivedStats(bp: number, specialization: MonsterSpecialization) {
@@ -82,7 +105,7 @@ function buildMonster(blueprint: MonsterBlueprint): Monster {
   const rank: MonsterRank = blueprint.rank ?? 'normal'
   const isBoss = rank === 'boss'
   const stats = computeDerivedStats(blueprint.bp, blueprint.specialization)
-  const attackInterval = blueprint.attackInterval ?? 1.6
+  const attackInterval = sanitizeAttackInterval(blueprint.attackInterval)
   const toughness = blueprint.toughness ?? (isBoss ? 1.2 : 1.0)
   const coreDropTier = typeof blueprint.realmTier === 'number' ? blueprint.realmTier : 9
   const baseChance = CORE_DROP_CHANCE_BY_RANK[rank] ?? CORE_DROP_CHANCE_BY_RANK.normal

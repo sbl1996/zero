@@ -10,7 +10,12 @@ import { ITEMS } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
 import { getSkillDefinition } from '@/data/skills'
-import { resolveMonsterSkillProfile, resolveMonsterSkillSelector } from '@/data/monsterSkills'
+import {
+  DEFAULT_SKILL_ID,
+  resolveMonsterSkillProfile,
+  resolveMonsterSkillSelector,
+  rollAttackInterval,
+} from '@/data/monsterSkills'
 import { MAX_EQUIP_LEVEL } from '@/composables/useEnhance'
 import { realmTierContentLevel } from '@/utils/realm'
 import type { NumericRealmTier } from '@/utils/realm'
@@ -253,9 +258,28 @@ function createMonsterSkillCooldownMap(profile: MonsterSkillProfile): Record<str
   return cooldowns
 }
 
-function findMonsterSkill(profile: MonsterSkillProfile, skillId: string): MonsterSkillDefinition | null {
-  if (profile.basic.id === skillId) return profile.basic
-  return profile.extras.find((skill) => skill.id === skillId) ?? null
+function cloneMonsterSkill(skill: MonsterSkillDefinition | null): MonsterSkillDefinition | null {
+  if (!skill) return null
+  return {
+    ...skill,
+    hits: skill.hits.map((hit) => ({ ...hit })),
+  }
+}
+
+function findMonsterSkill(
+  profile: MonsterSkillProfile,
+  skillId: string,
+  monster: Monster,
+  rng?: () => number,
+): MonsterSkillDefinition | null {
+  if (profile.basic.id === skillId) {
+    const skill = cloneMonsterSkill(profile.basic)
+    if (!skill) return null
+    skill.cooldown = rollAttackInterval(monster.attackInterval, rng)
+    return skill
+  }
+  const found = profile.extras.find((skill) => skill.id === skillId) ?? null
+  return cloneMonsterSkill(found)
 }
 
 function buildSkillStateSnapshot(
@@ -291,11 +315,8 @@ function resolveMonsterCooldownFloor(cooldowns: Record<string, number>): number 
   return floor === Infinity ? 0 : floor
 }
 
-function resolveInitialMonsterDelay(monster: Monster, profile: MonsterSkillProfile): number {
-  if (Number.isFinite(monster.attackInterval) && monster.attackInterval > 0) {
-    return monster.attackInterval
-  }
-  return Math.max(profile.basic.cooldown ?? 0, 0)
+function resolveInitialMonsterDelay(_: Monster, __: MonsterSkillProfile): number {
+  return 0
 }
 
 function resolveMonsterSkillPlanDepth(monster: Monster | null): number {
@@ -519,6 +540,10 @@ export const useBattleStore = defineStore('battle', {
       this.itemCooldowns = {}
       const profile = monster.skillProfile ?? resolveMonsterSkillProfile(monster)
       this.monsterSkillCooldowns = createMonsterSkillCooldownMap(profile)
+      const initialBasicIntervalRng = makeRng(this.monsterRngSeed ^ 0x3c6ef372)
+      const initialBasicInterval = rollAttackInterval(monster.attackInterval, initialBasicIntervalRng)
+      this.monsterRngSeed = (this.monsterRngSeed + 0xa4093822) >>> 0
+      this.monsterSkillCooldowns[DEFAULT_SKILL_ID] = initialBasicInterval
       this.actionLockUntil = null
       this.pendingDodge = null
       this.pendingItemUse = null
@@ -677,7 +702,7 @@ export const useBattleStore = defineStore('battle', {
       this.monsterRngSeed = (this.monsterRngSeed + 0xa4093822) >>> 0
       const choice = selector({ monster, skillStates, rng })
       if (!choice) return null
-      return findMonsterSkill(profile, choice)
+      return findMonsterSkill(profile, choice, monster, rng)
     },
     setupMonsterComboTelegraph(skill: MonsterSkillDefinition | null, delaySeconds: number) {
       const comboPreview = createComboPreviewInfo(skill)
