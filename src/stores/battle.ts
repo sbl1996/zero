@@ -16,6 +16,7 @@ import {
   resolveMonsterSkillSelector,
   rollAttackInterval,
 } from '@/data/monsterSkills'
+import { resolveMonsterOpeningStrategy } from '@/data/monsterOpenings'
 import { MAX_EQUIP_LEVEL } from '@/composables/useEnhance'
 import { realmTierContentLevel } from '@/utils/realm'
 import type { NumericRealmTier } from '@/utils/realm'
@@ -249,13 +250,42 @@ function resolveMonsterPenetration(monster: Monster) {
   }
 }
 
+function clampInitialCooldown(value: number | undefined | null): number {
+  if (!Number.isFinite(value) || (value ?? 0) < 0) return 0
+  return value as number
+}
+
 function createMonsterSkillCooldownMap(profile: MonsterSkillProfile): Record<string, number> {
   const cooldowns: Record<string, number> = {}
-  const skills = [profile.basic, ...profile.extras]
-  skills.forEach((skill) => {
-    cooldowns[skill.id] = 0
+  cooldowns[profile.basic.id] = clampInitialCooldown(profile.basic.cooldown)
+  profile.extras.forEach((skill) => {
+    cooldowns[skill.id] = clampInitialCooldown(skill.cooldown)
   })
   return cooldowns
+}
+
+function buildMonsterOpeningPlan(
+  monster: Monster,
+  profile: MonsterSkillProfile,
+  referenceMs: number,
+): MonsterSkillPlanEntry[] {
+  const strategy = resolveMonsterOpeningStrategy(monster)
+  if (!strategy || strategy.length === 0) return []
+  const entries: MonsterSkillPlanEntry[] = []
+  strategy.forEach((action) => {
+    const delaySeconds = Math.max(0, action.at ?? 0)
+    const skill = findMonsterSkill(profile, action.skillId, monster)
+    if (!skill) return
+    const scheduledAt = referenceMs + delaySeconds * 1000
+    const comboPreview = createComboPreviewInfo(skill)
+    entries.push({
+      skill,
+      scheduledAt,
+      prepDuration: delaySeconds,
+      comboPreview,
+    })
+  })
+  return entries.sort((a, b) => a.scheduledAt - b.scheduledAt)
 }
 
 function cloneMonsterSkill(skill: MonsterSkillDefinition | null): MonsterSkillDefinition | null {
@@ -527,7 +557,8 @@ export const useBattleStore = defineStore('battle', {
       this.monsterRngSeed = initialSeed
       this.lastOutcome = null
       this.loot = []
-      this.battleStartedAt = getNow()
+      const now = getNow()
+      this.battleStartedAt = now
       this.battleEndedAt = null
       const player = usePlayerStore()
       this.resetCultivationMetrics()
@@ -556,7 +587,7 @@ export const useBattleStore = defineStore('battle', {
       this.monsterNextSkillTotal = 0
       this.monsterCurrentSkill = null
       this.monsterChargingSkill = null
-      this.lastTickAt = getNow()
+      this.lastTickAt = now
       this.skillChain = {
         lastSkillId: null,
         targetId: monster.id ?? null,
@@ -569,7 +600,7 @@ export const useBattleStore = defineStore('battle', {
       this.playerSuperArmor = null
       this.monsterStunUntil = null
       const initialDelay = resolveInitialMonsterDelay(monster, profile)
-      this.monsterSkillPlan = []
+      this.monsterSkillPlan = buildMonsterOpeningPlan(monster, profile, now)
       this.extendMonsterSkillPlan(initialDelay)
       this.startLoop()
     },

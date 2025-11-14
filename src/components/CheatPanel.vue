@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui'
 const playerStore = usePlayerStore()
 const progressStore = useProgressStore()
 const ui = useUiStore()
-const { showCheatPanel, autoRematchAfterVictory, showSkillCooldownGrayscale } = storeToRefs(ui)
+const { showCheatPanel, autoRematchAfterVictory } = storeToRefs(ui)
 
 const goldAmount = ref(1000)
 const upgradingRealm = ref(false)
@@ -54,12 +54,6 @@ function handleAutoRematchToggle(event: Event) {
   const target = event.target as HTMLInputElement | null
   if (!target) return
   ui.toggleAutoRematch(target.checked)
-}
-
-function handleCooldownToggle(event: Event) {
-  const target = event.target as HTMLInputElement | null
-  if (!target) return
-  ui.toggleCooldownGrayscale(target.checked)
 }
 
 async function advanceRealmDirectly() {
@@ -115,19 +109,6 @@ function fillBasePower() {
           </label>
           <p class="text-small text-muted" style="margin-top: 6px;">开启后战斗胜利会自动开始下一场（不包括BOSS）。</p>
         </div>
-        <div class="cheat-settings">
-          <label class="cheat-settings-toggle">
-            <input
-              class="cheat-settings-checkbox"
-              type="checkbox"
-              :checked="showSkillCooldownGrayscale"
-              @change="handleCooldownToggle"
-            >
-            显示技能冷却灰度特效
-          </label>
-          <p class="text-small text-muted" style="margin-top: 6px;">关闭后视图里只剩旋转遮罩，便于调试冷却弧。</p>
-        </div>
-
         <div class="cheat-danger">
           <button class="btn btn-danger" type="button" @click="deleteSave">删除存档</button>
           <p class="text-small text-muted" style="margin: 6px 0 0;">清空本地存档并刷新页面</p>

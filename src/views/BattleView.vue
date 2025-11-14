@@ -34,7 +34,7 @@ const uiStore = useUiStore()
 const inventory = useInventoryStore()
 
 const { res } = storeToRefs(playerStore)
-const { enableHoldAutoCast, autoRematchAfterVictory, showSkillCooldownGrayscale } = storeToRefs(uiStore)
+const { enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(uiStore)
 
 const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
@@ -1712,7 +1712,7 @@ onBeforeUnmount(() => {
         :attack-times="timelineAttackTimes"
       />
 
-      <div class="battle-action-row" :class="{ 'cooldown-mask-only': !showSkillCooldownGrayscale }">
+      <div class="battle-action-row">
         <div class="battle-actions">
           <div
             v-for="slot in skillSlots"
