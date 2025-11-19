@@ -5,6 +5,7 @@ export const useUiStore = defineStore('ui', {
     showAttributes: false,
     showEquipment: false,
     showCheatPanel: false,
+    showSettings: false,
     autoRematchAfterVictory: false,
     enableHoldAutoCast: false,
   }),
@@ -17,6 +18,9 @@ export const useUiStore = defineStore('ui', {
     },
     toggleCheatPanel(value?: boolean) {
       this.showCheatPanel = value ?? !this.showCheatPanel
+    },
+    toggleSettings(value?: boolean) {
+      this.showSettings = value ?? !this.showSettings
     },
     toggleAutoRematch(value?: boolean) {
       this.autoRematchAfterVictory = value ?? !this.autoRematchAfterVictory

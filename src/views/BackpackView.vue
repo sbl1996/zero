@@ -6,11 +6,12 @@ import { usePlayerStore } from '@/stores/player'
 import { useEquipmentActions } from '@/composables/useEquipmentActions'
 import { resolveMainStatBreakdown } from '@/composables/useEnhance'
 import { ITEMS, consumableIds } from '@/data/items'
-import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
+import { EQUIPMENT_TEMPLATE_MAP } from '@/data/equipment'
 import { resolveItemIcon, textIcon } from '@/utils/itemIcon'
 import { formatRealmTierLabel, realmTierIndex } from '@/utils/realm'
+import { formatEquipmentSubstats, getEquipmentStatLabel, getEquipmentQualityMeta } from '@/utils/equipmentStats'
 import type { ItemIcon } from '@/utils/itemIcon'
-import type { EquipSlot, EquipSlotKey, EquipSubStats, Equipment, RealmTier } from '@/types/domain'
+import type { EquipSlot, EquipSlotKey, EquipmentSubStat, Equipment, EquipmentQuality, RealmTier } from '@/types/domain'
 
 const inventory = useInventoryStore()
 const player = usePlayerStore()
@@ -42,6 +43,9 @@ interface BackpackEquipmentEntry {
   slot: EquipSlot
   slotKey?: EquipSlotKey
   slotLabel: string
+  quality: EquipmentQuality
+  qualityLabel: string
+  qualityColor: string
   mainDetail: string
   subDetails: string[]
   requiredRealmTier?: RealmTier
@@ -146,7 +150,7 @@ function formatMainStat(equipment: Equipment): string {
   if (breakdowns.length === 0) return '主要属性 —'
 
   const breakdown = breakdowns[0]!
-  const statLabel = breakdown.key === 'ATK' ? '攻击' : breakdown.key === 'DEF' ? '防御' : '生命值'
+  const statLabel = getEquipmentStatLabel(breakdown.key)
   const increase = breakdown.total - breakdown.base
 
   return `${statLabel} ${breakdown.total} (+${increase})`
@@ -163,49 +167,36 @@ function getMainStatTooltip(equipment: Equipment): string {
   return `基础: ${breakdown.base}, 强化加成: +${increase} (+${percentIncrease}%)`
 }
 
-function formatSubs(subs: EquipSubStats): string[] {
-  const entries: string[] = []
-  if (subs.addATK) entries.push(`追加攻击 +${subs.addATK}`)
-  if (subs.addDEF) entries.push(`追加防御 +${subs.addDEF}`)
-  if (subs.addHP) entries.push(`追加生命值 +${subs.addHP}`)
-  if (subs.addQiMax) entries.push(`斗气上限 +${subs.addQiMax}`)
-  if (subs.addAGI) entries.push(`敏捷 +${subs.addAGI}`)
-  if (subs.addREC) entries.push(`恢复 +${subs.addREC}`)
-  if (subs.penFlat) entries.push(`穿透(固定) +${subs.penFlat}`)
-  if (subs.penPct) entries.push(`穿透(%) +${Math.round(subs.penPct * 100)}%`)
-  if (subs.toughness) entries.push(`韧性 +${subs.toughness}`)
+function formatSubs(substats: EquipmentSubStat[] | undefined | null): string[] {
+  if (!substats) return ['无']
+  const entries = formatEquipmentSubstats(substats)
   return entries.length > 0 ? entries : ['无']
 }
 
+function lookupTemplate(templateId?: string) {
+  if (!templateId) return undefined
+  return EQUIPMENT_TEMPLATE_MAP.get(templateId)
+}
+
 function getEquipmentRequiredRealmTier(equipment: Equipment): RealmTier | undefined {
-  // 先尝试直接用装备ID查找模板（适用于起始装备等基础装备）
-  let template = BASE_EQUIPMENT_TEMPLATES.find(t => t.id === equipment.id)
-
-  // 如果找不到，说明可能是带时间戳和索引的装备ID，需要提取基础模板ID
-  if (!template) {
-    const parts = equipment.id.split('-')
-
-    // 处理BOSS掉落装备的ID格式：templateId-drop-timestamp-index
-    // 需要移除 "-drop-timestamp-index" 部分
-    const dropIndex = parts.indexOf('drop')
-    if (dropIndex !== -1 && parts.length >= dropIndex + 3) {
-      const baseId = parts.slice(0, dropIndex).join('-')
-      template = BASE_EQUIPMENT_TEMPLATES.find(t => t.id === baseId)
-    }
-    // 如果不是BOSS掉落格式，尝试原来的逻辑（templateId-timestamp-index）
-    else if (parts.length >= 3) {
-      const baseId = parts.slice(0, -2).join('-')
-      template = BASE_EQUIPMENT_TEMPLATES.find(t => t.id === baseId)
+  if (equipment.requiredRealmTier !== undefined) return equipment.requiredRealmTier
+  const direct = lookupTemplate(equipment.templateId)
+  if (direct?.requiredRealmTier !== undefined) return direct.requiredRealmTier
+  const candidates = [equipment.id]
+  const parts = equipment.id.split('-')
+  const dropIndex = parts.indexOf('drop')
+  if (dropIndex !== -1 && parts.length >= dropIndex + 3) {
+    candidates.push(parts.slice(0, dropIndex).join('-'))
+  } else if (parts.length >= 3) {
+    candidates.push(parts.slice(0, -2).join('-'))
+  }
+  for (const candidate of candidates) {
+    const template = lookupTemplate(candidate)
+    if (template?.requiredRealmTier !== undefined) {
+      return template.requiredRealmTier
     }
   }
-
-  // 如果仍然找不到模板，返回undefined（这样就不会显示需求境界）
-  if (!template) {
-    console.warn(`Equipment template not found for ID: ${equipment.id}`)
-    return undefined
-  }
-
-  return template.requiredRealmTier
+  return undefined
 }
 
 const stackEntries = computed<BackpackStackEntry[]>(() =>
@@ -227,44 +218,56 @@ const stackEntries = computed<BackpackStackEntry[]>(() =>
 )
 
 const equipmentEntries = computed<BackpackEquipmentEntry[]>(() =>
-  inventory.equipment.map((equipment) => ({
-    kind: 'equipment' as const,
-    type: 'equipment' as const,
-    subType: getEquipmentSubType(equipment.slot),
-    source: 'inventory' as const,
-    id: equipment.id,
-    name: equipment.name,
-    icon: iconForSlot(equipment.slot),
-    level: equipment.level,
-    slot: equipment.slot,
-    slotLabel: resolveSlotLabel(equipment.slot),
-    mainDetail: formatMainStat(equipment),
-    subDetails: formatSubs(equipment.subs),
-    requiredRealmTier: getEquipmentRequiredRealmTier(equipment),
-    equipment,
-  })),
-)
-
-const equippedEntries = computed<BackpackEquipmentEntry[]>(() =>
-  Object.entries(player.equips)
-    .filter((entry): entry is [EquipSlotKey, Equipment] => Boolean(entry[1]))
-    .map(([slotKey, equipment]) => ({
+  inventory.equipment.map((equipment) => {
+    const qualityMeta = getEquipmentQualityMeta(equipment.quality)
+    return {
       kind: 'equipment' as const,
       type: 'equipment' as const,
       subType: getEquipmentSubType(equipment.slot),
-      source: 'equipped' as const,
+      source: 'inventory' as const,
       id: equipment.id,
       name: equipment.name,
       icon: iconForSlot(equipment.slot),
       level: equipment.level,
       slot: equipment.slot,
-      slotKey,
-      slotLabel: resolveSlotLabel(equipment.slot, slotKey),
+      slotLabel: resolveSlotLabel(equipment.slot),
+      quality: equipment.quality,
+      qualityLabel: qualityMeta.label,
+      qualityColor: qualityMeta.color,
       mainDetail: formatMainStat(equipment),
-      subDetails: formatSubs(equipment.subs),
+      subDetails: formatSubs(equipment.substats),
       requiredRealmTier: getEquipmentRequiredRealmTier(equipment),
       equipment,
-    })),
+    }
+  }),
+)
+
+const equippedEntries = computed<BackpackEquipmentEntry[]>(() =>
+  Object.entries(player.equips)
+    .filter((entry): entry is [EquipSlotKey, Equipment] => Boolean(entry[1]))
+    .map(([slotKey, equipment]) => {
+      const qualityMeta = getEquipmentQualityMeta(equipment.quality)
+      return {
+        kind: 'equipment' as const,
+        type: 'equipment' as const,
+        subType: getEquipmentSubType(equipment.slot),
+        source: 'equipped' as const,
+        id: equipment.id,
+        name: equipment.name,
+        icon: iconForSlot(equipment.slot),
+        level: equipment.level,
+        slot: equipment.slot,
+        slotKey,
+        slotLabel: resolveSlotLabel(equipment.slot, slotKey),
+        quality: equipment.quality,
+        qualityLabel: qualityMeta.label,
+        qualityColor: qualityMeta.color,
+        mainDetail: formatMainStat(equipment),
+        subDetails: formatSubs(equipment.substats),
+        requiredRealmTier: getEquipmentRequiredRealmTier(equipment),
+        equipment,
+      }
+    }),
 )
 
 const typeOrder: Record<BackpackEntryType, number> = {
@@ -536,10 +539,27 @@ function entryTypeLabel(type: BackpackEntryType): string {
               <span v-else>{{ entry.icon.text }}</span>
             </div>
             <div>
-              <div class="inventory-card__name">{{ entry.name }}</div>
+              <div class="inventory-card__name">
+                <template v-if="entry.kind === 'equipment'">
+                  <span class="inventory-card__name-text" :style="{ color: entry.qualityColor }">
+                    {{ entry.name }}
+                  </span>
+                  <span
+                    class="inventory-card__quality-tag"
+                    :style="{ borderColor: entry.qualityColor, color: entry.qualityColor }"
+                  >
+                    {{ entry.qualityLabel }}
+                  </span>
+                </template>
+                <template v-else>
+                  {{ entry.name }}
+                </template>
+              </div>
               <div class="inventory-card__meta text-small text-muted">
                 <template v-if="entry.kind === 'equipment' && entry.source === 'equipped'">已穿戴装备</template>
-                <template v-else-if="entry.kind === 'equipment'">{{ getEquipmentSubTypeLabel(entry.subType) }}</template>
+                <template v-else-if="entry.kind === 'equipment'">
+                  {{ getEquipmentSubTypeLabel(entry.subType) }}
+                </template>
                 <template v-else>{{ entryTypeLabel(entry.type) }}</template>
               </div>
             </div>
@@ -573,7 +593,7 @@ function entryTypeLabel(type: BackpackEntryType): string {
                   境界不足，无法穿戴
                 </span>
               </div>
-              <div class="text-small">等级：+{{ entry.level }}</div>
+              <div class="text-small">强化等级：+{{ entry.level }}</div>
               <div class="text-small" style="margin-top: 6px;" :title="getMainStatTooltip(entry.equipment)">
                 {{ entry.mainDetail }}
               </div>
@@ -706,6 +726,22 @@ function entryTypeLabel(type: BackpackEntryType): string {
 
 .inventory-card__name {
   font-weight: 600;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.inventory-card__name-text {
+  font-weight: inherit;
+}
+
+.inventory-card__quality-tag {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .inventory-card__body {

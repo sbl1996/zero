@@ -1,4 +1,4 @@
-import type { Equipment, EquipSlot } from '@/types/domain'
+import type { Equipment, EquipSlot, EquipmentMainStatType } from '@/types/domain'
 import { randBool } from './useRng'
 
 export type MainEnhanceGem = 'blessGem' | 'soulGem' | 'miracleGem'
@@ -116,7 +116,7 @@ export function mainFlatBonus(baseMain: number, slot: EquipSlot, level: number, 
   return Math.max(1, raw)
 }
 
-export type MainStatKey = 'ATK' | 'DEF' | 'HP'
+export type MainStatKey = EquipmentMainStatType
 
 export interface MainStatBreakdownEntry {
   key: MainStatKey
@@ -132,17 +132,13 @@ export function resolveMainStatBreakdown(
 ): MainStatBreakdownEntry[] {
   const percent = mainBonusPercent(level)
   const breakdowns: MainStatBreakdownEntry[] = []
-  const mainEntries = Object.entries(equipment.mainStat).map(([key, value]) => [
-    key as MainStatKey,
-    typeof value === 'number' ? value : undefined,
-  ]) as Array<[MainStatKey, number | undefined]>
-
-  mainEntries.forEach(([key, value]) => {
-    if (!value) return
-    const flat = mainFlatBonus(value, equipment.slot, level, equipment.flatCapMultiplier)
-    const total = Math.round((value + flat) * (1 + percent))
-    breakdowns.push({ key, base: value, flat, percent, total })
-  })
+  const main = equipment.mainStat
+  if (!main) return breakdowns
+  const value = typeof main.value === 'number' ? main.value : 0
+  if (value <= 0) return breakdowns
+  const flat = mainFlatBonus(value, equipment.slot, level, equipment.flatCapMultiplier)
+  const total = Math.round((value + flat) * (1 + percent))
+  breakdowns.push({ key: main.type, base: value, flat, percent, total })
 
   return breakdowns
 }

@@ -4,7 +4,7 @@ import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS } from '@/composable
 import { resolveSkillAftercast, resolveSkillChargeTime, resolveSkillCooldown, resolveQiCost } from '@/composables/useSkills'
 import { makeRng, randRange, randBool } from '@/composables/useRng'
 import { bossUnlockMap } from '@/data/monsters'
-import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
+import { BASE_EQUIPMENT_TEMPLATES, instantiateEquipment } from '@/data/equipment'
 import { CORE_SHARD_BASE_ID, getCoreShardConfig } from '@/data/cultivationCores'
 import { ITEMS } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
@@ -25,6 +25,7 @@ import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
 import { useUiStore } from './ui'
 import { useQuestStore } from './quests'
+import { useNodeSpawnStore } from './nodeSpawns'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
 import { resolveDodgeSuccessChance } from '@/composables/useDodge'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
@@ -119,17 +120,10 @@ function createEquipmentFromTemplate(
   template: (typeof BASE_EQUIPMENT_TEMPLATES)[number],
   initialLevel = 0,
 ): Equipment {
-  return {
-    id: makeEquipmentId(template.id),
-    name: template.name,
-    slot: template.slot,
+  return instantiateEquipment(template, {
     level: initialLevel,
-    mainStat: { ...template.baseMain },
-    subs: { ...template.baseSubs },
-    exclusive: template.exclusive,
-    flatCapMultiplier: template.flatCapMultiplier,
-    requiredRealmTier: template.requiredRealmTier,
-  }
+    id: makeEquipmentId(template.id),
+  })
 }
 
 interface DrawEquipmentOptions {
@@ -445,6 +439,9 @@ function initialState(): BattleState {
     playerSuperArmor: null,
     monsterVulnerability: null,
     monsterChargingDebuff: null,
+    originNodeId: null,
+    originNodeInstanceId: null,
+    pendingQuestCompletions: [],
   }
 }
 
@@ -486,6 +483,8 @@ export const useBattleStore = defineStore('battle', {
       player.setRecoveryMode('idle')
       player.stopQiOperation()
       player.stopQiOperation()
+      this.originNodeId = null
+      this.originNodeInstanceId = null
     },
     exitBattle() {
       this.stopLoop()
@@ -518,6 +517,9 @@ export const useBattleStore = defineStore('battle', {
       this.monsterNextSkillTotal = 0
       this.monsterCurrentSkill = null
       this.monsterChargingSkill = null
+      this.originNodeId = null
+      this.originNodeInstanceId = null
+      this.pendingQuestCompletions = []
       this.lastTickAt = 0
       this.battleStartedAt = null
       this.battleEndedAt = null
@@ -543,7 +545,7 @@ export const useBattleStore = defineStore('battle', {
       // this.lastOutcome = null
       // this.loot = []
     },
-    start(monster: Monster, seed?: number) {
+    start(monster: Monster, options?: { seed?: number; originNodeId?: string | null; originNodeInstanceId?: string | null }) {
       this.clearRematchTimer()
       this.stopLoop()
       this.monster = monster
@@ -552,9 +554,11 @@ export const useBattleStore = defineStore('battle', {
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
-      const initialSeed = (seed ?? Date.now()) >>> 0
+      const initialSeed = (options?.seed ?? Date.now()) >>> 0
       this.rngSeed = initialSeed
       this.monsterRngSeed = initialSeed
+      this.originNodeId = options?.originNodeId ?? null
+      this.originNodeInstanceId = options?.originNodeInstanceId ?? null
       this.lastOutcome = null
       this.loot = []
       const now = getNow()
@@ -1236,14 +1240,20 @@ export const useBattleStore = defineStore('battle', {
       const player = usePlayerStore()
       const slotCount = player.skills.loadout.length || SKILL_SLOT_COUNT
       this.concluded = result
+      this.floatTexts = []
       this.battleEndedAt = getNow()
       this.loot = loot
+      const questsPrepared = this.pendingQuestCompletions.length > 0
+        ? [...this.pendingQuestCompletions]
+        : undefined
+      this.pendingQuestCompletions = []
       if (currentMonster) {
         this.lastOutcome = {
           monsterId: currentMonster.id,
           monsterName: currentMonster.name,
           result,
           drops: loot.length > 0 ? loot : undefined,
+          questsPrepared,
         }
       }
       this.monsterHp = 0
@@ -1833,6 +1843,13 @@ export const useBattleStore = defineStore('battle', {
       const progress = useProgressStore()
       progress.markMonsterCleared(this.monster.id)
 
+      if (this.originNodeId && this.originNodeInstanceId) {
+        const nodeSpawns = useNodeSpawnStore()
+        nodeSpawns.handleMonsterDefeat(this.originNodeId, this.originNodeInstanceId)
+        this.originNodeInstanceId = null
+        this.originNodeId = null
+      }
+
       if (this.monster.isBoss) {
         const nextMapId = bossUnlockMap[this.monster.id]
         if (nextMapId) {
@@ -1851,6 +1868,7 @@ export const useBattleStore = defineStore('battle', {
       }
       // Show quest completion/turn-in notices
       if (questResult.prepared && questResult.prepared.length) {
+        this.pendingQuestCompletions.push(...questResult.prepared)
         for (const questId of questResult.prepared) {
           const qName = questStore.definitionMap[questId]?.name ?? questId
           this.pushFloat(`可交付「${qName}」`, 'loot')

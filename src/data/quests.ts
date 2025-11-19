@@ -17,10 +17,10 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   {
     id: 'quest-slime-menace',
     name: '青苔原的黏液祸患',
-    giver: '青苔原生态管理员',
-    location: '翡冷翠任务板',
+    giver: '卫兵 振翔',
+    location: '青苔原',
     description:
-      '“最近青苔原遍布史莱姆的粘液印记，路过的行人被它们缠得寸步难行。帮忙清理一批吧，别让那些软泥团以为这片草地是它们的王国。”',
+      '最近青苔原遍布史莱姆的粘液印记，路过的行人被它们缠得寸步难行。帮忙清理一批吧，别让那些软泥团以为这片草地是它们的王国。',
     summary: '在青苔原击杀 10 只史莱姆。',
     recommendedRealmTier: 1,
     difficultyLabel: '★',

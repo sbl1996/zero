@@ -378,7 +378,7 @@ const timelineClasses = computed(() => ({
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 6px 10px;
   border-radius: 10px;
   background: linear-gradient(180deg, rgba(28, 34, 46, 0.65), rgba(21, 24, 32, 0.6));
   border: 1px solid rgba(255, 255, 255, 0.08);

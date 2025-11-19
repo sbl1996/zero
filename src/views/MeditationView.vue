@@ -415,10 +415,6 @@ onBeforeUnmount(() => {
               <span class="stat-value">{{ formattedElapsed }}</span>
             </div>
             <div class="stat-item">
-              <span class="stat-label">修炼进度</span>
-              <span class="stat-value">{{ bpProgressPercent }}%</span>
-            </div>
-            <div class="stat-item">
               <span class="stat-label">本源增长</span>
               <span class="stat-value">
                 {{ isMeditating ? meditationBpRate.toFixed(2) : '0.00' }}/s
@@ -444,7 +440,7 @@ onBeforeUnmount(() => {
       </div>
       <div class="meditation-progress">
         <div class="progress-header">
-          <span>斗气本源 {{ bpCurrent }} / {{ bpRangeMax }}</span>
+          <span>斗气本源 {{ bpCurrent }} / {{ bpRangeMax }} ({{ bpProgressPercent }}%)</span>
           <span>区间 {{ bpRangeMin }} ~ {{ bpRangeMax }}</span>
         </div>
       <div class="progress-bar">

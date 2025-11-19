@@ -1,20 +1,9 @@
 import type { Monster, MonsterAttackInterval, MonsterRank, MonsterSpecialization } from '@/types/domain'
-import { monsterPositions } from '@/data/maps'
 import {
   resolveMonsterSkillProfile,
   resolveMonsterSkillSelector,
 } from '@/data/monsterSkills'
 import monsterBlueprintsRaw from './monster-blueprints.json'
-
-// 怪物到地图的映射
-export function getMonsterMap(monsterId: string): string | null {
-  for (const [mapId, positions] of Object.entries(monsterPositions)) {
-    if (positions[monsterId]) {
-      return mapId
-    }
-  }
-  return null
-}
 
 // BOSS击败后的地图解锁顺序
 export const bossUnlockMap: Record<string, string> = {

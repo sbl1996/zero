@@ -6,11 +6,12 @@ import { useBattleStore } from '@/stores/battle'
 import { usePlayerStore } from '@/stores/player'
 import { useUiStore } from '@/stores/ui'
 import { useInventoryStore } from '@/stores/inventory'
+import { useProgressStore } from '@/stores/progress'
 import { getSkillDefinition } from '@/data/skills'
+import { useQuestStore } from '@/stores/quests'
 import { resolveSkillChargeTime, resolveSkillCooldown } from '@/composables/useSkills'
 import { quickConsumableIds } from '@/data/items'
 import { resolveDodgeSuccessChance } from '@/composables/useDodge'
-import { getMonsterMap } from '@/data/monsters'
 import { getAutoMonsterPortraits } from '@/utils/monsterPortraits'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import { formatRealmTierLabel } from '@/utils/realm'
@@ -32,6 +33,8 @@ const battle = useBattleStore()
 const playerStore = usePlayerStore()
 const uiStore = useUiStore()
 const inventory = useInventoryStore()
+const progress = useProgressStore()
+const questStore = useQuestStore()
 
 const { res } = storeToRefs(playerStore)
 const { enableHoldAutoCast, autoRematchAfterVictory } = storeToRefs(uiStore)
@@ -57,6 +60,11 @@ const monsterAttackProgress = computed(() => {
   if (!Number.isFinite(total) || total <= 0) return 0
   const remaining = Math.max(0, battle.monsterNextSkillTimer)
   return Math.max(0, Math.min(1, remaining / total))
+})
+
+const preparedQuestNames = computed(() => {
+  const questIds = battle.lastOutcome?.questsPrepared ?? []
+  return questIds.map((id) => questStore.definitionMap[id]?.name ?? id)
 })
 
 const buffTickTrigger = computed(() => battle.lastTickAt)
@@ -898,17 +906,13 @@ function stopAllAutoCast() {
 function backToSelect() {
   stopAllAutoCast()
 
-  // 获取当前战斗的怪物所属的地图
-  let targetRoute = '/'
-  if (monster.value) {
-    const mapId = getMonsterMap(monster.value.id)
-    if (mapId) {
-      targetRoute = `/map/${mapId}`
-    }
-  }
-
+  const mapId = progress.currentMapId
   battle.exitBattle()
-  router.push(targetRoute)
+  if (mapId) {
+    router.push({ name: 'map', params: { mapId } })
+  } else {
+    router.push('/map')
+  }
 }
 
 function handleBossPortraitClick() {
@@ -1537,6 +1541,37 @@ onBeforeUnmount(() => {
 .monster-badge.specialization-badge {
   border: 1px solid;
 }
+
+.battle-quest-notice {
+  margin-top: 10px;
+  padding: 8px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(8, 12, 20, 0.88);
+  text-align: center;
+}
+
+.battle-quest-notice-title {
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  font-size: 12px;
+}
+
+.battle-quest-notice-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+.battle-quest-notice-item {
+  border-radius: 999px;
+  padding: 2px 10px;
+  background: rgba(255, 255, 255, 0.08);
+  font-size: 12px;
+  letter-spacing: 0.05em;
+}
 </style>
 
 <template>
@@ -1691,6 +1726,18 @@ onBeforeUnmount(() => {
               {{ formatLootEntry(entry) }}
             </div>
           </div>
+          <div v-if="preparedQuestNames.length" class="battle-quest-notice text-small">
+            <div class="battle-quest-notice-title">任务达成</div>
+            <div class="battle-quest-notice-list">
+              <span
+                v-for="(name, index) in preparedQuestNames"
+                :key="`quest-complete-${name}-${index}`"
+                class="battle-quest-notice-item"
+              >
+                {{ name }}
+              </span>
+            </div>
+          </div>
         </div>
         <div v-else-if="battle.concluded === 'defeat'" class="float-text" style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; color: #ff6b7a;">
           战败
@@ -1704,21 +1751,22 @@ onBeforeUnmount(() => {
         </div>
       </div>
 
-      <MonsterAttackTimeline
-        :active="isMonsterAttackActive"
-        :time-to-attack="isMonsterAttackActive ? battle.monsterNextSkillTimer : null"
-        :pending-dodge="battle.pendingDodge"
-        :action-lock-until="battle.actionLockUntil"
-        :attack-times="timelineAttackTimes"
-      />
+      <div class="timeline-action-stack">
+        <MonsterAttackTimeline
+          :active="isMonsterAttackActive"
+          :time-to-attack="isMonsterAttackActive ? battle.monsterNextSkillTimer : null"
+          :pending-dodge="battle.pendingDodge"
+          :action-lock-until="battle.actionLockUntil"
+          :attack-times="timelineAttackTimes"
+        />
 
-      <div class="battle-action-row">
-        <div class="battle-actions">
-          <div
-            v-for="slot in skillSlots"
-            :key="slot.index"
-            class="battle-action-slot"
-          >
+        <div class="battle-action-row">
+          <div class="battle-actions">
+            <div
+              v-for="slot in skillSlots"
+              :key="slot.index"
+              class="battle-action-slot"
+            >
             <button
               :disabled="slot.disabled"
               :class="{
@@ -1789,13 +1837,15 @@ onBeforeUnmount(() => {
               {{ slot.label }}
             </div>
           </div>
+          </div>
+
+          <QuickItemBar
+            class="battle-quick-items"
+            :hotkeys="ITEM_HOTKEYS"
+            :hotkey-labels="itemHotkeyLabels"
+          />
         </div>
 
-        <QuickItemBar
-          class="battle-quick-items"
-          :hotkeys="ITEM_HOTKEYS"
-          :hotkey-labels="itemHotkeyLabels"
-        />
       </div>
 
       <footer class="flex flex-between flex-center">

@@ -33,7 +33,21 @@
             {{ getItemIcon(item) }}
           </div>
           <div class="flex-1">
-            <h3 style="margin: 0 0 8px 0; font-size: 16px;">{{ item.name }}</h3>
+            <h3 style="margin: 0 0 8px 0; font-size: 16px;">
+              <template v-if="'slot' in item">
+                <span class="shop-item-name" :style="{ color: getItemQualityColor(item) }">{{ item.name }}</span>
+                <span
+                  v-if="getItemQualityLabel(item)"
+                  class="shop-quality-tag"
+                  :style="{ borderColor: getItemQualityColor(item), color: getItemQualityColor(item) }"
+                >
+                  {{ getItemQualityLabel(item) }}
+                </span>
+              </template>
+              <template v-else>
+                {{ item.name }}
+              </template>
+            </h3>
             <div class="text-small text-muted" style="margin-bottom: 8px;">{{ getItemDescription(item) }}</div>
             <div
               v-if="getItemRequiredRealmLabel(item)"
@@ -85,9 +99,10 @@ import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { useProgressStore } from '@/stores/progress'
 import { ITEMS, consumableIds } from '@/data/items'
-import { BASE_EQUIPMENT_TEMPLATES, EQUIPMENT_PRICES } from '@/data/equipment'
+import { BASE_EQUIPMENT_TEMPLATES, instantiateEquipment } from '@/data/equipment'
 import { MONSTERS } from '@/data/monsters'
 import { formatRealmTierLabel, realmTierIndex } from '@/utils/realm'
+import { formatEquipmentStat, formatEquipmentSubstats, getEquipmentQualityMeta } from '@/utils/equipmentStats'
 import type { ItemDefinition, EquipmentTemplate, EquipSlot } from '@/types/domain'
 
 const playerStore = usePlayerStore()
@@ -154,11 +169,6 @@ const gemItems = computed(() => {
   return result
 })
 
-const mapEquipmentWithPrice = (template: EquipmentTemplate) => ({
-  ...template,
-  price: EQUIPMENT_PRICES[template.id as keyof typeof EQUIPMENT_PRICES],
-})
-
 const currentItems = computed(() => {
   const equipmentTemplates = allowedEquipmentTemplates.value
   switch (activeTab.value) {
@@ -167,23 +177,15 @@ const currentItems = computed(() => {
     case '宝石':
       return gemItems.value
     case '装备':
-      return equipmentTemplates.map(mapEquipmentWithPrice)
+      return equipmentTemplates
     case '武器':
-      return equipmentTemplates
-        .filter((template) => getEquipmentSubType(template.slot) === 'weapon')
-        .map(mapEquipmentWithPrice)
+      return equipmentTemplates.filter((template) => getEquipmentSubType(template.slot) === 'weapon')
     case '防具':
-      return equipmentTemplates
-        .filter((template) => getEquipmentSubType(template.slot) === 'armor')
-        .map(mapEquipmentWithPrice)
+      return equipmentTemplates.filter((template) => getEquipmentSubType(template.slot) === 'armor')
     case '饰品':
-      return equipmentTemplates
-        .filter((template) => getEquipmentSubType(template.slot) === 'accessory')
-        .map(mapEquipmentWithPrice)
+      return equipmentTemplates.filter((template) => getEquipmentSubType(template.slot) === 'accessory')
     case '盾牌':
-      return equipmentTemplates
-        .filter((template) => getEquipmentSubType(template.slot) === 'shield')
-        .map(mapEquipmentWithPrice)
+      return equipmentTemplates.filter((template) => getEquipmentSubType(template.slot) === 'shield')
     default:
       return []
   }
@@ -217,32 +219,43 @@ const getItemIcon = (item: ItemDefinition | EquipmentTemplate) => {
   return '📦'
 }
 
+const getItemQualityMeta = (item: ItemDefinition | EquipmentTemplate) => {
+  if ('slot' in item) {
+    return getEquipmentQualityMeta(item.quality)
+  }
+  return null
+}
+
+const getItemQualityLabel = (item: ItemDefinition | EquipmentTemplate) => {
+  return getItemQualityMeta(item)?.label ?? ''
+}
+
+const getItemQualityColor = (item: ItemDefinition | EquipmentTemplate) => {
+  return getItemQualityMeta(item)?.color ?? ''
+}
+
 const getItemDescription = (item: ItemDefinition | EquipmentTemplate) => {
+  if ('slot' in item) {
+    const statEntries = [
+      formatEquipmentStat(item.baseMain),
+      ...formatEquipmentSubstats(item.baseSubstats ?? []),
+    ].filter(Boolean)
+    const statsText = statEntries.join('，')
+    if (item.description) {
+      return statsText ? `${item.description}｜${statsText}` : item.description
+    }
+    return statsText
+  }
   if ('description' in item && item.description) return item.description
   if ('usage' in item) return item.usage
-  if ('slot' in item) {
-    const stats = []
-    if (item.baseMain.ATK) stats.push(`攻击 +${item.baseMain.ATK}`)
-    if (item.baseMain.DEF) stats.push(`防御 +${item.baseMain.DEF}`)
-    if (item.baseMain.HP) stats.push(`生命 +${item.baseMain.HP}`)
-
-    // 添加副属性描述
-    const subStats = []
-    if (item.baseSubs.addATK) subStats.push(`攻击 +${item.baseSubs.addATK}`)
-    if (item.baseSubs.addDEF) subStats.push(`防御 +${item.baseSubs.addDEF}`)
-    if (item.baseSubs.addHP) subStats.push(`生命 +${item.baseSubs.addHP}`)
-
-    let description = stats.join(', ')
-    if (subStats.length > 0) {
-      description += (description ? ' | ' : '') + subStats.join(', ')
-    }
-    return description
-  }
   return ''
 }
 
 const getItemPrice = (item: ItemDefinition | EquipmentTemplate) => {
-  return 'price' in item ? item.price : EQUIPMENT_PRICES[item.id as keyof typeof EQUIPMENT_PRICES]
+  if ('slot' in item) {
+    return item.price?.buy ?? item.price?.sell ?? 0
+  }
+  return item.price ?? 0
 }
 
 const getItemRequiredRealmLabel = (item: ItemDefinition | EquipmentTemplate) => {
@@ -292,19 +305,12 @@ const buyItem = (item: ItemDefinition | EquipmentTemplate, rawQuantity?: number)
   if ('heal' in item || 'restoreQi' in item || 'usage' in item) {
     inventoryStore.addItem(item.id, quantity)
   } else if ('slot' in item) {
+    const timestamp = Date.now()
     for (let index = 0; index < quantity; index += 1) {
-      const timestamp = Date.now()
-      const equipment = {
-        id: `${item.id}-${timestamp}-${index}`,
-        name: item.name,
-        slot: item.slot,
+      const equipment = instantiateEquipment(item, {
         level: 0,
-        mainStat: { ...item.baseMain },
-        subs: { ...item.baseSubs },
-        exclusive: item.exclusive,
-        flatCapMultiplier: item.flatCapMultiplier,
-        requiredRealmTier: item.requiredRealmTier,
-      }
+        id: `${item.id}-shop-${timestamp}-${index}`,
+      })
       inventoryStore.addEquipment(equipment)
     }
   }
@@ -338,6 +344,19 @@ const showPurchaseMessage = (message: string, success: boolean) => {
 
 .item-card {
   transition: all 0.3s ease;
+}
+
+.shop-item-name {
+  font-weight: 600;
+}
+
+.shop-quality-tag {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
+  margin-left: 8px;
 }
 
 .item-card:hover {

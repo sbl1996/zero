@@ -9,6 +9,45 @@ export type EquipSlotKey =
   | 'ring1'
   | 'ring2'
 
+export type EquipmentQuality = 'normal' | 'fine' | 'rare' | 'excellent' | 'epic'
+
+export type EquipmentStatValueType = 'flat' | 'percent'
+
+export type EquipmentMainStatType = 'HP' | 'QiMax' | 'ATK' | 'DEF' | 'AGI' | 'REC'
+
+export type EquipmentSubStatType =
+  | 'HP'
+  | 'QiMax'
+  | 'ATK'
+  | 'DEF'
+  | 'AGI'
+  | 'REC'
+  | 'HpRec'
+  | 'QiRec'
+  | 'WeaknessRate'
+  | 'WeaknessDmgPct'
+  | 'DamageReduction'
+  | 'SkillCooldownReduction'
+  | 'QiGuardAbsorb'
+  | 'QiGuardEfficiency'
+  | 'PenFlat'
+  | 'PenPct'
+  | 'Toughness'
+
+export interface EquipmentStatValue<TType extends EquipmentMainStatType | EquipmentSubStatType> {
+  type: TType
+  value: number
+  valueType?: EquipmentStatValueType
+}
+
+export type EquipmentMainStat = EquipmentStatValue<EquipmentMainStatType>
+export type EquipmentSubStat = EquipmentStatValue<EquipmentSubStatType>
+
+export interface EquipmentPrice {
+  buy?: number
+  sell?: number
+}
+
 export type AttributeKey = 'ATK' | 'DEF' | 'AGI' | 'REC'
 export type CombatAttributeKey = AttributeKey
 
@@ -182,53 +221,36 @@ export interface SkillProgress {
   lastUsedAt: number | null
 }
 
-export interface EquipSubStats {
-  addHP?: number
-  addQiMax?: number
-  addATK?: number
-  addDEF?: number
-  addAGI?: number
-  addREC?: number
-  penFlat?: number
-  penPct?: number
-  toughness?: number
-}
-
 export interface Equipment {
   id: string
+  templateId?: string
   name: string
+  description?: string
   slot: EquipSlot
   level: number
+  quality: EquipmentQuality
   requiredRealmTier?: RealmTier
-  mainStat: {
-    HP?: number
-    QiMax?: number
-    ATK?: number
-    DEF?: number
-    AGI?: number
-    REC?: number
-  }
-  subs: EquipSubStats
+  mainStat: EquipmentMainStat
+  substats: EquipmentSubStat[]
   exclusive?: '2H' | '1H+Shield'
   flatCapMultiplier?: number
+  price?: EquipmentPrice
+  flags?: string[]
 }
 
 export interface EquipmentTemplate {
   id: string
   name: string
+  description?: string
   slot: EquipSlot
   requiredRealmTier?: RealmTier
-  baseMain: {
-    HP?: number
-    QiMax?: number
-    ATK?: number
-    DEF?: number
-    AGI?: number
-    REC?: number
-  }
-  baseSubs: EquipSubStats
+  quality: EquipmentQuality
+  baseMain: EquipmentMainStat
+  baseSubstats: EquipmentSubStat[]
   exclusive?: '2H' | '1H+Shield'
   flatCapMultiplier?: number
+  price?: EquipmentPrice
+  flags?: string[]
 }
 
 export interface InventorySave {
@@ -503,6 +525,7 @@ export interface BattleOutcome {
   monsterName: string
   result: 'victory' | 'defeat'
   drops?: LootResult[]
+  questsPrepared?: string[]
 }
 
 export interface MonsterSkillPlanEntry {
@@ -567,6 +590,9 @@ export interface BattleState {
   playerSuperArmor: { expiresAt: number; durationMs: number } | null
   monsterVulnerability: { percent: number; expiresAt: number; durationMs: number } | null
   monsterChargingDebuff: { expiresAt: number; durationMs: number } | null
+  originNodeId?: string | null
+  originNodeInstanceId?: string | null
+  pendingQuestCompletions: string[]
 }
 
 export type SkillChargeStatus = 'charging' | 'charged' | 'rewinding'
@@ -588,6 +614,7 @@ export interface SkillChargeState {
 export interface UnlockState {
   clearedMonsters: Record<string, boolean>
   unlockedMaps: Record<string, boolean>
+  currentNodes: Record<string, string | null>
 }
 
 export interface SaveData {

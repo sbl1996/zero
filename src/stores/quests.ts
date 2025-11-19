@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { watch } from 'vue'
 import { QUEST_DEFINITIONS, QUEST_DEFINITION_MAP, QUEST_ITEM_DEFINITIONS } from '@/data/quests'
-import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
+import { BASE_EQUIPMENT_TEMPLATES, instantiateEquipment } from '@/data/equipment'
 import type {
   QuestDefinition,
   QuestObjective,
@@ -55,17 +55,10 @@ function instantiateEquipmentFromTemplate(entry: QuestRewardEquipmentTemplate) {
   if (!template) return null
   questEquipmentSequence += 1
   const uniqueId = `${template.id}-quest-${Date.now()}-${questEquipmentSequence}`
-  return {
-    id: uniqueId,
-    name: template.name,
-    slot: template.slot,
+  return instantiateEquipment(template, {
     level: entry.initialLevel ?? 0,
-    mainStat: { ...template.baseMain },
-    subs: { ...template.baseSubs },
-    exclusive: template.exclusive,
-    flatCapMultiplier: template.flatCapMultiplier,
-    requiredRealmTier: template.requiredRealmTier,
-  }
+    id: uniqueId,
+  })
 }
 
 function resolveRealmTierValue(): number | null {

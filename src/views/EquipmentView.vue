@@ -5,6 +5,8 @@ import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { ITEMS, quickConsumableIds } from '@/data/items'
 import { resolveMainStatBreakdown } from '@/composables/useEnhance'
+import { getEquipmentStatLabel, formatEquipmentSubstats, getEquipmentQualityMeta } from '@/utils/equipmentStats'
+import type { EquipmentSubStat } from '@/types/domain'
 
 const player = usePlayerStore()
 const inventory = useInventoryStore()
@@ -20,17 +22,12 @@ const slots = [
   ['ring2', '戒指 2'],
 ] as const
 
-const statLabels = {
-  ATK: '攻击',
-  DEF: '防御',
-  HP: '生命值',
-} as const
-
 const equipList = computed(() =>
   slots.map(([key, label]) => {
     const item = player.equips[key]
     const breakdown = item ? resolveMainStatBreakdown(item)[0] ?? null : null
-    return { key, label, item, breakdown }
+    const qualityMeta = item ? getEquipmentQualityMeta(item.quality) : null
+    return { key, label, item, breakdown, qualityMeta }
   }),
 )
 
@@ -55,11 +52,9 @@ function quickSlotEffectText(itemId: string | null) {
   return effects.join(' ')
 }
 
-function formatSubStats(subs: Record<string, number>) {
-  const stats: string[] = []
-  if (subs.addATK) stats.push(`攻击 +${subs.addATK}`)
-  if (subs.addDEF) stats.push(`防御 +${subs.addDEF}`)
-  if (subs.addHP) stats.push(`生命 +${subs.addHP}`)
+function formatSubStats(substats: EquipmentSubStat[] | undefined | null) {
+  if (!substats) return '无'
+  const stats = formatEquipmentSubstats(substats)
   return stats.length > 0 ? stats.join(', ') : '无'
 }
 
@@ -80,7 +75,7 @@ function goEnhance(slotKey: typeof slots[number][0]) {
           <tr>
             <th>部位</th>
             <th>名称</th>
-            <th>等级</th>
+            <th>强化等级</th>
             <th>主属性</th>
             <th>副属性</th>
           </tr>
@@ -91,7 +86,11 @@ function goEnhance(slotKey: typeof slots[number][0]) {
             <td>
               <template v-if="slot.item">
                 <div class="equip-name-cell">
-                  <span>{{ slot.item.name }}</span>
+                  <div class="equip-name">
+                    <span class="equip-name__text" :style="{ color: slot.qualityMeta?.color }">
+                      {{ slot.item.name }}
+                    </span>
+                  </div>
                   <button
                     class="btn btn-secondary enhance-button"
                     type="button"
@@ -106,21 +105,19 @@ function goEnhance(slotKey: typeof slots[number][0]) {
             <td>{{ slot.item ? `+${slot.item.level}` : '-' }}</td>
             <td>
               <template v-if="slot.item && slot.breakdown">
-                <span>{{ statLabels[slot.breakdown.key] }} {{ slot.breakdown.total }}</span>
+                <span>{{ getEquipmentStatLabel(slot.breakdown.key) }} {{ slot.breakdown.total }}</span>
                 <span class="text-muted text-tiny" style="display: block;">
                   基础 {{ slot.breakdown.base }} + 固定 {{ slot.breakdown.flat }}，百分比 {{ formatPercent(slot.breakdown.percent) }}
                 </span>
               </template>
-              <template v-else-if="slot.item">
-                <span v-if="slot.item.mainStat.ATK">攻击 {{ slot.item.mainStat.ATK }}</span>
-                <span v-else-if="slot.item.mainStat.DEF">防御 {{ slot.item.mainStat.DEF }}</span>
-                <span v-else-if="slot.item.mainStat.HP">HP {{ slot.item.mainStat.HP }}</span>
+              <template v-else-if="slot.item && slot.item.mainStat">
+                <span>{{ getEquipmentStatLabel(slot.item.mainStat.type) }} {{ slot.item.mainStat.value }}</span>
               </template>
               <template v-else>-</template>
             </td>
             <td>
               <template v-if="slot.item">
-                <span class="text-small">{{ formatSubStats(slot.item.subs) }}</span>
+                <span class="text-small">{{ formatSubStats(slot.item.substats) }}</span>
               </template>
               <template v-else>-</template>
             </td>
@@ -170,6 +167,25 @@ function goEnhance(slotKey: typeof slots[number][0]) {
   display: flex;
   align-items: center;
   gap: 12px;
+}
+
+.equip-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+}
+
+.equip-name__text {
+  font-weight: inherit;
+}
+
+.equip-quality-tag {
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 .enhance-button {

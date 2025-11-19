@@ -60,79 +60,147 @@
           <header class="wild-header">
             <div class="wild-header__info">
               <h3 class="map-name">{{ currentMap.name }}</h3>
-              <p v-if="realmRangeLabel" class="wild-level">推荐境界 {{ realmRangeLabel }}</p>
             </div>
             <button type="button" class="return-button" @click="returnToCity">
               返回翡冷翠
             </button>
           </header>
-          <div class="wild-map-canvas">
-            <img class="map-image" :src="currentMap.image" :alt="`${currentMap.name} 地图`" />
-            <button
-              v-for="monster in monstersOnMap"
-              :key="monster.id"
-              type="button"
-              class="monster-marker"
-              :style="monsterMarkerStyle(monster.id)"
-              @click="selectMonster(monster.id)"
-              @mouseenter="focusMonster(monster.id)"
-              @mouseleave="clearFocusedMonster"
-              @focus="focusMonster(monster.id)"
-              @blur="clearFocusedMonster"
-            >
-              <span class="monster-label" :class="{ 'boss-label': monster.isBoss }">
-                {{ monster.name }}
-              </span>
-            </button>
-          </div>
-          <footer class="monster-detail" v-if="monstersOnMap.length">
-            <template v-if="focusedMonster">
-              <h4 class="monster-name" :class="{ 'boss-name': focusedMonster.isBoss }">
-                {{ focusedMonster.name }}
-                <span v-if="focusedMonster.isBoss" class="monster-badge">BOSS</span>
-                <span v-else
-                  class="monster-badge specialization-badge"
-                  :style="{
-                    background: getSpecializationColor(focusedMonster.specialization).bg,
-                    color: getSpecializationColor(focusedMonster.specialization).text,
-                    borderColor: getSpecializationColor(focusedMonster.specialization).border
-                  }">
-                  {{ getSpecializationLabel(focusedMonster.specialization) }}
-                </span>
-              </h4>
-              <div class="monster-stats">
-                <div class="stat-group">
-                  <span class="stat-label">境界</span>
-                  <span class="stat-value">{{ describeMonsterRealm(focusedMonster) }}</span>
-                </div>
-                <div class="stat-group">
-                  <span class="stat-label">生命</span>
-                  <span class="stat-value">{{ focusedMonster.hp }}</span>
-                </div>
-                <div class="stat-group">
-                  <span class="stat-label">攻击</span>
-                  <span class="stat-value">{{ focusedMonster.stats.ATK }}</span>
-                </div>
-                <div class="stat-group">
-                  <span class="stat-label">防御</span>
-                  <span class="stat-value">{{ focusedMonster.stats.DEF }}</span>
-                </div>
-                <div class="stat-group">
-                  <span class="stat-label">敏捷</span>
-                  <span class="stat-value">{{ focusedMonster.stats.AGI }}</span>
-                </div>
-                <div class="stat-group reward">
-                  <span class="stat-label">奖励</span>
-                  <span class="stat-value">{{ formatMonsterRewards(focusedMonster) }}</span>
-                </div>
+          <div class="wild-content">
+            <div class="wild-map-canvas">
+              <img class="map-image" :src="currentMap.image" :alt="`${currentMap.name} 地图`" />
+              <svg class="node-graph" viewBox="0 0 100 100" preserveAspectRatio="none">
+                <line
+                  v-for="edge in nodeEdges"
+                  :key="edge.id"
+                  class="graph-edge"
+                  :x1="edge.from.position.x"
+                  :y1="edge.from.position.y"
+                  :x2="edge.to.position.x"
+                  :y2="edge.to.position.y"
+                />
+              </svg>
+              <button
+                v-for="node in mapNodes"
+                :key="node.id"
+                type="button"
+                class="node-marker"
+                :class="[
+                  `node-type-${node.type}`,
+                  { active: node.id === activeNodeId }
+                ]"
+                :style="nodeStyle(node)"
+                :disabled="!canSelectNode(node)"
+                @click="selectNode(node.id)"
+                @mouseenter="nodeHint = null"
+                @focus="nodeHint = null"
+              >
+                <span class="node-label">{{ node.label }}</span>
+              </button>
+              <NpcDialoguePanel />
+            </div>
+            <aside class="node-sidebar">
+              <div class="node-header">
+                <h4 class="node-title">{{ currentNode?.label ?? '未选择节点' }}</h4>
+                <p v-if="nodeHint" class="node-hint">{{ nodeHint }}</p>
               </div>
-            </template>
-            <template v-else>
-              {{ currentMap.description || '探索此地，寻找挑战与机遇。' }}
-            </template>
-          </footer>
+              <p v-if="currentNode?.description" class="node-description">
+                {{ currentNode.description }}
+              </p>
+              <div class="node-list">
+                <p v-if="!nodeListEntries.length" class="node-list__empty">
+                  这里空荡荡的...
+                </p>
+                <ul v-else class="node-entry-list">
+                  <li v-for="entry in nodeListEntries" :key="entry.key">
+                    <button
+                      type="button"
+                      class="node-entry"
+                      :class="[
+                        `node-entry--${entry.kind}`,
+                        {
+                          locked: entry.kind === 'portal' && entry.locked,
+                          boss: entry.kind === 'monster' && entry.monster?.isBoss
+                        }
+                      ]"
+                      :disabled="entry.kind === 'portal' && entry.locked"
+                      @mouseenter="handleEntryHover(entry)"
+                      @mouseleave="handleEntryLeave(entry)"
+                      @focus="handleEntryHover(entry)"
+                      @blur="handleEntryLeave(entry)"
+                      @click="handleEntryClick(entry)"
+                    >
+                      <span class="node-entry__title">
+                        <template v-if="entry.kind === 'monster'">
+                          {{ entry.monster?.name ?? entry.monsterId }}
+                        </template>
+                        <template v-else-if="entry.kind === 'npc'">
+                          {{ entry.name }}
+                        </template>
+                        <template v-else>
+                          {{ entry.label }}
+                        </template>
+                      </span>
+                      <span class="node-entry__meta">
+                        <template v-if="entry.kind === 'monster'">
+                          {{ entry.monster ? describeMonsterRealm(entry.monster) : '未知等级' }}
+                        </template>
+                        <template v-else-if="entry.kind === 'npc'">
+                          NPC
+                        </template>
+                        <template v-else>
+                          {{ entry.locked ? '未解锁' : '传送' }}
+                        </template>
+                      </span>
+                    </button>
+                  </li>
+                </ul>
+              </div>
+            </aside>
+          </div>
+          <div class="monster-detail" v-if="focusedMonster">
+            <h4 class="monster-name" :class="{ 'boss-name': focusedMonster.isBoss }">
+              {{ focusedMonster.name }}
+              <span v-if="focusedMonster.isBoss" class="monster-badge">BOSS</span>
+              <span
+                v-else
+                class="monster-badge specialization-badge"
+                :style="monsterBadgeStyle(focusedMonster.specialization)"
+              >
+                {{ getSpecializationLabel(focusedMonster.specialization) }}
+              </span>
+            </h4>
+            <div class="monster-stats">
+              <div class="stat-group">
+                <span class="stat-label">境界</span>
+                <span class="stat-value">{{ describeMonsterRealm(focusedMonster) }}</span>
+              </div>
+              <div class="stat-group">
+                <span class="stat-label">生命</span>
+                <span class="stat-value">{{ focusedMonster.hp }}</span>
+              </div>
+              <div class="stat-group">
+                <span class="stat-label">攻击</span>
+                <span class="stat-value">{{ focusedMonster.stats.ATK }}</span>
+              </div>
+              <div class="stat-group">
+                <span class="stat-label">防御</span>
+                <span class="stat-value">{{ focusedMonster.stats.DEF }}</span>
+              </div>
+              <div class="stat-group">
+                <span class="stat-label">敏捷</span>
+                <span class="stat-value">{{ focusedMonster.stats.AGI }}</span>
+              </div>
+              <div class="stat-group reward">
+                <span class="stat-label">奖励</span>
+                <span class="stat-value">{{ formatMonsterRewards(focusedMonster) }}</span>
+              </div>
+            </div>
+          </div>
           <div v-else class="monster-detail placeholder">
-            暂无可挑战的怪物。
+            {{
+              currentNode?.description
+                ?? (currentMap.description || '探索此地，寻找挑战与机遇。')
+            }}
           </div>
         </section>
       </div>
@@ -144,19 +212,21 @@
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
-import { defaultMapId, maps as mapDefinitions, getMonsterPosition } from '@/data/maps'
-import { getMonsterMap, MONSTERS } from '@/data/monsters'
+import NpcDialoguePanel from '@/components/NpcDialoguePanel.vue'
+import { defaultMapId, maps as mapDefinitions } from '@/data/maps'
+import { NPC_MAP } from '@/data/npcs'
+import { MONSTERS } from '@/data/monsters'
 import { formatMonsterRewards, describeMonsterRealm } from '@/utils/monsterUtils'
 import { useBattleStore } from '@/stores/battle'
 import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'
-import { formatRealmTierLabel } from '@/utils/realm'
-import type { NumericRealmTier } from '@/utils/realm'
-import type { GameMap, MapLocation } from '@/types/map'
-import type { MonsterSpecialization } from '@/types/domain'
+import { useNodeSpawnStore } from '@/stores/nodeSpawns'
+import { useNpcDialogStore } from '@/stores/npcDialog'
+import type { GameMap, MapLocation, MapNode } from '@/types/map'
+import type { Monster, MonsterSpecialization } from '@/types/domain'
 
 const route = useRoute()
 const router = useRouter()
@@ -164,7 +234,35 @@ const router = useRouter()
 const battle = useBattleStore()
 const progress = useProgressStore()
 const player = usePlayerStore()
+const nodeSpawns = useNodeSpawnStore()
+const npcDialog = useNpcDialogStore()
 
+const monsterDictionary = MONSTERS.reduce<Record<string, Monster>>((acc, monster) => {
+  acc[monster.id] = monster
+  return acc
+}, {})
+
+type NodeListEntry =
+  | {
+      kind: 'monster'
+      key: string
+      instanceId: string
+      monsterId: string
+      monster?: Monster
+    }
+  | {
+      kind: 'npc'
+      key: string
+      id: string
+      name: string
+      title?: string
+    }
+  | {
+      kind: 'portal'
+      key: string
+      label: string
+      locked: boolean
+    }
 
 function getSpecializationLabel(specialization: MonsterSpecialization): string {
   const labels: Record<MonsterSpecialization, string> = {
@@ -175,25 +273,44 @@ function getSpecializationLabel(specialization: MonsterSpecialization): string {
     bruiser: '重装',
     skirmisher: '游击',
     mystic: '奥术',
-    crazy: '疯狂'
+    crazy: '疯狂',
   }
   return labels[specialization] || '未知'
 }
 
-function getSpecializationColor(specialization: MonsterSpecialization): { bg: string; text: string; border: string } {
+function getSpecializationColor(
+  specialization: MonsterSpecialization,
+): { bg: string; text: string; border: string } {
   const colors: Record<MonsterSpecialization, { bg: string; text: string; border: string }> = {
-    balanced: { bg: 'rgba(156, 163, 175, 0.7)', text: '#f3f4f6', border: 'rgba(156, 163, 175, 0.9)' },    // 灰色 - 平衡
-    attacker: { bg: 'rgba(239, 68, 68, 0.7)', text: '#fef2f2', border: 'rgba(239, 68, 68, 0.9)' },        // 红色 - 攻击
-    defender: { bg: 'rgba(59, 130, 246, 0.7)', text: '#eff6ff', border: 'rgba(59, 130, 246, 0.9)' },       // 蓝色 - 防御
-    agile: { bg: 'rgba(34, 197, 94, 0.7)', text: '#f0fdf4', border: 'rgba(34, 197, 94, 0.9)' },          // 绿色 - 敏捷
-    bruiser: { bg: 'rgba(168, 85, 247, 0.7)', text: '#faf5ff', border: 'rgba(168, 85, 247, 0.9)' },        // 紫色 - 重装
-    skirmisher: { bg: 'rgba(251, 146, 60, 0.7)', text: '#fff7ed', border: 'rgba(251, 146, 60, 0.9)' },     // 橙色 - 游击
-    mystic: { bg: 'rgba(139, 92, 246, 0.7)', text: '#f5f3ff', border: 'rgba(139, 92, 246, 0.9)' },        // 深紫色 - 奥术
-    crazy: { bg: 'rgba(217, 70, 239, 0.7)', text: '#fdf4ff', border: 'rgba(217, 70, 239, 0.9)' }          // 粉色 - 疯狂
+    balanced: { bg: 'rgba(156, 163, 175, 0.7)', text: '#f3f4f6', border: 'rgba(156, 163, 175, 0.9)' },
+    attacker: { bg: 'rgba(239, 68, 68, 0.7)', text: '#fef2f2', border: 'rgba(239, 68, 68, 0.9)' },
+    defender: { bg: 'rgba(59, 130, 246, 0.7)', text: '#eff6ff', border: 'rgba(59, 130, 246, 0.9)' },
+    agile: { bg: 'rgba(34, 197, 94, 0.7)', text: '#f0fdf4', border: 'rgba(34, 197, 94, 0.9)' },
+    bruiser: { bg: 'rgba(168, 85, 247, 0.7)', text: '#faf5ff', border: 'rgba(168, 85, 247, 0.9)' },
+    skirmisher: { bg: 'rgba(251, 146, 60, 0.7)', text: '#fff7ed', border: 'rgba(251, 146, 60, 0.9)' },
+    mystic: { bg: 'rgba(139, 92, 246, 0.7)', text: '#f5f3ff', border: 'rgba(139, 92, 246, 0.9)' },
+    crazy: { bg: 'rgba(217, 70, 239, 0.7)', text: '#fdf4ff', border: 'rgba(217, 70, 239, 0.9)' },
   }
   return colors[specialization] || { bg: 'rgba(107, 114, 128, 0.7)', text: '#f9fafb', border: 'rgba(107, 114, 128, 0.9)' }
 }
 
+const now = ref(Date.now())
+let nowTimer: ReturnType<typeof setInterval> | null = null
+
+onMounted(() => {
+  if (typeof window !== 'undefined') {
+    nowTimer = window.setInterval(() => {
+      now.value = Date.now()
+    }, 1000)
+  }
+})
+
+onBeforeUnmount(() => {
+  if (nowTimer) {
+    clearInterval(nowTimer)
+    nowTimer = null
+  }
+})
 
 const mapsList = computed(() => mapDefinitions.filter((map) => !isMapLocked(map)))
 const fallbackMap = computed(() => {
@@ -234,7 +351,6 @@ watch(
     const target = getMapById(id)
 
     if (!target || isMapLocked(target)) {
-      // 如果地图被锁定或不存在，使用store中保存的地图状态
       const savedMapId = progress.currentMapId
       const savedTarget = getMapById(savedMapId)
       if (savedTarget && !isMapLocked(savedTarget)) {
@@ -243,11 +359,10 @@ watch(
         router.replace({ name: 'map', params: { mapId: fallbackMap.value.id } })
       }
     } else {
-      // 地图有效，保存到store
       progress.setCurrentMap(target.id)
     }
   },
-  { immediate: true }
+  { immediate: true },
 )
 
 const currentMap = computed(() => {
@@ -267,28 +382,59 @@ const visibleLocations = computed<MapLocation[]>(() => {
 
 const isCityMap = computed(() => currentMap.value?.category === 'city')
 
-const monstersOnMap = computed(() => {
+const mapNodes = computed<MapNode[]>(() => {
   if (!currentMap.value || currentMap.value.category !== 'wild') return []
-  return MONSTERS.filter(monster => getMonsterMap(monster.id) === currentMap.value?.id)
+  return currentMap.value.nodes ?? []
 })
 
-const realmRange = computed(() => {
-  const tiers = monstersOnMap.value
-    .map((monster) => (typeof monster.realmTier === 'number' ? monster.realmTier : null))
-    .filter((tier): tier is NumericRealmTier => tier !== null)
-  if (!tiers.length) return null
-  return {
-    min: Math.min(...tiers) as NumericRealmTier,
-    max: Math.max(...tiers) as NumericRealmTier,
+const activeNodeId = computed(() => {
+  const map = currentMap.value
+  if (!map || map.category !== 'wild') return null
+  const stored = progress.currentNodeId(map.id)
+  if (stored && map.nodes?.some((node) => node.id === stored)) {
+    return stored
   }
+  const fallbackNode = map.nodes?.[0]?.id ?? null
+  return map.defaultNodeId ?? fallbackNode ?? null
 })
 
-const realmRangeLabel = computed(() => {
-  const range = realmRange.value
-  if (!range) return ''
-  const minLabel = formatRealmTierLabel(range.min)
-  const maxLabel = formatRealmTierLabel(range.max)
-  return range.min === range.max ? minLabel : `${minLabel}~${maxLabel}`
+watch(
+  () => ({ map: currentMap.value, nodeId: activeNodeId.value }),
+  ({ map, nodeId }) => {
+    if (!map || map.category !== 'wild' || !nodeId) return
+    if (progress.currentNodeId(map.id) !== nodeId) {
+      progress.setCurrentNode(map.id, nodeId)
+    }
+    const node = map.nodes?.find((entry) => entry.id === nodeId)
+    if (node) {
+      nodeSpawns.ensureInitialized(map.id, node)
+    }
+  },
+  { immediate: true },
+)
+
+const currentNode = computed<MapNode | null>(() => {
+  if (!mapNodes.value.length) return null
+  const id = activeNodeId.value
+  if (!id) return mapNodes.value[0] ?? null
+  return mapNodes.value.find((node) => node.id === id) ?? mapNodes.value[0] ?? null
+})
+
+const nodeEdges = computed(() => {
+  const edges: Array<{ id: string; from: MapNode; to: MapNode }> = []
+  const seen = new Set<string>()
+  const nodes = mapNodes.value
+  nodes.forEach((node) => {
+    node.connections.forEach((targetId) => {
+      const target = nodes.find((entry) => entry.id === targetId)
+      if (!target) return
+      const key = [node.id, target.id].sort().join(':')
+      if (seen.has(key)) return
+      seen.add(key)
+      edges.push({ id: key, from: node, to: target })
+    })
+  })
+  return edges
 })
 
 const currentMapLocked = computed(() => {
@@ -299,6 +445,7 @@ const currentMapLocked = computed(() => {
 
 const focusedLocationId = ref<string | null>(null)
 const focusedMonsterId = ref<string | null>(null)
+const nodeHint = ref<string | null>(null)
 
 const focusedLocation = computed<MapLocation | null>(() => {
   if (!focusedLocationId.value) return null
@@ -320,18 +467,66 @@ const focusedLocationLocked = computed(() => {
   return isLocationLocked(focusedLocation.value)
 })
 
-const focusedMonster = computed(() => {
-  if (!focusedMonsterId.value) return null
-  return monstersOnMap.value.find((monster) => monster.id === focusedMonsterId.value) ?? null
+const currentNodeState = computed(() => {
+  if (!currentNode.value) return null
+  return nodeSpawns.nodeStates[currentNode.value.id] ?? null
 })
 
-const monsterPositions = computed<Record<string, { x: number; y: number }>>(() => {
-  if (!currentMap.value) return {}
-  const mapId = currentMap.value.id
-  return monstersOnMap.value.reduce((acc, monster) => {
-    acc[monster.id] = getMonsterPosition(mapId, monster.id)
-    return acc
-  }, {} as Record<string, { x: number; y: number }>)
+const monsterEntries = computed(() => {
+  if (!currentNodeState.value) return []
+  return currentNodeState.value.instances.map((instance) => ({
+    ...instance,
+    monster: monsterDictionary[instance.monsterId],
+  }))
+})
+
+const npcListEntries = computed<NodeListEntry[]>(() => {
+  const node = currentNode.value
+  if (!node?.npcs?.length) return []
+  return node.npcs.map((npcId, index) => {
+    const definition = NPC_MAP[npcId]
+    return {
+      kind: 'npc' as const,
+      key: `npc-${npcId}-${index}`,
+      id: npcId,
+      name: definition?.name ?? npcId,
+      title: definition?.title,
+    }
+  })
+})
+
+const portalEntry = computed<NodeListEntry | null>(() => {
+  if (!currentNode.value?.destination) return null
+  const targetMap = getMapById(currentNode.value.destination.mapId)
+  return {
+    kind: 'portal',
+    key: `portal-${currentNode.value.id}`,
+    label: targetMap?.name ?? currentNode.value.destination.mapId,
+    locked: destinationLocked.value,
+  }
+})
+
+const nodeListEntries = computed<NodeListEntry[]>(() => {
+  const entries: NodeListEntry[] = []
+  monsterEntries.value.forEach((entry) => {
+    entries.push({
+      kind: 'monster',
+      key: `monster-${entry.instanceId}`,
+      instanceId: entry.instanceId,
+      monsterId: entry.monsterId,
+      monster: entry.monster,
+    })
+  })
+  npcListEntries.value.forEach((entry) => entries.push(entry))
+  if (portalEntry.value) {
+    entries.push(portalEntry.value)
+  }
+  return entries
+})
+
+const focusedMonster = computed(() => {
+  if (!focusedMonsterId.value) return null
+  return monsterDictionary[focusedMonsterId.value] ?? null
 })
 
 function markerStyle(location: MapLocation) {
@@ -341,12 +536,71 @@ function markerStyle(location: MapLocation) {
   }
 }
 
-function monsterMarkerStyle(monsterId: string) {
-  const position = monsterPositions.value[monsterId]
-  if (!position) return {}
+function nodeStyle(node: MapNode) {
   return {
-    left: `${position.x}%`,
-    top: `${position.y}%`,
+    left: `${node.position.x}%`,
+    top: `${node.position.y}%`,
+  }
+}
+
+function canSelectNode(node: MapNode) {
+  if (currentMapLocked.value) return false
+  if (!currentNode.value) return true
+  if (currentNode.value.id === node.id) return true
+  return (
+    currentNode.value.connections.includes(node.id) ||
+    node.connections.includes(currentNode.value.id)
+  )
+}
+
+const destinationLocked = computed(() => isPortalLocked(currentNode.value))
+
+function selectNode(nodeId: string) {
+  if (!currentMap.value || currentMap.value.category !== 'wild') return
+  const target = currentMap.value.nodes?.find((node) => node.id === nodeId)
+  if (!target) return
+  if (!canSelectNode(target)) {
+    nodeHint.value = '该节点与当前位置未直接连通。'
+    return
+  }
+  if (target.type === 'portal') {
+    travelThroughPortal(target)
+    return
+  }
+  nodeHint.value = null
+  focusedMonsterId.value = null
+  progress.setCurrentNode(currentMap.value.id, target.id)
+  nodeSpawns.ensureInitialized(currentMap.value.id, target)
+}
+
+function isPortalLocked(node: MapNode | null | undefined) {
+  if (!node?.destination) return false
+  const target = getMapById(node.destination.mapId)
+  if (!target) return true
+  if (target.category === 'wild') {
+    return !progress.isMapUnlocked(target.id)
+  }
+  return false
+}
+
+function travelThroughPortal(source?: MapNode | null) {
+  const portalNode = source ?? currentNode.value
+  if (!portalNode?.destination || !currentMap.value) return
+  if (isPortalLocked(portalNode)) {
+    nodeHint.value = '前方区域尚未解锁。'
+    return
+  }
+  const destination = portalNode.destination
+  progress.setCurrentMap(destination.mapId, destination.nodeId)
+  router.push({ name: 'map', params: { mapId: destination.mapId } })
+}
+
+function monsterBadgeStyle(specialization: MonsterSpecialization) {
+  const colors = getSpecializationColor(specialization)
+  return {
+    background: colors.bg,
+    color: colors.text,
+    borderColor: colors.border,
   }
 }
 
@@ -368,8 +622,8 @@ function goToLocation(location: MapLocation) {
   if (!location.routeName) return
   router.push({
     name: location.routeName,
-    params: location.routeParams,
-    query: location.routeQuery,
+    params: location.routeParams ?? undefined,
+    query: location.routeQuery ?? undefined,
   })
 }
 
@@ -389,16 +643,19 @@ function clearFocusedMonster() {
   focusedMonsterId.value = null
 }
 
-function selectMonster(monsterId: string) {
-  if (currentMapLocked.value) return
-  const monster = monstersOnMap.value.find((m) => m.id === monsterId)
+function engageMonster(instanceId: string, monsterId: string) {
+  if (currentMapLocked.value || !currentNode.value) return
+  const monster = monsterDictionary[monsterId]
   if (!monster) return
   if (player.res.operation.mode === 'idle') {
-    const confirmed = typeof window === 'undefined' ||
-      window.confirm('检测到你尚未运转斗气，确定要开始战斗吗？')
+    const confirmed =
+      typeof window === 'undefined' || window.confirm('检测到你尚未运转斗气，确定要开始战斗吗？')
     if (!confirmed) return
   }
-  battle.start(monster)
+  battle.start(monster, {
+    originNodeId: currentNode.value.id,
+    originNodeInstanceId: instanceId,
+  })
   router.push('/battle')
 }
 
@@ -409,13 +666,57 @@ function returnToCity() {
   }
 }
 
+function handleEntryHover(entry: NodeListEntry) {
+  if (entry.kind === 'monster') {
+    focusMonster(entry.monsterId)
+    return
+  }
+  clearFocusedMonster()
+  if (entry.kind === 'npc') {
+    return
+  }
+  nodeHint.value = null
+}
+
+function handleEntryLeave(entry: NodeListEntry) {
+  if (entry.kind === 'monster') {
+    clearFocusedMonster()
+  }
+}
+
+function handleEntryClick(entry: NodeListEntry) {
+  if (entry.kind === 'monster') {
+    engageMonster(entry.instanceId, entry.monsterId)
+    return
+  }
+  if (entry.kind === 'npc') {
+    npcDialog.open(entry.id)
+    return
+  }
+  if (entry.kind === 'portal') {
+    if (entry.locked) {
+      nodeHint.value = '前方区域尚未解锁。'
+      return
+    }
+    travelThroughPortal(currentNode.value)
+  }
+}
+
 watch(
   currentMap,
   () => {
     focusedLocationId.value = null
     focusedMonsterId.value = null
+    nodeHint.value = null
   },
-  { immediate: true }
+  { immediate: true },
+)
+
+watch(
+  () => activeNodeId.value,
+  () => {
+    focusedMonsterId.value = null
+  },
 )
 </script>
 
@@ -492,6 +793,12 @@ watch(
   margin: 0;
   font-size: 1.4rem;
   font-weight: 600;
+}
+
+.map-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.65);
 }
 
 .map-tip {
@@ -615,11 +922,15 @@ watch(
 
 .wild-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 320px) 1fr;
+  grid-template-columns: minmax(220px, 280px) 1fr;
   gap: 1.5rem;
   height: 100%;
   box-sizing: border-box;
-  align-items: start;
+  align-items: stretch;
+}
+
+.wild-layout > .panel {
+  height: 100%;
 }
 
 .wild-main {
@@ -647,54 +958,194 @@ watch(
   color: rgba(255, 255, 255, 0.7);
 }
 
+.wild-node-label {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.wild-content {
+  display: flex;
+  gap: 1.25rem;
+  align-items: stretch;
+}
+
 .wild-map-canvas {
   position: relative;
-  width: 100%;
+  flex: 1 1 0;
   border-radius: 12px;
   overflow: hidden;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(8, 12, 18, 0.5);
-  min-height: 320px;
+  min-height: 360px;
 }
 
-.monster-marker {
+.node-graph {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.graph-edge {
+  stroke: rgba(255, 255, 255, 0.3);
+  stroke-width: 0.3;
+  stroke-linecap: round;
+  fill: none;
+  transition: stroke 0.2s ease;
+}
+
+.node-marker {
   position: absolute;
   transform: translate(-50%, -50%);
-  padding: 0.35rem 0.75rem;
-  border-radius: 999px;
-  border: none;
+  padding: 0.35rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  background: rgba(17, 28, 38, 0.85);
+  color: #f0f0f0;
   cursor: pointer;
-  background: rgba(255, 201, 120, 0.92);
-  color: #1a1e24;
   font-weight: 600;
-  transition: transform 0.15s ease, background 0.2s ease, box-shadow 0.2s ease;
+  transition: transform 0.15s ease, background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
 }
 
-.monster-marker:has(.boss-label) {
-  background: linear-gradient(135deg, rgba(220, 38, 127, 0.92), rgba(185, 28, 28, 0.92));
-  color: #fff;
-  box-shadow: 0 4px 12px rgba(220, 38, 127, 0.4);
+.node-marker .node-label {
+  white-space: nowrap;
 }
 
-.monster-marker:hover,
-.monster-marker:focus {
-  transform: translate(-50%, -50%) scale(1.06);
-  background: rgba(255, 220, 150, 0.96);
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+.node-marker:hover,
+.node-marker:focus {
+  transform: translate(-50%, -50%) scale(1.04);
+  border-color: rgba(90, 177, 255, 0.9);
+  background: rgba(28, 48, 64, 0.95);
   outline: none;
 }
 
-.monster-marker:has(.boss-label):hover,
-.monster-marker:has(.boss-label):focus {
-  background: linear-gradient(135deg, rgba(236, 72, 153, 0.96), rgba(220, 38, 38, 0.96));
-  box-shadow: 0 8px 24px rgba(236, 72, 153, 0.5);
+.node-marker.active {
+  border-color: #5ab1ff;
+  background: linear-gradient(
+    135deg,
+    rgba(59, 130, 246, 0.95),
+    rgba(14, 165, 233, 0.9)
+  );
+  color: #f8fafc;
+  box-shadow: 0 6px 20px rgba(15, 23, 42, 0.45);
 }
 
-.monster-label {
-  display: inline-flex;
+.node-marker:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.node-marker.node-type-portal {
+  border-style: dashed;
+}
+
+.node-sidebar {
+  flex: 0 0 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+  border-radius: 12px;
+  padding: 1rem;
+  background: rgba(8, 12, 18, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.node-header {
+  display: flex;
+  flex-direction: column;
   gap: 0.35rem;
-  align-items: center;
-  white-space: nowrap;
+}
+
+.node-title {
+  margin: 0;
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.node-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #f97316;
+}
+
+.node-description {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.node-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.node-list__empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.node-footer-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+  padding: 0.5rem 0.25rem 0;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.node-entry-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.node-entry {
+  width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 6px;
+  background: rgba(18, 28, 40, 0.8);
+  color: #f0f0f0;
+  padding: 0.4rem 0.6rem;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.35rem;
+  cursor: pointer;
+  transition: border-color 0.2s ease, background 0.2s ease;
+}
+
+.node-entry:hover,
+.node-entry:focus {
+  border-color: rgba(90, 177, 255, 0.7);
+  background: rgba(35, 52, 70, 0.92);
+  outline: none;
+}
+
+.node-entry.locked {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.node-entry__title {
+  font-weight: 600;
+}
+
+.node-entry__meta {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.node-entry--monster.boss {
+  border-color: rgba(251, 191, 36, 0.6);
+}
+
+.node-entry--portal {
+  border-style: dashed;
 }
 
 .monster-badge {
@@ -801,6 +1252,13 @@ watch(
     text-align: center;
   }
 
+  .wild-content {
+    flex-direction: column;
+  }
+
+  .node-sidebar {
+    flex: 1 1 auto;
+  }
   .wild-layout {
     grid-template-columns: 1fr;
   }

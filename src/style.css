@@ -41,7 +41,7 @@ button {
 }
 
 .app-shell {
-  max-width: 1100px;
+  max-width: 1300px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }
@@ -76,6 +76,7 @@ button {
   border: 1px solid rgba(255, 255, 255, 0.15);
   background: rgba(0, 0, 0, 0.35);
   font-size: 14px;
+  color: #ffffff;
   transition: transform 120ms ease, background 120ms ease, color 120ms ease;
 }
 
@@ -242,7 +243,8 @@ button {
   color: #fff8d8;
 }
 
-.cheat-overlay {
+.cheat-overlay,
+.settings-overlay {
   position: fixed;
   inset: 0;
   z-index: 300;
@@ -254,7 +256,8 @@ button {
   backdrop-filter: blur(2px);
 }
 
-.cheat-panel {
+.cheat-panel,
+.settings-panel {
   width: min(360px, 100%);
   padding: 22px 26px;
   border-radius: 20px;
@@ -263,14 +266,16 @@ button {
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
 }
 
-.cheat-header {
+.cheat-header,
+.settings-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
 }
 
-.cheat-close {
+.cheat-close,
+.settings-close {
   border: none;
   background: rgba(255, 255, 255, 0.08);
   color: #fff;
@@ -282,7 +287,8 @@ button {
   transition: background 120ms ease;
 }
 
-.cheat-close:hover {
+.cheat-close:hover,
+.settings-close:hover {
   background: rgba(255, 255, 255, 0.16);
 }
 
@@ -349,6 +355,57 @@ button {
   outline: none;
   border-color: rgba(245, 208, 111, 0.6);
   box-shadow: 0 0 0 2px rgba(245, 208, 111, 0.2);
+}
+
+.settings-section {
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.settings-section:first-of-type {
+  margin-top: 0;
+}
+
+.settings-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings-section__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.settings-volume-label {
+  font-weight: 600;
+  color: #f5d06f;
+}
+
+.settings-slider {
+  width: 100%;
+  accent-color: #f5d06f;
+}
+
+.settings-toggle {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  cursor: pointer;
+}
+
+.settings-toggle__checkbox {
+  margin-top: 4px;
+  width: 18px;
+  height: 18px;
+  accent-color: #f5d06f;
+  flex-shrink: 0;
 }
 
 .gap-sm {
@@ -439,15 +496,21 @@ button {
 
 .battle-layout {
   display: grid;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: minmax(220px, 280px) 1fr;
   gap: 24px;
   align-items: start;
+}
+
+.timeline-action-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .battle-action-row {
   display: flex;
   gap: 24px;
-  margin-top: 12px;
+  margin-top: 0;
   justify-content: center;
   align-items: stretch;
 }
@@ -1361,6 +1424,10 @@ button {
   .battle-action-row {
     flex-direction: column;
     gap: 16px;
+  }
+
+  .timeline-action-stack {
+    gap: 8px;
   }
 
   .battle-action-row .battle-actions,

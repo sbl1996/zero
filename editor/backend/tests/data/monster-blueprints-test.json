@@ -1,0 +1,20 @@
+[
+  {
+    "id": "m-alpha",
+    "name": "Alpha",
+    "realmTier": 1,
+    "hp": 100,
+    "bp": 50,
+    "specialization": "balanced",
+    "rewards": { "gold": 25 }
+  },
+  {
+    "id": "m-beta",
+    "name": "Beta",
+    "realmTier": 2,
+    "hp": 200,
+    "bp": 100,
+    "specialization": "bruiser",
+    "rewards": { "gold": 45 }
+  }
+]

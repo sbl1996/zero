@@ -8,7 +8,7 @@ import { useUiStore } from '@/stores/ui'
 const playerStore = usePlayerStore()
 const progressStore = useProgressStore()
 const ui = useUiStore()
-const { showCheatPanel, autoRematchAfterVictory } = storeToRefs(ui)
+const { showCheatPanel } = storeToRefs(ui)
 
 const goldAmount = ref(1000)
 const upgradingRealm = ref(false)
@@ -48,12 +48,6 @@ function deleteSave() {
     console.warn('[cheat] failed to clear localStorage', error)
   }
   window.location.reload()
-}
-
-function handleAutoRematchToggle(event: Event) {
-  const target = event.target as HTMLInputElement | null
-  if (!target) return
-  ui.toggleAutoRematch(target.checked)
 }
 
 async function advanceRealmDirectly() {
@@ -97,18 +91,6 @@ function fillBasePower() {
         </div>
         <p v-if="isRealmMaxed" class="text-small text-muted" style="margin: 6px 0 0;">已达最高境界。</p>
 
-        <div class="cheat-settings">
-          <label class="cheat-settings-toggle">
-            <input
-              class="cheat-settings-checkbox"
-              type="checkbox"
-              :checked="autoRematchAfterVictory"
-              @change="handleAutoRematchToggle"
-            >
-            胜利后自动重赛
-          </label>
-          <p class="text-small text-muted" style="margin-top: 6px;">开启后战斗胜利会自动开始下一场（不包括BOSS）。</p>
-        </div>
         <div class="cheat-danger">
           <button class="btn btn-danger" type="button" @click="deleteSave">删除存档</button>
           <p class="text-small text-muted" style="margin: 6px 0 0;">清空本地存档并刷新页面</p>

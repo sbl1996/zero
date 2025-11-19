@@ -1,9 +1,16 @@
-import type { GameMap } from '@/types/map'
+import type { GameMap, MapNode } from '@/types/map'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import mapMetadataRaw from './map-metadata.json'
-import monsterPositionsRaw from './monster-positions.json'
 
-type MapMetadata = Omit<GameMap, 'image'> & { image: string }
+type MapBgmMetadata = {
+  ambient?: string | null
+  battle?: string | null
+}
+
+type MapMetadata = Omit<GameMap, 'image' | 'bgm'> & {
+  image: string
+  bgm?: MapBgmMetadata
+}
 
 interface MapMetadataFile {
   defaultMapId: string
@@ -12,18 +19,37 @@ interface MapMetadataFile {
 
 const MAP_METADATA = mapMetadataRaw as MapMetadataFile
 
-export const monsterPositions = monsterPositionsRaw as Record<
-  string,
-  Record<string, { x: number; y: number }>
->
-
-export function getMonsterPosition(mapId: string, monsterId: string): { x: number; y: number } {
-  return monsterPositions[mapId]?.[monsterId] || { x: 50, y: 50 }
-}
-
 export const defaultMapId = MAP_METADATA.defaultMapId
 
-export const maps: GameMap[] = MAP_METADATA.maps.map((map) => ({
-  ...map,
-  image: resolveAssetUrl(map.image),
-}))
+export const maps: GameMap[] = MAP_METADATA.maps.map((map) => {
+  const { image, bgm, ...rest } = map
+  const resolvedBgm = bgm
+    ? {
+        ambient: bgm.ambient ? resolveAssetUrl(bgm.ambient) : undefined,
+        battle: bgm.battle ? resolveAssetUrl(bgm.battle) : undefined,
+      }
+    : undefined
+  return {
+    ...rest,
+    image: resolveAssetUrl(image),
+    bgm: resolvedBgm,
+  }
+})
+
+const mapLookup = new Map<string, GameMap>()
+const nodeLookup = new Map<string, MapNode & { mapId: string }>()
+
+maps.forEach((map) => {
+  mapLookup.set(map.id, map)
+  map.nodes?.forEach((node) => {
+    nodeLookup.set(node.id, { ...node, mapId: map.id })
+  })
+})
+
+export function getGameMap(mapId: string): GameMap | undefined {
+  return mapLookup.get(mapId)
+}
+
+export function getMapNode(nodeId: string): (MapNode & { mapId: string }) | undefined {
+  return nodeLookup.get(nodeId)
+}

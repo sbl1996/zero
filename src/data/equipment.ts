@@ -1,481 +1,214 @@
-import type { Equipment, EquipSlotKey, EquipmentTemplate } from '@/types/domain'
+import rawEquipmentData from './equipment_items.json'
+import type {
+  Equipment,
+  EquipSlot,
+  EquipSlotKey,
+  EquipmentMainStat,
+  EquipmentMainStatType,
+  EquipmentPrice,
+  EquipmentQuality,
+  EquipmentSubStat,
+  EquipmentSubStatType,
+  EquipmentTemplate,
+  EquipmentStatValueType,
+  RealmTier,
+} from '@/types/domain'
 
-export const BASE_EQUIPMENT_TEMPLATES: EquipmentTemplate[] = [
-  // 一级装备
-  {
-    id: 'iron-sword',
-    name: '铁剑',
-    slot: 'weaponR',
-    requiredRealmTier: 1,
-    baseMain: { ATK: 10 },
-    baseSubs: { addATK: 3 },
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'iron-maul',
-    name: '铁锤',
-    slot: 'weapon2H',
-    requiredRealmTier: 1,
-    baseMain: { ATK: 16 },
-    baseSubs: { addATK: 4 },
-    exclusive: '2H',
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'iron-shield',
-    name: '铁盾',
-    slot: 'shieldL',
-    requiredRealmTier: 1,
-    baseMain: { DEF: 10 },
-    baseSubs: { addDEF: 2 },
-    exclusive: '1H+Shield',
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'iron-plate',
-    name: '铁甲',
-    slot: 'armor',
-    requiredRealmTier: 1,
-    baseMain: { DEF: 15 },
-    baseSubs: { addDEF: 2, addHP: 20 },
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'iron-helm',
-    name: '铁盔',
-    slot: 'helmet',
-    requiredRealmTier: 1,
-    baseMain: { DEF: 8 },
-    baseSubs: { addDEF: 1 },
-    flatCapMultiplier: 0.15,
-  },
-  {
-    id: 'iron-ring',
-    name: '铁戒指',
-    slot: 'ring',
-    requiredRealmTier: 1,
-    baseMain: { HP: 30 },
-    baseSubs: { addHP: 5 },
-    flatCapMultiplier: 0.15,
-  },
+interface RawEquipmentStat {
+  type: string
+  value: number
+  value_type?: EquipmentStatValueType
+}
 
-  // 二级装备
-  {
-    id: 'steel-blade',
-    name: '钢刃',
-    slot: 'weaponR',
-    requiredRealmTier: 2,
-    baseMain: { ATK: 18 },
-    baseSubs: { addATK: 3 },
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'steel-greatsword',
-    name: '巨型钢剑',
-    slot: 'weapon2H',
-    requiredRealmTier: 2,
-    baseMain: { ATK: 30 },
-    baseSubs: { addATK: 4 },
-    exclusive: '2H',
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'steel-bulwark',
-    name: '钢盾',
-    slot: 'shieldL',
-    requiredRealmTier: 2,
-    baseMain: { DEF: 16 },
-    baseSubs: { addDEF: 2 },
-    exclusive: '1H+Shield',
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'steel-cuirass',
-    name: '钢甲',
-    slot: 'armor',
-    requiredRealmTier: 2,
-    baseMain: { DEF: 24 },
-    baseSubs: { addDEF: 2, addHP: 20 },
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'steel-helm',
-    name: '钢盔',
-    slot: 'helmet',
-    requiredRealmTier: 2,
-    baseMain: { DEF: 13 },
-    baseSubs: { addDEF: 1 },
-    flatCapMultiplier: 0.15,
-  },
-  {
-    id: 'amber-ring',
-    name: '琥珀戒',
-    slot: 'ring',
-    requiredRealmTier: 2,
-    baseMain: { HP: 48 },
-    baseSubs: { addHP: 5 },
-    flatCapMultiplier: 0.15,
-  },
+interface RawEquipmentPrice {
+  buy?: number
+  sell?: number
+}
 
-  // 三级装备
-  {
-    id: 'knight-blade',
-    name: '骑士刃',
-    slot: 'weaponR',
-    requiredRealmTier: 3,
-    baseMain: { ATK: 24 },
-    baseSubs: { addATK: 3 },
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'knight-warhammer',
-    name: '骑士战锤',
-    slot: 'weapon2H',
-    requiredRealmTier: 3,
-    baseMain: { ATK: 40 },
-    baseSubs: { addATK: 4 },
-    exclusive: '2H',
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'knight-tower-shield',
-    name: '骑士塔盾',
-    slot: 'shieldL',
-    requiredRealmTier: 3,
-    baseMain: { DEF: 22 },
-    baseSubs: { addDEF: 2 },
-    exclusive: '1H+Shield',
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'knight-armor',
-    name: '骑士甲',
-    slot: 'armor',
-    requiredRealmTier: 3,
-    baseMain: { DEF: 33 },
-    baseSubs: { addDEF: 2, addHP: 20 },
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'knight-helm',
-    name: '骑士盔',
-    slot: 'helmet',
-    requiredRealmTier: 3,
-    baseMain: { DEF: 18 },
-    baseSubs: { addDEF: 1 },
-    flatCapMultiplier: 0.15,
-  },
-  {
-    id: 'ruby-ring',
-    name: '红玉戒',
-    slot: 'ring',
-    requiredRealmTier: 3,
-    baseMain: { HP: 66 },
-    baseSubs: { addHP: 5 },
-    flatCapMultiplier: 0.15,
-  },
+interface RawEquipmentItem {
+  id: string
+  name: string
+  description?: string
+  slot: string
+  required_tier?: number
+  base_quality: EquipmentQuality
+  base_main: RawEquipmentStat
+  substats?: RawEquipmentStat[]
+  exclusive?: '2H' | '1H+Shield'
+  flatCapMultiplier?: number
+  price?: RawEquipmentPrice
+  flags?: string[]
+}
 
-  // 四级装备
-  {
-    id: 'mithril-saber',
-    name: '秘银军刀',
-    slot: 'weaponR',
-    requiredRealmTier: 4,
-    baseMain: { ATK: 32 },
-    baseSubs: { addATK: 3 },
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'mithril-claymore',
-    name: '秘银巨剑',
-    slot: 'weapon2H',
-    requiredRealmTier: 4,
-    baseMain: { ATK: 56 },
-    baseSubs: { addATK: 4 },
-    exclusive: '2H',
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'mithril-aegis',
-    name: '秘银盾',
-    slot: 'shieldL',
-    requiredRealmTier: 4,
-    baseMain: { DEF: 31 },
-    baseSubs: { addDEF: 2 },
-    exclusive: '1H+Shield',
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'mithril-hauberk',
-    name: '秘银甲',
-    slot: 'armor',
-    requiredRealmTier: 4,
-    baseMain: { DEF: 46 },
-    baseSubs: { addDEF: 2, addHP: 20 },
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'mithril-coif',
-    name: '秘银盔',
-    slot: 'helmet',
-    requiredRealmTier: 4,
-    baseMain: { DEF: 25 },
-    baseSubs: { addDEF: 1 },
-    flatCapMultiplier: 0.15,
-  },
-  {
-    id: 'sapphire-ring',
-    name: '蓝宝石戒',
-    slot: 'ring',
-    requiredRealmTier: 4,
-    baseMain: { HP: 93 },
-    baseSubs: { addHP: 5 },
-    flatCapMultiplier: 0.15,
-  },
-
-  // 五级装备
-  {
-    id: 'runed-edge',
-    name: '符文之锋',
-    slot: 'weaponR',
-    requiredRealmTier: 5,
-    baseMain: { ATK: 40 },
-    baseSubs: { addATK: 3 },
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'runed-greataxe',
-    name: '符文巨斧',
-    slot: 'weapon2H',
-    requiredRealmTier: 5,
-    baseMain: { ATK: 75 },
-    baseSubs: { addATK: 4 },
-    exclusive: '2H',
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'runed-bulwark',
-    name: '符文壁垒',
-    slot: 'shieldL',
-    requiredRealmTier: 5,
-    baseMain: { DEF: 42 },
-    baseSubs: { addDEF: 2 },
-    exclusive: '1H+Shield',
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'runed-cuirass',
-    name: '符文甲',
-    slot: 'armor',
-    requiredRealmTier: 5,
-    baseMain: { DEF: 63 },
-    baseSubs: { addDEF: 2, addHP: 20 },
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'runed-helm',
-    name: '符文头盔',
-    slot: 'helmet',
-    requiredRealmTier: 5,
-    baseMain: { DEF: 34 },
-    baseSubs: { addDEF: 1 },
-    flatCapMultiplier: 0.15,
-  },
-  {
-    id: 'topaz-ring',
-    name: '黄玉戒',
-    slot: 'ring',
-    requiredRealmTier: 5,
-    baseMain: { HP: 126 },
-    baseSubs: { addHP: 5 },
-    flatCapMultiplier: 0.15,
-  },
-
-  // 六级装备
-  {
-    id: 'dragonbone-fang',
-    name: '龙骨之牙',
-    slot: 'weaponR',
-    requiredRealmTier: 6,
-    baseMain: { ATK: 54 },
-    baseSubs: { addATK: 3 },
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'dragonslayer',
-    name: '屠龙者',
-    slot: 'weapon2H',
-    requiredRealmTier: 6,
-    baseMain: { ATK: 96 },
-    baseSubs: { addATK: 4 },
-    exclusive: '2H',
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'dragonbone-shield',
-    name: '龙骨盾',
-    slot: 'shieldL',
-    requiredRealmTier: 6,
-    baseMain: { DEF: 52 },
-    baseSubs: { addDEF: 2 },
-    exclusive: '1H+Shield',
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'dragonscale-armor',
-    name: '龙鳞甲',
-    slot: 'armor',
-    requiredRealmTier: 6,
-    baseMain: { DEF: 78 },
-    baseSubs: { addDEF: 2, addHP: 20 },
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'dragonbone-helm',
-    name: '龙骨盔',
-    slot: 'helmet',
-    requiredRealmTier: 6,
-    baseMain: { DEF: 42 },
-    baseSubs: { addDEF: 1 },
-    flatCapMultiplier: 0.15,
-  },
-  {
-    id: 'emerald-ring',
-    name: '祖母绿戒',
-    slot: 'ring',
-    requiredRealmTier: 6,
-    baseMain: { HP: 156 },
-    baseSubs: { addHP: 5 },
-    flatCapMultiplier: 0.15,
-  },
-
-  // 六级装备
-  {
-    id: 'radiant-sword',
-    name: '辟光剑',
-    slot: 'weaponR',
-    requiredRealmTier: 7,
-    baseMain: { ATK: 64 },
-    baseSubs: { addATK: 3 },
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'starbreaker',
-    name: '碎星者',
-    slot: 'weapon2H',
-    requiredRealmTier: 7,
-    baseMain: { ATK: 116 },
-    baseSubs: { addATK: 4 },
-    exclusive: '2H',
-    flatCapMultiplier: 0.25,
-  },
-  {
-    id: 'celestial-bulwark',
-    name: '天穹壁垒',
-    slot: 'shieldL',
-    requiredRealmTier: 7,
-    baseMain: { DEF: 64 },
-    baseSubs: { addDEF: 2 },
-    exclusive: '1H+Shield',
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'starlit-plate',
-    name: '星辉甲',
-    slot: 'armor',
-    requiredRealmTier: 7,
-    baseMain: { DEF: 96 },
-    baseSubs: { addDEF: 2, addHP: 20 },
-    flatCapMultiplier: 0.18,
-  },
-  {
-    id: 'starcrest',
-    name: '星冕',
-    slot: 'helmet',
-    requiredRealmTier: 7,
-    baseMain: { DEF: 51 },
-    baseSubs: { addDEF: 1 },
-    flatCapMultiplier: 0.15,
-  },
-  {
-    id: 'morningstar-ring',
-    name: '晨星戒',
-    slot: 'ring',
-    requiredRealmTier: 7,
-    baseMain: { HP: 192 },
-    baseSubs: { addHP: 5 },
-    flatCapMultiplier: 0.15,
-  },
+const EQUIP_SLOTS: EquipSlot[] = ['helmet', 'shieldL', 'weaponR', 'weapon2H', 'armor', 'ring']
+const MAIN_STAT_TYPES: EquipmentMainStatType[] = ['HP', 'QiMax', 'ATK', 'DEF', 'AGI', 'REC']
+const SUB_STAT_TYPES: EquipmentSubStatType[] = [
+  'HP',
+  'QiMax',
+  'ATK',
+  'DEF',
+  'AGI',
+  'REC',
+  'HpRec',
+  'QiRec',
+  'WeaknessRate',
+  'WeaknessDmgPct',
+  'DamageReduction',
+  'SkillCooldownReduction',
+  'QiGuardAbsorb',
+  'QiGuardEfficiency',
+  'PenFlat',
+  'PenPct',
+  'Toughness',
 ]
 
-export const STARTING_EQUIPMENT_IDS: Partial<Record<EquipSlotKey, string>> = {
+const DEFAULT_PERCENT_SUB_STATS = new Set<EquipmentSubStatType>([
+  'WeaknessRate',
+  'WeaknessDmgPct',
+  'DamageReduction',
+  'SkillCooldownReduction',
+  'QiGuardAbsorb',
+  'QiGuardEfficiency',
+  'PenPct',
+])
+
+const QUALITY_MAIN_MULTIPLIER: Record<EquipmentQuality, number> = {
+  normal: 1.0,
+  fine: 1.2,
+  rare: 1.45,
+  excellent: 1.8,
+  epic: 2.2,
+}
+
+function isEquipSlot(value: string): value is EquipSlot {
+  return EQUIP_SLOTS.includes(value as EquipSlot)
+}
+
+function isMainStatType(value: string): value is EquipmentMainStatType {
+  return MAIN_STAT_TYPES.includes(value as EquipmentMainStatType)
+}
+
+function isSubStatType(value: string): value is EquipmentSubStatType {
+  return SUB_STAT_TYPES.includes(value as EquipmentSubStatType)
+}
+
+function toValueType(
+  value?: EquipmentStatValueType,
+  fallback?: EquipmentStatValueType,
+): EquipmentStatValueType | undefined {
+  if (value === 'percent') return 'percent'
+  if (value === 'flat') return 'flat'
+  if (fallback === 'percent' || fallback === 'flat') return fallback
+  return undefined
+}
+
+function toEquipmentMainStat(stat: RawEquipmentStat): EquipmentMainStat {
+  const type = stat.type
+  if (!isMainStatType(type)) {
+    throw new Error(`Unknown main stat type "${type}" in equipment data`)
+  }
+  const numericValue = Number(stat.value)
+  return {
+    type,
+    value: Number.isFinite(numericValue) ? numericValue : 0,
+    valueType: toValueType(stat.value_type),
+  }
+}
+
+function scaleMainStat(stat: EquipmentMainStat, multiplier: number): EquipmentMainStat {
+  const scaled = Math.round((Number.isFinite(stat.value) ? stat.value : 0) * multiplier)
+  return { ...stat, value: scaled }
+}
+
+function toEquipmentSubStat(stat: RawEquipmentStat): EquipmentSubStat {
+  const type = stat.type
+  if (!isSubStatType(type)) {
+    throw new Error(`Unknown substat type "${type}" in equipment data`)
+  }
+  const numericValue = Number(stat.value)
+  return {
+    type,
+    value: Number.isFinite(numericValue) ? numericValue : 0,
+    valueType: toValueType(stat.value_type, DEFAULT_PERCENT_SUB_STATS.has(type) ? 'percent' : undefined),
+  }
+}
+
+function toRealmTier(value: number | undefined): RealmTier | undefined {
+  if (typeof value !== 'number') return undefined
+  if (value >= 1 && value <= 9) return value as RealmTier
+  return undefined
+}
+
+function clonePrice(price?: RawEquipmentPrice | null): EquipmentPrice | undefined {
+  if (!price) return undefined
+  const next: EquipmentPrice = {}
+  if (typeof price.buy === 'number') next.buy = price.buy
+  if (typeof price.sell === 'number') next.sell = price.sell
+  return Object.keys(next).length > 0 ? next : undefined
+}
+
+const rawItems = rawEquipmentData as RawEquipmentItem[]
+
+export const BASE_EQUIPMENT_TEMPLATES: EquipmentTemplate[] = rawItems.map((item) => {
+  if (!isEquipSlot(item.slot)) {
+    throw new Error(`Invalid equip slot "${item.slot}" for equipment ${item.id}`)
+  }
+
+  const qualityMultiplier = QUALITY_MAIN_MULTIPLIER[item.base_quality] ?? 1
+  const baseMain = scaleMainStat(toEquipmentMainStat(item.base_main), qualityMultiplier)
+
+  return {
+    id: item.id,
+    name: item.name,
+    description: item.description,
+    slot: item.slot,
+    requiredRealmTier: toRealmTier(item.required_tier),
+    quality: item.base_quality,
+    baseMain,
+    baseSubstats: (item.substats ?? []).map(toEquipmentSubStat),
+    exclusive: item.exclusive,
+    flatCapMultiplier: item.flatCapMultiplier,
+    price: clonePrice(item.price),
+    flags: item.flags?.slice(),
+  }
+})
+
+export const EQUIPMENT_TEMPLATE_MAP = new Map(BASE_EQUIPMENT_TEMPLATES.map((template) => [template.id, template]))
+
+export const STARTING_EQUIPMENT_IDS: Partial<Record<EquipSlotKey, string>> = {}
+
+export interface InstantiateEquipmentOptions {
+  level?: number
+  id?: string
+}
+
+export function instantiateEquipment(template: EquipmentTemplate, options: InstantiateEquipmentOptions = {}): Equipment {
+  return {
+    id: options.id ?? template.id,
+    templateId: template.id,
+    name: template.name,
+    description: template.description,
+    slot: template.slot,
+    level: options.level ?? 0,
+    quality: template.quality,
+    requiredRealmTier: template.requiredRealmTier,
+    mainStat: { ...template.baseMain },
+    substats: template.baseSubstats.map((stat) => ({ ...stat })),
+    exclusive: template.exclusive,
+    flatCapMultiplier: template.flatCapMultiplier,
+    price: template.price ? { ...template.price } : undefined,
+    flags: template.flags?.slice(),
+  }
 }
 
 export function getStartingEquipment(): Partial<Record<EquipSlotKey, Equipment>> {
   const result: Partial<Record<EquipSlotKey, Equipment>> = {}
-
-  for (const [slot, templateId] of Object.entries(STARTING_EQUIPMENT_IDS)) {
-    const template = BASE_EQUIPMENT_TEMPLATES.find(t => t.id === templateId)
-    if (template) {
-      const equipment: Equipment = {
-        id: template.id,
-        name: template.name,
-        slot: template.slot,
-        level: 1,
-        mainStat: { ...template.baseMain },
-        subs: { ...template.baseSubs },
-        flatCapMultiplier: template.flatCapMultiplier,
-        requiredRealmTier: template.requiredRealmTier,
-        exclusive: template.exclusive,
-      }
-      result[slot as EquipSlotKey] = equipment
-    }
-  }
-
+  Object.entries(STARTING_EQUIPMENT_IDS).forEach(([slotKey, templateId]) => {
+    if (!templateId) return
+    const template = EQUIPMENT_TEMPLATE_MAP.get(templateId)
+    if (!template) return
+    const equipment = instantiateEquipment(template, { id: template.id })
+    result[slotKey as EquipSlotKey] = equipment
+  })
   return result
 }
-
-export const EQUIPMENT_PRICES = {
-  'iron-sword': 300,
-  'iron-maul': 500,
-  'iron-shield': 250,
-  'iron-plate': 400,
-  'iron-helm': 200,
-  'iron-ring': 220,
-  'steel-blade': 600,
-  'steel-greatsword': 1000,
-  'steel-bulwark': 500,
-  'steel-cuirass': 800,
-  'steel-helm': 400,
-  'amber-ring': 440,
-  'knight-blade': 1050,
-  'knight-warhammer': 1750,
-  'knight-tower-shield': 875,
-  'knight-armor': 1400,
-  'knight-helm': 700,
-  'ruby-ring': 770,
-  'mithril-saber': 1800,
-  'mithril-claymore': 3000,
-  'mithril-aegis': 1500,
-  'mithril-hauberk': 2400,
-  'mithril-coif': 1200,
-  'sapphire-ring': 1320,
-  'runed-edge': 2700,
-  'runed-greataxe': 4500,
-  'runed-bulwark': 2250,
-  'runed-cuirass': 3600,
-  'runed-helm': 1800,
-  'topaz-ring': 1980,
-  'dragonbone-fang': 3900,
-  'dragonslayer': 6500,
-  'dragonbone-shield': 3250,
-  'dragonscale-armor': 5200,
-  'dragonbone-helm': 2600,
-  'emerald-ring': 2860,
-  'radiant-sword': 5400,
-  'starbreaker': 9000,
-  'celestial-bulwark': 4500,
-  'starlit-plate': 7200,
-  'starcrest': 3600,
-  'morningstar-ring': 3960,
-} as const

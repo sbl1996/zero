@@ -1,0 +1,215 @@
+[
+    {
+        "id": "starter-sword",
+        "base_quality": "normal",
+        "slot": "weaponR",
+        "required_tier": 1,
+        "name": "新手长剑",
+        "description": "冒险者的第一把武器，能为旅途带来一些帮助。也许经历无数战斗之后，你会发现它的真正价值。",
+        "base_main": {
+            "type": "ATK",
+            "value": 10
+        },
+        "substats": [],
+        "price": {
+            "sell": 100
+        },
+        "flags": [
+            "starter"
+        ]
+    },
+    {
+        "id": "leather-armor",
+        "base_quality": "normal",
+        "slot": "armor",
+        "required_tier": 1,
+        "name": "皮甲",
+        "description": "由动物皮革制成的轻便护甲，能防御一些基本攻击。",
+        "base_main": {
+            "type": "DEF",
+            "value": 8
+        },
+        "substats": [],
+        "price": {
+            "sell": 80
+        },
+        "flags": [
+            "starter"
+        ]
+    },
+    {
+        "id": "straw-hat",
+        "base_quality": "normal",
+        "slot": "helmet",
+        "required_tier": 1,
+        "name": "草帽",
+        "description": "一顶简单的草帽，戴着很有少年感。",
+        "base_main": {
+            "type": "DEF",
+            "value": 4
+        },
+        "substats": [],
+        "price": {
+            "sell": 50
+        },
+        "flags": [
+            "starter"
+        ]
+    },
+    {
+        "id": "iron-sword",
+        "base_quality": "normal",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "铁剑",
+        "description": "10级冒险者常用的铁剑，剑身经过淬火处理，比新手武器更耐用。",
+        "base_main": {
+            "type": "ATK",
+            "value": 20
+        },
+        "substats": [],
+        "price": {
+            "sell": 500
+        },
+        "flags": []
+    },
+    {
+        "id": "steel-armor",
+        "base_quality": "normal",
+        "slot": "armor",
+        "required_tier": 2,
+        "name": "钢制铠甲",
+        "description": "由冷轧钢板拼接而成的铠甲，能有效抵御中等强度的物理攻击。",
+        "base_main": {
+            "type": "DEF",
+            "value": 20
+        },
+        "substats": [],
+        "price": {
+            "sell": 450
+        },
+        "flags": []
+    },
+    {
+        "id": "bronze-shield",
+        "base_quality": "normal",
+        "slot": "shieldL",
+        "required_tier": 2,
+        "name": "小圆盾",
+        "description": "由青铜打造的小圆盾，轻便且坚固。",
+        "base_main": {
+            "type": "DEF",
+            "value": 10
+        },
+        "substats": [],
+        "price": {
+            "sell": 400
+        },
+        "flags": []
+    },
+    {
+        "id": "iron-ring",
+        "base_quality": "normal",
+        "slot": "ring",
+        "required_tier": 2,
+        "name": "铁指环",
+        "description": "简单的铁制指环，能小幅提升佩戴者的生命值。",
+        "base_main": {
+            "type": "HP",
+            "value": 10
+        },
+        "substats": [],
+        "price": {
+            "sell": 300
+        },
+        "flags": []
+    },
+    {
+        "id": "refined-steel-sword",
+        "base_quality": "fine",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "精钢剑",
+        "description": "经过精炼工艺打造的铁剑，锋利且坚韧。",
+        "base_main": {
+            "type": "ATK",
+            "value": 20
+        },
+        "substats": [
+            {
+                "type": "AGI",
+                "value": 4
+            }
+        ],
+        "price": {
+            "sell": 650
+        },
+        "flags": []
+    },
+    {
+        "id": "plate-armor",
+        "base_quality": "fine",
+        "slot": "armor",
+        "required_tier": 2,
+        "name": "板甲",
+        "description": "由多块钢板组成的重型铠甲，提供出色的防护性能。",
+        "base_main": {
+            "type": "DEF",
+            "value": 20
+        },
+        "substats": [
+            {
+                "type": "HP",
+                "value": 30
+            }
+        ],
+        "price": {
+            "sell": 580
+        },
+        "flags": []
+    },
+    {
+        "id": "iron-helmet",
+        "base_quality": "fine",
+        "slot": "helmet",
+        "required_tier": 2,
+        "name": "铁盔",
+        "description": "表层淬火的铁制头盔，能减少头部受到的冲击。",
+        "base_main": {
+            "type": "DEF",
+            "value": 10
+        },
+        "substats": [
+            {
+                "type": "DEF",
+                "value": 2
+            }
+        ],
+        "price": {
+            "sell": 380
+        },
+        "flags": []
+    },
+    {
+        "id": "steel-ring",
+        "base_quality": "fine",
+        "slot": "ring",
+        "required_tier": 2,
+        "name": "银边指环",
+        "description": "银质镶边的戒指，内部刻有斗气增幅符文，能提升斗气上限。",
+        "base_main": {
+            "type": "QiMax",
+            "value": 20
+        },
+        "substats": [
+            {
+                "type": "QiMax",
+                "value": 5
+            }
+        ],
+        "price": {
+            "sell": 420
+        },
+        "flags": []
+    }
+]

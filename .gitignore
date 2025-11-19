@@ -1,5 +1,6 @@
 .claude/
 src/assets/*.webp
+src/assets/*.mp3
 src/assets/raw/
 deploy.sh
 

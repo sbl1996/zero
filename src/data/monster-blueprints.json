@@ -6,7 +6,9 @@
     "hp": 80,
     "bp": 100,
     "specialization": "balanced",
-    "rewards": { "gold": 25 }
+    "rewards": {
+      "gold": 25
+    }
   },
   {
     "id": "m-wolf",
@@ -15,7 +17,9 @@
     "hp": 130,
     "bp": 120,
     "specialization": "skirmisher",
-    "rewards": { "gold": 35 }
+    "rewards": {
+      "gold": 35
+    }
   },
   {
     "id": "m-goblin",
@@ -24,7 +28,31 @@
     "hp": 180,
     "bp": 140,
     "specialization": "attacker",
-    "rewards": { "gold": 55 }
+    "rewards": {
+      "gold": 55
+    }
+  },
+  {
+    "id": "m-echo-beast",
+    "name": "回声兽影",
+    "realmTier": 1,
+    "hp": 160,
+    "bp": 150,
+    "specialization": "agile",
+    "rewards": {
+      "gold": 100
+    }
+  },
+  {
+    "id": "m-slime-variant",
+    "name": "变异史莱姆",
+    "realmTier": 1,
+    "hp": 120,
+    "bp": 150,
+    "specialization": "attacker",
+    "rewards": {
+      "gold": 50
+    }
   },
   {
     "id": "m-boar",
@@ -33,7 +61,20 @@
     "hp": 260,
     "bp": 160,
     "specialization": "bruiser",
-    "rewards": { "gold": 70 }
+    "rewards": {
+      "gold": 70
+    }
+  },
+  {
+    "id": "m-glimmer-spirit",
+    "name": "苔光碎灵",
+    "realmTier": 1,
+    "hp": 240,
+    "bp": 160,
+    "specialization": "balanced",
+    "rewards": {
+      "gold": 65
+    }
   },
   {
     "id": "boss-golden-sheep",
@@ -42,7 +83,9 @@
     "hp": 800,
     "bp": 200,
     "specialization": "defender",
-    "rewards": { "gold": 300 },
+    "rewards": {
+      "gold": 300
+    },
     "rank": "boss"
   },
   {
@@ -52,7 +95,20 @@
     "hp": 460,
     "bp": 240,
     "specialization": "defender",
-    "rewards": { "gold": 140 }
+    "rewards": {
+      "gold": 140
+    }
+  },
+  {
+    "id": "m-dragonbone-stalker",
+    "name": "龙骨潜行者",
+    "realmTier": 2,
+    "hp": 620,
+    "bp": 280,
+    "specialization": "agile",
+    "rewards": {
+      "gold": 230
+    }
   },
   {
     "id": "m-pyro-fox",
@@ -61,7 +117,20 @@
     "hp": 520,
     "bp": 300,
     "specialization": "skirmisher",
-    "rewards": { "gold": 165 }
+    "rewards": {
+      "gold": 165
+    }
+  },
+  {
+    "id": "m-thunderbound-stoneguard",
+    "name": "雷隐石卫",
+    "realmTier": 2,
+    "hp": 900,
+    "bp": 320,
+    "specialization": "defender",
+    "rewards": {
+      "gold": 245
+    }
   },
   {
     "id": "m-froststone-colossus",
@@ -70,7 +139,20 @@
     "hp": 780,
     "bp": 340,
     "specialization": "defender",
-    "rewards": { "gold": 210 }
+    "rewards": {
+      "gold": 210
+    }
+  },
+  {
+    "id": "m-frostfire-wisp",
+    "name": "霜炎幽灵",
+    "realmTier": 2,
+    "hp": 440,
+    "bp": 360,
+    "specialization": "crazy",
+    "rewards": {
+      "gold": 175
+    }
   },
   {
     "id": "boss-wind-raptor",
@@ -79,8 +161,21 @@
     "hp": 1600,
     "bp": 400,
     "specialization": "agile",
-    "rewards": { "gold": 600 },
+    "rewards": {
+      "gold": 600
+    },
     "rank": "boss"
+  },
+  {
+    "id": "m-volt-hound",
+    "name": "雷噬猎犬",
+    "realmTier": 3,
+    "hp": 900,
+    "bp": 460,
+    "specialization": "skirmisher",
+    "rewards": {
+      "gold": 340
+    }
   },
   {
     "id": "m-shade",
@@ -89,7 +184,9 @@
     "hp": 980,
     "bp": 480,
     "specialization": "agile",
-    "rewards": { "gold": 330 }
+    "rewards": {
+      "gold": 330
+    }
   },
   {
     "id": "m-thunder-knight",
@@ -98,7 +195,9 @@
     "hp": 1200,
     "bp": 600,
     "specialization": "defender",
-    "rewards": { "gold": 420 }
+    "rewards": {
+      "gold": 420
+    }
   },
   {
     "id": "m-abyss-witch",
@@ -107,7 +206,31 @@
     "hp": 1350,
     "bp": 680,
     "specialization": "mystic",
-    "rewards": { "gold": 500 }
+    "rewards": {
+      "gold": 500
+    }
+  },
+  {
+    "id": "m-storm-pylon",
+    "name": "雷柱灵",
+    "realmTier": 3,
+    "hp": 1400,
+    "bp": 720,
+    "specialization": "attacker",
+    "rewards": {
+      "gold": 520
+    }
+  },
+  {
+    "id": "m-rift-sentinel",
+    "name": "裂雷守卫",
+    "realmTier": 3,
+    "hp": 1700,
+    "bp": 750,
+    "specialization": "bruiser",
+    "rewards": {
+      "gold": 560
+    }
   },
   {
     "id": "boss-dragon-whelp",
@@ -116,9 +239,14 @@
     "hp": 2200,
     "bp": 800,
     "specialization": "balanced",
-    "rewards": { "gold": 610 },
+    "rewards": {
+      "gold": 610
+    },
     "rank": "boss",
-    "attackInterval": [1.2, 2.0]
+    "attackInterval": [
+      1.2,
+      2.0
+    ]
   },
   {
     "id": "m-specter",
@@ -127,7 +255,9 @@
     "hp": 1622,
     "bp": 880,
     "specialization": "crazy",
-    "rewards": { "gold": 378 }
+    "rewards": {
+      "gold": 378
+    }
   },
   {
     "id": "m-rockback",
@@ -136,7 +266,9 @@
     "hp": 1682,
     "bp": 1000,
     "specialization": "bruiser",
-    "rewards": { "gold": 391 }
+    "rewards": {
+      "gold": 391
+    }
   },
   {
     "id": "m-raven",
@@ -145,7 +277,9 @@
     "hp": 1785,
     "bp": 1080,
     "specialization": "skirmisher",
-    "rewards": { "gold": 415 }
+    "rewards": {
+      "gold": 415
+    }
   },
   {
     "id": "boss-treant",
@@ -154,10 +288,14 @@
     "hp": 2676,
     "bp": 1200,
     "specialization": "defender",
-    "rewards": { "gold": 535 },
+    "rewards": {
+      "gold": 535
+    },
     "rank": "boss",
     "toughness": 1.6,
-    "attackInterval": [1.8]
+    "attackInterval": [
+      1.8
+    ]
   },
   {
     "id": "m-nightstalker",
@@ -166,7 +304,9 @@
     "hp": 1906,
     "bp": 1220,
     "specialization": "agile",
-    "rewards": { "gold": 441 }
+    "rewards": {
+      "gold": 441
+    }
   },
   {
     "id": "m-troll",
@@ -175,7 +315,9 @@
     "hp": 1967,
     "bp": 1360,
     "specialization": "bruiser",
-    "rewards": { "gold": 454 }
+    "rewards": {
+      "gold": 454
+    }
   },
   {
     "id": "m-hound",
@@ -184,7 +326,9 @@
     "hp": 2070,
     "bp": 1480,
     "specialization": "attacker",
-    "rewards": { "gold": 477 }
+    "rewards": {
+      "gold": 477
+    }
   },
   {
     "id": "boss-priest",
@@ -193,7 +337,9 @@
     "hp": 3088,
     "bp": 1600,
     "specialization": "mystic",
-    "rewards": { "gold": 612 },
+    "rewards": {
+      "gold": 612
+    },
     "rank": "boss"
   },
   {
@@ -203,7 +349,9 @@
     "hp": 2190,
     "bp": 1760,
     "specialization": "attacker",
-    "rewards": { "gold": 503 }
+    "rewards": {
+      "gold": 503
+    }
   },
   {
     "id": "m-sentinel",
@@ -212,7 +360,9 @@
     "hp": 2233,
     "bp": 2000,
     "specialization": "defender",
-    "rewards": { "gold": 513 }
+    "rewards": {
+      "gold": 513
+    }
   },
   {
     "id": "m-reaver",
@@ -221,7 +371,9 @@
     "hp": 2354,
     "bp": 2180,
     "specialization": "crazy",
-    "rewards": { "gold": 540 }
+    "rewards": {
+      "gold": 540
+    }
   },
   {
     "id": "boss-archmage",
@@ -230,7 +382,9 @@
     "hp": 3500,
     "bp": 2400,
     "specialization": "mystic",
-    "rewards": { "gold": 690 },
+    "rewards": {
+      "gold": 690
+    },
     "rank": "boss"
   },
   {
@@ -240,7 +394,9 @@
     "hp": 2457,
     "bp": 2580,
     "specialization": "mystic",
-    "rewards": { "gold": 563 }
+    "rewards": {
+      "gold": 563
+    }
   },
   {
     "id": "m-colossus",
@@ -249,7 +405,9 @@
     "hp": 2517,
     "bp": 2800,
     "specialization": "defender",
-    "rewards": { "gold": 576 }
+    "rewards": {
+      "gold": 576
+    }
   },
   {
     "id": "m-titan",
@@ -258,7 +416,9 @@
     "hp": 2638,
     "bp": 2980,
     "specialization": "bruiser",
-    "rewards": { "gold": 602 }
+    "rewards": {
+      "gold": 602
+    }
   },
   {
     "id": "boss-knight",
@@ -267,10 +427,14 @@
     "hp": 3887,
     "bp": 3200,
     "specialization": "bruiser",
-    "rewards": { "gold": 765 },
+    "rewards": {
+      "gold": 765
+    },
     "rank": "boss",
     "toughness": 1.6,
-    "attackInterval": [1.5]
+    "attackInterval": [
+      1.5
+    ]
   },
   {
     "id": "m-chimera",
@@ -279,7 +443,9 @@
     "hp": 2741,
     "bp": 3600,
     "specialization": "balanced",
-    "rewards": { "gold": 625 }
+    "rewards": {
+      "gold": 625
+    }
   },
   {
     "id": "m-wyrm",
@@ -288,7 +454,9 @@
     "hp": 2801,
     "bp": 4000,
     "specialization": "attacker",
-    "rewards": { "gold": 638 }
+    "rewards": {
+      "gold": 638
+    }
   },
   {
     "id": "m-kraken",
@@ -297,7 +465,9 @@
     "hp": 2922,
     "bp": 4360,
     "specialization": "bruiser",
-    "rewards": { "gold": 664 }
+    "rewards": {
+      "gold": 664
+    }
   },
   {
     "id": "boss-warlord",
@@ -306,7 +476,9 @@
     "hp": 4299,
     "bp": 4800,
     "specialization": "bruiser",
-    "rewards": { "gold": 842 },
+    "rewards": {
+      "gold": 842
+    },
     "rank": "boss",
     "toughness": 1.6
   },
@@ -317,7 +489,9 @@
     "hp": 3025,
     "bp": 5140,
     "specialization": "defender",
-    "rewards": { "gold": 687 }
+    "rewards": {
+      "gold": 687
+    }
   },
   {
     "id": "m-banshee",
@@ -326,7 +500,9 @@
     "hp": 3086,
     "bp": 5480,
     "specialization": "mystic",
-    "rewards": { "gold": 700 }
+    "rewards": {
+      "gold": 700
+    }
   },
   {
     "id": "m-hunter",
@@ -335,7 +511,9 @@
     "hp": 3207,
     "bp": 6000,
     "specialization": "agile",
-    "rewards": { "gold": 727 }
+    "rewards": {
+      "gold": 727
+    }
   },
   {
     "id": "boss-dragon",
@@ -344,10 +522,14 @@
     "hp": 4600,
     "bp": 6400,
     "specialization": "balanced",
-    "rewards": { "gold": 923 },
+    "rewards": {
+      "gold": 923
+    },
     "rank": "boss",
     "toughness": 1.8,
-    "attackInterval": [1.8]
+    "attackInterval": [
+      1.8
+    ]
   },
   {
     "id": "m-faerie",
@@ -356,7 +538,9 @@
     "hp": 3150,
     "bp": 6640,
     "specialization": "agile",
-    "rewards": { "gold": 735 }
+    "rewards": {
+      "gold": 735
+    }
   },
   {
     "id": "m-bloomfiend",
@@ -365,7 +549,9 @@
     "hp": 3220,
     "bp": 7200,
     "specialization": "mystic",
-    "rewards": { "gold": 750 }
+    "rewards": {
+      "gold": 750
+    }
   },
   {
     "id": "m-dreamstag",
@@ -374,7 +560,9 @@
     "hp": 3305,
     "bp": 7920,
     "specialization": "balanced",
-    "rewards": { "gold": 768 }
+    "rewards": {
+      "gold": 768
+    }
   },
   {
     "id": "m-sylvan-sentinel",
@@ -383,7 +571,9 @@
     "hp": 3400,
     "bp": 8760,
     "specialization": "agile",
-    "rewards": { "gold": 785 }
+    "rewards": {
+      "gold": 785
+    }
   },
   {
     "id": "boss-queen-of-blooms",
@@ -392,9 +582,13 @@
     "hp": 4950,
     "bp": 9600,
     "specialization": "defender",
-    "rewards": { "gold": 970 },
+    "rewards": {
+      "gold": 970
+    },
     "rank": "boss",
     "toughness": 1.6,
-    "attackInterval": [1.7]
+    "attackInterval": [
+      1.7
+    ]
   }
 ]

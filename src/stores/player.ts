@@ -74,12 +74,34 @@ function sumEquipStats(equips: Partial<Record<EquipSlotKey, Equipment>>): EquipS
       if (entry.key === 'DEF') summary.addDEF += entry.total
     })
 
-    summary.addHP += eq.subs.addHP ?? 0
-    summary.addQiMax += eq.subs.addQiMax ?? 0
-    summary.addATK += eq.subs.addATK ?? 0
-    summary.addDEF += eq.subs.addDEF ?? 0
-    summary.addAGI += eq.subs.addAGI ?? 0
-    summary.addREC += eq.subs.addREC ?? 0
+    const substats = Array.isArray(eq.substats) ? eq.substats : []
+    substats.forEach((stat) => {
+      const value = Number(stat.value)
+      if (!Number.isFinite(value) || value === 0) return
+      if (stat.valueType === 'percent') return
+      switch (stat.type) {
+        case 'HP':
+          summary.addHP += value
+          break
+        case 'QiMax':
+          summary.addQiMax += value
+          break
+        case 'ATK':
+          summary.addATK += value
+          break
+        case 'DEF':
+          summary.addDEF += value
+          break
+        case 'AGI':
+          summary.addAGI += value
+          break
+        case 'REC':
+          summary.addREC += value
+          break
+        default:
+          break
+      }
+    })
   })
 
   return summary
