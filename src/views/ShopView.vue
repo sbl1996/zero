@@ -311,7 +311,7 @@ const buyItem = (item: ItemDefinition | EquipmentTemplate, rawQuantity?: number)
         level: 0,
         id: `${item.id}-shop-${timestamp}-${index}`,
       })
-      inventoryStore.addEquipment(equipment)
+      inventoryStore.addEquipment(equipment, { markNew: true })
     }
   }
 

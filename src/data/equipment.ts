@@ -29,6 +29,7 @@ interface RawEquipmentItem {
   id: string
   name: string
   description?: string
+  artwork?: string
   slot: string
   required_tier?: number
   base_quality: EquipmentQuality
@@ -161,6 +162,7 @@ export const BASE_EQUIPMENT_TEMPLATES: EquipmentTemplate[] = rawItems.map((item)
     id: item.id,
     name: item.name,
     description: item.description,
+    artwork: item.artwork,
     slot: item.slot,
     requiredRealmTier: toRealmTier(item.required_tier),
     quality: item.base_quality,
@@ -188,6 +190,7 @@ export function instantiateEquipment(template: EquipmentTemplate, options: Insta
     templateId: template.id,
     name: template.name,
     description: template.description,
+    artwork: template.artwork,
     slot: template.slot,
     level: options.level ?? 0,
     quality: template.quality,
@@ -198,6 +201,19 @@ export function instantiateEquipment(template: EquipmentTemplate, options: Insta
     flatCapMultiplier: template.flatCapMultiplier,
     price: template.price ? { ...template.price } : undefined,
     flags: template.flags?.slice(),
+  }
+}
+
+export function applyEquipmentTemplateMetadata(equipment: Equipment): Equipment {
+  const templateKey = equipment.templateId ?? equipment.id
+  const template = templateKey ? EQUIPMENT_TEMPLATE_MAP.get(templateKey) : undefined
+  if (!template) return equipment
+  return {
+    ...equipment,
+    templateId: template.id,
+    name: template.name,
+    description: template.description,
+    artwork: template.artwork,
   }
 }
 

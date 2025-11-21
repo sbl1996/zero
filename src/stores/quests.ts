@@ -446,7 +446,7 @@ export const useQuestStore = defineStore('quests', {
         rewardClone.equipmentTemplates.forEach(entry => {
           const equipment = instantiateEquipmentFromTemplate(entry)
           if (equipment) {
-            inventory.addEquipment(equipment)
+            inventory.addEquipment(equipment, { markNew: true })
           }
         })
       }

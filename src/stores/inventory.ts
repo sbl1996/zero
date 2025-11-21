@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ITEMS, quickConsumableIds } from '@/data/items'
-import type { ItemDefinition, Equipment, InventorySave } from '@/types/domain'
+import { applyEquipmentTemplateMetadata } from '@/data/equipment'
+import type { ItemDefinition, Equipment, EquipmentInventoryMetaEntry, InventorySave } from '@/types/domain'
 
 type StackRecord = Record<string, number>
 
@@ -16,11 +17,26 @@ function defaultQuickSlots(): (string | null)[] {
   return ['potionHP', 'potionQi', 'potionQiPlus', null]
 }
 
+function cloneEquipmentMeta(meta: Record<string, EquipmentMetaState>) {
+  return Object.fromEntries(
+    Object.entries(meta).map(([id, entry]) => [id, { ...entry } satisfies EquipmentMetaState]),
+  )
+}
+
+interface EquipmentMetaState extends EquipmentInventoryMetaEntry {}
+
+interface AddEquipmentOptions {
+  markNew?: boolean
+  acquiredAt?: number
+}
+
 export const useInventoryStore = defineStore('inventory', {
   state: () => ({
     stacks: defaultStacks() as StackRecord,
     equipment: [] as Equipment[],
     quickSlots: defaultQuickSlots() as (string | null)[],
+    equipmentMeta: {} as Record<string, EquipmentMetaState>,
+    lastEquipmentAcquiredAt: null as number | null,
   }),
   getters: {
     all(state): Array<ItemDefinition & { quantity: number }> {
@@ -32,7 +48,12 @@ export const useInventoryStore = defineStore('inventory', {
     snapshot(state): InventorySave {
       return {
         stacks: { ...state.stacks },
-        equipment: state.equipment.map((equipment) => ({ ...equipment })),
+        equipment: state.equipment.map((equipment) => {
+          const { description: _desc, artwork: _artwork, ...rest } = equipment
+          return { ...rest }
+        }),
+        equipmentMeta: cloneEquipmentMeta(state.equipmentMeta),
+        lastEquipmentAcquiredAt: state.lastEquipmentAcquiredAt,
       }
     },
   },
@@ -40,8 +61,22 @@ export const useInventoryStore = defineStore('inventory', {
     hydrate(save?: Partial<InventorySave> | null) {
       const stacks = save?.stacks ?? {}
       const equipment = save?.equipment ?? []
+      const meta = save?.equipmentMeta ?? {}
       this.stacks = { ...defaultStacks(), ...stacks }
-      this.equipment = equipment.map((item) => ({ ...item }))
+      this.equipmentMeta = {}
+      this.equipment = equipment.map((item) => {
+        const copy = applyEquipmentTemplateMetadata({ ...item })
+        const entry = meta[item.id]
+        this.equipmentMeta[item.id] = entry
+          ? { ...entry }
+          : {
+              acquiredAt: Date.now(),
+              seenAt: Date.now(),
+              isNew: false,
+            }
+        return copy
+      })
+      this.lastEquipmentAcquiredAt = save?.lastEquipmentAcquiredAt ?? null
     },
     hydrateQuickSlots(slots: Array<string | null | undefined>) {
       const base = defaultQuickSlots()
@@ -69,8 +104,22 @@ export const useInventoryStore = defineStore('inventory', {
       this.stacks[id] = current - amount
       return true
     },
-    addEquipment(equipment: Equipment) {
-      this.equipment.push({ ...equipment })
+    addEquipment(equipment: Equipment, options: AddEquipmentOptions = {}) {
+      const copy = { ...equipment }
+      this.equipment.push(copy)
+      const existingMeta = this.equipmentMeta[copy.id]
+      const markNew = Boolean(options.markNew)
+      const acquiredAt = options.acquiredAt ?? existingMeta?.acquiredAt ?? Date.now()
+      const seenAt = markNew ? null : existingMeta?.seenAt ?? Date.now()
+      this.equipmentMeta[copy.id] = {
+        acquiredAt,
+        seenAt,
+        isNew: markNew ? true : existingMeta?.isNew ?? false,
+      }
+      if (markNew) {
+        this.lastEquipmentAcquiredAt = Date.now()
+      }
+      return copy
     },
     removeEquipment(equipmentId: string) {
       const index = this.equipment.findIndex((eq) => eq.id === equipmentId)
@@ -82,7 +131,19 @@ export const useInventoryStore = defineStore('inventory', {
       const index = this.equipment.findIndex((eq) => eq.id === equipmentId)
       if (index === -1) return false
       this.equipment.splice(index, 1)
+      delete this.equipmentMeta[equipmentId]
       return true
+    },
+    markEquipmentSeen(equipmentId: string) {
+      const meta = this.equipmentMeta[equipmentId]
+      if (!meta) return
+      meta.isNew = false
+      meta.seenAt = Date.now()
+    },
+    markEquipmentsSeen(equipmentIds: string[]) {
+      equipmentIds.forEach((id) => {
+        this.markEquipmentSeen(id)
+      })
     },
     getEquipment(equipmentId: string) {
       return this.equipment.find((eq) => eq.id === equipmentId) ?? null

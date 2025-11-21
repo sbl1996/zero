@@ -226,6 +226,7 @@ export interface Equipment {
   templateId?: string
   name: string
   description?: string
+  artwork?: string
   slot: EquipSlot
   level: number
   quality: EquipmentQuality
@@ -242,6 +243,7 @@ export interface EquipmentTemplate {
   id: string
   name: string
   description?: string
+  artwork?: string
   slot: EquipSlot
   requiredRealmTier?: RealmTier
   quality: EquipmentQuality
@@ -253,9 +255,17 @@ export interface EquipmentTemplate {
   flags?: string[]
 }
 
+export interface EquipmentInventoryMetaEntry {
+  acquiredAt: number
+  seenAt: number | null
+  isNew: boolean
+}
+
 export interface InventorySave {
   stacks: Record<string, number>
   equipment: Equipment[]
+  equipmentMeta?: Record<string, EquipmentInventoryMetaEntry>
+  lastEquipmentAcquiredAt?: number | null
 }
 
 export interface SkillSlots {

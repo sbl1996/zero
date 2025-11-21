@@ -1,12 +1,27 @@
 import { watch } from 'vue'
 import { setActivePinia } from 'pinia'
 import type { Pinia } from 'pinia'
-import type { SaveData } from '@/types/domain'
+import type { Equipment, EquipSlotKey, Player, SaveData } from '@/types/domain'
 import { load, save } from '@/utils/persist'
 import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
 import { useQuestStore } from './quests'
+
+function stripDynamicEquipmentFields(equipment: Equipment): Equipment {
+  const { description: _desc, artwork: _artwork, ...rest } = equipment
+  return { ...rest }
+}
+
+function sanitizePlayerState(player: Player): Player {
+  const equips = Object.fromEntries(
+    Object.entries(player.equips || {}).map(([slot, equip]) => {
+      if (!equip) return [slot, equip]
+      return [slot, stripDynamicEquipmentFields(equip)]
+    }),
+  ) as Partial<Record<EquipSlotKey, Equipment>>
+  return { ...player, equips }
+}
 
 const SAVE_VERSION = 3
 const SAVE_INTERVAL_MS = 60_000
@@ -63,7 +78,7 @@ export function setupPersistence(pinia: Pinia) {
 
   const collectSaveData = (): SaveData => ({
     version: SAVE_VERSION,
-    player: player.$state,
+    player: sanitizePlayerState(player.$state),
     inventory: inventory.snapshot,
     quickSlots: [...inventory.quickSlots],
     unlocks: progress.data,

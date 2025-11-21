@@ -199,6 +199,180 @@ button {
   background: linear-gradient(90deg, #ff4f71, #ff8359);
 }
 
+/* Equipment quality visual helpers */
+.quality-aura-normal {
+  box-shadow: 0 0 8px rgba(255, 255, 255, 0.08);
+}
+
+.quality-aura-fine {
+  box-shadow:
+    0 0 10px rgba(93, 225, 123, 0.3),
+    0 0 20px rgba(93, 225, 123, 0.2);
+}
+
+.quality-aura-rare {
+  box-shadow:
+    0 0 12px rgba(58, 152, 255, 0.35),
+    0 0 28px rgba(58, 152, 255, 0.25);
+}
+
+.quality-aura-excellent {
+  box-shadow:
+    0 0 14px rgba(209, 119, 255, 0.4),
+    0 0 32px rgba(209, 119, 255, 0.28);
+}
+
+.quality-aura-epic {
+  box-shadow:
+    0 0 16px rgba(255, 179, 71, 0.6),
+    0 0 36px rgba(255, 115, 34, 0.35);
+}
+
+.quality-particles-fine,
+.quality-particles-rare,
+.quality-particles-excellent,
+.quality-particles-epic {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.quality-particles-fine::before,
+.quality-particles-rare::before,
+.quality-particles-excellent::before,
+.quality-particles-epic::before {
+  content: '';
+  position: absolute;
+  width: 160%;
+  height: 160%;
+  top: -30%;
+  left: -30%;
+  opacity: 0.45;
+  animation: qualityParticlesFloat 8s linear infinite;
+  background-size: 40% 40%;
+}
+
+.quality-particles-fine::before {
+  background-image: radial-gradient(circle, rgba(93, 225, 123, 0.25) 0%, transparent 55%);
+}
+
+.quality-particles-rare::before {
+  background-image: radial-gradient(circle, rgba(58, 152, 255, 0.25) 0%, transparent 55%);
+}
+
+.quality-particles-excellent::before {
+  background-image: radial-gradient(circle, rgba(209, 119, 255, 0.3) 0%, transparent 55%);
+}
+
+.quality-particles-epic::before {
+  background-image: radial-gradient(circle, rgba(255, 179, 71, 0.35) 0%, transparent 55%);
+}
+
+@keyframes qualityParticlesFloat {
+  0% {
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+  50% {
+    transform: translate3d(5%, 8%, 0) scale(1.05);
+  }
+  100% {
+    transform: translate3d(10%, 12%, 0) scale(1.1);
+  }
+}
+
+.enhance-badge {
+  --enhance-badge-shadow: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-weight: 700;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  border: 1px solid rgba(255, 255, 255, 0.35);
+  box-shadow: var(--enhance-badge-shadow);
+}
+
+.enhance-badge--base {
+  background: linear-gradient(135deg, rgba(160, 160, 160, 0.2), rgba(60, 60, 60, 0.6));
+  color: #f0f0f0;
+  --enhance-badge-shadow: 0 0 8px rgba(255, 255, 255, 0.15);
+}
+
+.enhance-badge--charged {
+  background: linear-gradient(140deg, #5de17b, #18794c);
+  color: #eaffef;
+  --enhance-badge-shadow: 0 0 12px rgba(93, 225, 123, 0.45);
+}
+
+.enhance-badge--radiant {
+  background: linear-gradient(140deg, #74f0ff, #7f3dff);
+  color: #f9f6ff;
+  --enhance-badge-shadow: 0 0 16px rgba(116, 240, 255, 0.5);
+}
+
+.enhance-badge--mythic {
+  background: linear-gradient(145deg, #ffb347, #ff512f);
+  color: #fff9e6;
+  --enhance-badge-shadow:
+    0 0 16px rgba(255, 179, 71, 0.6),
+    0 0 28px rgba(255, 81, 47, 0.35);
+}
+
+.enhance-aura-none {
+  box-shadow: none;
+}
+
+.enhance-aura-sheen {
+  box-shadow: 0 0 12px rgba(255, 255, 255, 0.2);
+  animation: auraBreath 4s ease-in-out infinite;
+}
+
+.enhance-aura-breath {
+  box-shadow:
+    0 0 14px rgba(58, 152, 255, 0.4),
+    0 0 30px rgba(58, 152, 255, 0.2);
+  animation: auraBreath 3.6s ease-in-out infinite;
+}
+
+.enhance-aura-mythic {
+  box-shadow:
+    0 0 18px rgba(255, 179, 71, 0.6),
+    0 0 40px rgba(255, 115, 34, 0.4);
+  animation: auraPulse 2.4s ease-in-out infinite;
+}
+
+@keyframes auraBreath {
+  0% {
+    opacity: 0.7;
+  }
+  50% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes auraPulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.02);
+  }
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
 .resource-qi {
   background: linear-gradient(90deg, #38bdf8, #2563eb);
 }

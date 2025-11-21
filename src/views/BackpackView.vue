@@ -1,141 +1,55 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import EquipmentGrid from '@/components/equipment/EquipmentGrid.vue'
+import AttributeOverviewPanel from '@/components/equipment/AttributeOverviewPanel.vue'
+import EquipmentDetailPanel from '@/components/equipment/EquipmentDetailPanel.vue'
 import { useInventoryStore } from '@/stores/inventory'
 import { usePlayerStore } from '@/stores/player'
 import { useEquipmentActions } from '@/composables/useEquipmentActions'
-import { resolveMainStatBreakdown } from '@/composables/useEnhance'
+import { useEquipmentSelection } from '@/composables/useEquipmentSelection'
 import { ITEMS, consumableIds } from '@/data/items'
-import { EQUIPMENT_TEMPLATE_MAP } from '@/data/equipment'
 import { resolveItemIcon, textIcon } from '@/utils/itemIcon'
-import { formatRealmTierLabel, realmTierIndex } from '@/utils/realm'
-import { formatEquipmentSubstats, getEquipmentStatLabel, getEquipmentQualityMeta } from '@/utils/equipmentStats'
+import { createEquipmentGridEntry, type EquipmentEntryBuilderContext } from '@/utils/equipmentEntry'
 import type { ItemIcon } from '@/utils/itemIcon'
-import type { EquipSlot, EquipSlotKey, EquipmentSubStat, Equipment, EquipmentQuality, RealmTier } from '@/types/domain'
+import type { EquipSlotKey, Equipment } from '@/types/domain'
+import type { EquipmentGridEntry, EquipmentSubType } from '@/types/equipment-ui'
+import type { EquipmentFilterOption } from '@/components/equipment/EquipmentGrid.vue'
 
 const inventory = useInventoryStore()
 const player = usePlayerStore()
-const { requestEquip, requestUnequip } = useEquipmentActions()
 const router = useRouter()
+const { requestEquip, requestUnequip } = useEquipmentActions()
+const {
+  attributeOverviewForEquipment,
+  getSlotLabel,
+  formatMainStatLine,
+  getMainStatTooltip,
+  formatSubstatsList,
+  getEquipmentRequiredRealmTier,
+  isRealmRequirementMet,
+  requirementLabel,
+} = useEquipmentSelection()
 
-type BackpackEntryType = 'consumable' | 'material' | 'equipment' | 'unknown'
-type EquipmentSubType = 'weapon' | 'armor' | 'accessory' | 'shield'
+const entryContext: EquipmentEntryBuilderContext = {
+  getSlotLabel,
+  formatMainStatLine,
+  getMainStatTooltip,
+  formatSubstatsList,
+  getEquipmentRequiredRealmTier,
+  isRealmRequirementMet,
+  requirementLabel,
+}
+
+type BackpackEntryType = 'consumable' | 'material' | 'unknown'
 
 interface BackpackStackEntry {
-  kind: 'stack'
-  type: BackpackEntryType
   id: string
+  type: BackpackEntryType
   name: string
   quantity: number
   icon: ItemIcon
   detail: string
-}
-
-interface BackpackEquipmentEntry {
-  kind: 'equipment'
-  type: 'equipment'
-  subType: EquipmentSubType
-  source: 'inventory' | 'equipped'
-  id: string
-  name: string
-  icon: ItemIcon
-  level: number
-  slot: EquipSlot
-  slotKey?: EquipSlotKey
-  slotLabel: string
-  quality: EquipmentQuality
-  qualityLabel: string
-  qualityColor: string
-  mainDetail: string
-  subDetails: string[]
-  requiredRealmTier?: RealmTier
-  equipment: Equipment
-}
-
-type BackpackEntry = BackpackStackEntry | BackpackEquipmentEntry
-
-const slotCategoryLabels: Record<EquipSlot, string> = {
-  helmet: '头盔',
-  shieldL: '左手盾牌',
-  weaponR: '右手武器',
-  weapon2H: '双手武器',
-  armor: '铠甲',
-  ring: '戒指',
-}
-
-const slotKeyLabels: Record<EquipSlotKey, string> = {
-  helmet: '头盔',
-  shieldL: '左手盾牌',
-  weaponR: '右手武器',
-  weapon2H: '双手武器',
-  armor: '铠甲',
-  ring1: '戒指 1',
-  ring2: '戒指 2',
-}
-
-function resolveSlotLabel(slot: EquipSlot, slotKey?: EquipSlotKey): string {
-  if (slotKey) {
-    return slotKeyLabels[slotKey] ?? slotCategoryLabels[slot] ?? slotKey
-  }
-  return slotCategoryLabels[slot] ?? slot
-}
-
-function iconForStack(id: string): ItemIcon {
-  const icon = resolveItemIcon(id)
-  if (icon.type === 'text' && icon.text === '⬜') {
-    return textIcon('📦')
-  }
-  return icon
-}
-
-function getEquipmentSubType(slot: EquipSlot): EquipmentSubType {
-  switch (slot) {
-    case 'weaponR':
-    case 'weapon2H':
-      return 'weapon'
-    case 'helmet':
-    case 'armor':
-      return 'armor'
-    case 'ring':
-      return 'accessory'
-    case 'shieldL':
-      return 'shield'
-    default:
-      return 'armor' // 默认归类为防具
-  }
-}
-
-function getEquipmentSubTypeLabel(subType: EquipmentSubType): string {
-  switch (subType) {
-    case 'weapon':
-      return '武器'
-    case 'armor':
-      return '防具'
-    case 'accessory':
-      return '饰品'
-    case 'shield':
-      return '盾牌'
-    default:
-      return '其他'
-  }
-}
-
-function iconForSlot(slot: EquipSlot): ItemIcon {
-  switch (slot) {
-    case 'helmet':
-      return textIcon('🎩')
-    case 'shieldL':
-      return textIcon('🛡️')
-    case 'weaponR':
-    case 'weapon2H':
-      return textIcon('⚔️')
-    case 'armor':
-      return textIcon('🦺')
-    case 'ring':
-      return textIcon('💍')
-    default:
-      return textIcon('📦')
-  }
 }
 
 const itemMeta = ITEMS.reduce<Record<string, { type: BackpackEntryType; name: string; detail?: string }>>((acc, def) => {
@@ -145,58 +59,12 @@ const itemMeta = ITEMS.reduce<Record<string, { type: BackpackEntryType; name: st
   return acc
 }, {})
 
-function formatMainStat(equipment: Equipment): string {
-  const breakdowns = resolveMainStatBreakdown(equipment)
-  if (breakdowns.length === 0) return '主要属性 —'
-
-  const breakdown = breakdowns[0]!
-  const statLabel = getEquipmentStatLabel(breakdown.key)
-  const increase = breakdown.total - breakdown.base
-
-  return `${statLabel} ${breakdown.total} (+${increase})`
-}
-
-function getMainStatTooltip(equipment: Equipment): string {
-  const breakdowns = resolveMainStatBreakdown(equipment)
-  if (breakdowns.length === 0) return ''
-
-  const breakdown = breakdowns[0]!
-  const increase = breakdown.total - breakdown.base
-  const percentIncrease = Math.round((increase / breakdown.base) * 100)
-
-  return `基础: ${breakdown.base}, 强化加成: +${increase} (+${percentIncrease}%)`
-}
-
-function formatSubs(substats: EquipmentSubStat[] | undefined | null): string[] {
-  if (!substats) return ['无']
-  const entries = formatEquipmentSubstats(substats)
-  return entries.length > 0 ? entries : ['无']
-}
-
-function lookupTemplate(templateId?: string) {
-  if (!templateId) return undefined
-  return EQUIPMENT_TEMPLATE_MAP.get(templateId)
-}
-
-function getEquipmentRequiredRealmTier(equipment: Equipment): RealmTier | undefined {
-  if (equipment.requiredRealmTier !== undefined) return equipment.requiredRealmTier
-  const direct = lookupTemplate(equipment.templateId)
-  if (direct?.requiredRealmTier !== undefined) return direct.requiredRealmTier
-  const candidates = [equipment.id]
-  const parts = equipment.id.split('-')
-  const dropIndex = parts.indexOf('drop')
-  if (dropIndex !== -1 && parts.length >= dropIndex + 3) {
-    candidates.push(parts.slice(0, dropIndex).join('-'))
-  } else if (parts.length >= 3) {
-    candidates.push(parts.slice(0, -2).join('-'))
+function iconForStack(id: string): ItemIcon {
+  const icon = resolveItemIcon(id)
+  if (icon.type === 'text' && icon.text === '⬜') {
+    return textIcon('📦')
   }
-  for (const candidate of candidates) {
-    const template = lookupTemplate(candidate)
-    if (template?.requiredRealmTier !== undefined) {
-      return template.requiredRealmTier
-    }
-  }
-  return undefined
+  return icon
 }
 
 const stackEntries = computed<BackpackStackEntry[]>(() =>
@@ -206,9 +74,8 @@ const stackEntries = computed<BackpackStackEntry[]>(() =>
       const meta = itemMeta[id]
       const type = meta?.type ?? 'unknown'
       return {
-        kind: 'stack' as const,
-        type,
         id,
+        type,
         name: meta?.name ?? id,
         quantity,
         icon: iconForStack(id),
@@ -217,103 +84,119 @@ const stackEntries = computed<BackpackStackEntry[]>(() =>
     }),
 )
 
-const equipmentEntries = computed<BackpackEquipmentEntry[]>(() =>
-  inventory.equipment.map((equipment) => {
-    const qualityMeta = getEquipmentQualityMeta(equipment.quality)
-    return {
-      kind: 'equipment' as const,
-      type: 'equipment' as const,
-      subType: getEquipmentSubType(equipment.slot),
-      source: 'inventory' as const,
-      id: equipment.id,
-      name: equipment.name,
-      icon: iconForSlot(equipment.slot),
-      level: equipment.level,
-      slot: equipment.slot,
-      slotLabel: resolveSlotLabel(equipment.slot),
-      quality: equipment.quality,
-      qualityLabel: qualityMeta.label,
-      qualityColor: qualityMeta.color,
-      mainDetail: formatMainStat(equipment),
-      subDetails: formatSubs(equipment.substats),
-      requiredRealmTier: getEquipmentRequiredRealmTier(equipment),
-      equipment,
-    }
-  }),
-)
-
-const equippedEntries = computed<BackpackEquipmentEntry[]>(() =>
-  Object.entries(player.equips)
-    .filter((entry): entry is [EquipSlotKey, Equipment] => Boolean(entry[1]))
-    .map(([slotKey, equipment]) => {
-      const qualityMeta = getEquipmentQualityMeta(equipment.quality)
-      return {
-        kind: 'equipment' as const,
-        type: 'equipment' as const,
-        subType: getEquipmentSubType(equipment.slot),
-        source: 'equipped' as const,
-        id: equipment.id,
-        name: equipment.name,
-        icon: iconForSlot(equipment.slot),
-        level: equipment.level,
-        slot: equipment.slot,
-        slotKey,
-        slotLabel: resolveSlotLabel(equipment.slot, slotKey),
-        quality: equipment.quality,
-        qualityLabel: qualityMeta.label,
-        qualityColor: qualityMeta.color,
-        mainDetail: formatMainStat(equipment),
-        subDetails: formatSubs(equipment.substats),
-        requiredRealmTier: getEquipmentRequiredRealmTier(equipment),
-        equipment,
-      }
-    }),
-)
-
-const typeOrder: Record<BackpackEntryType, number> = {
-  consumable: 0,
-  material: 1,
-  equipment: 2,
-  unknown: 3,
-}
-
-function compareBackpackEntries(a: BackpackEntry, b: BackpackEntry): number {
-  const typeDelta = typeOrder[a.type] - typeOrder[b.type]
-  if (typeDelta !== 0) return typeDelta
-
-  if (a.kind === 'equipment' && b.kind === 'equipment') {
-    const sourceDelta = a.source === b.source ? 0 : a.source === 'equipped' ? -1 : 1
-    if (sourceDelta !== 0) return sourceDelta
-
-    const requiredA = a.requiredRealmTier ? realmTierIndex(a.requiredRealmTier) : -1
-    const requiredB = b.requiredRealmTier ? realmTierIndex(b.requiredRealmTier) : -1
-    if (requiredA !== requiredB) return requiredB - requiredA
-
-    if (a.level !== b.level) return b.level - a.level
-  }
-
-  return a.name.localeCompare(b.name, 'zh-CN')
-}
-
-const allEntries = computed<BackpackEntry[]>(() => {
-  const combinedEquipment = [...equippedEntries.value, ...equipmentEntries.value]
-  return [...stackEntries.value, ...combinedEquipment].sort(compareBackpackEntries)
-})
-
-const filterOptions = [
+const equipmentFilterOptions: EquipmentFilterOption[] = [
   { value: 'all', label: '全部' },
-  { value: 'consumable', label: '消耗品' },
-  { value: 'material', label: '宝石' },
-  { value: 'equipment', label: '装备' },
+  { value: 'equipped', label: '已穿戴' },
   { value: 'weapon', label: '武器' },
   { value: 'armor', label: '防具' },
   { value: 'accessory', label: '饰品' },
   { value: 'shield', label: '盾牌' },
+]
+
+type EquipmentFilterId = 'all' | 'equipped' | EquipmentSubType
+
+const equipmentFilter = ref<EquipmentFilterId>('all')
+
+function createEquipmentEntry(
+  equipment: Equipment,
+  source: 'inventory' | 'equipped',
+  slotKey?: EquipSlotKey,
+): EquipmentGridEntry {
+  const meta = inventory.equipmentMeta[equipment.id]
+  return createEquipmentGridEntry(equipment, entryContext, {
+    source,
+    slotKey,
+    meta,
+  })
+}
+
+const inventoryEquipmentEntries = computed(() => inventory.equipment.map((equipment) => createEquipmentEntry(equipment, 'inventory')))
+const equippedEquipmentEntries = computed(() =>
+  Object.entries(player.equips)
+    .filter((entry): entry is [EquipSlotKey, Equipment] => Boolean(entry[1]))
+    .map(([slotKey, equipment]) => createEquipmentEntry(equipment, 'equipped', slotKey)),
+)
+
+const qualityRank: Record<string, number> = {
+  epic: 4,
+  excellent: 3,
+  rare: 2,
+  fine: 1,
+  normal: 0,
+}
+
+function sortEquipmentEntries(entries: EquipmentGridEntry[]): EquipmentGridEntry[] {
+  return [...entries].sort((a, b) => {
+    if (a.source !== b.source) {
+      return a.source === 'equipped' ? -1 : 1
+    }
+    if (a.level !== b.level) {
+      return b.level - a.level
+    }
+    const qualityDelta = (qualityRank[b.quality] ?? 0) - (qualityRank[a.quality] ?? 0)
+    if (qualityDelta !== 0) return qualityDelta
+    return b.name.localeCompare(a.name, 'zh-CN')
+  })
+}
+
+const sortedEquipmentEntries = computed(() =>
+  sortEquipmentEntries([...equippedEquipmentEntries.value, ...inventoryEquipmentEntries.value]),
+)
+
+const filteredEquipmentEntries = computed(() => {
+  const list = sortedEquipmentEntries.value
+  if (equipmentFilter.value === 'all') return list
+  if (equipmentFilter.value === 'equipped') return list.filter((entry) => entry.source === 'equipped')
+  return list.filter((entry) => entry.subType === equipmentFilter.value)
+})
+
+const selectedEntryId = ref<string | null>(null)
+
+watch(
+  filteredEquipmentEntries,
+  (entries) => {
+    if (!entries.length) {
+      selectedEntryId.value = null
+      return
+    }
+    if (!entries.some((entry) => entry.id === selectedEntryId.value)) {
+      const first = entries[0]
+      selectedEntryId.value = first ? first.id : null
+    }
+  },
+  { immediate: true },
+)
+
+const selectedEntry = computed(() => filteredEquipmentEntries.value.find((entry) => entry.id === selectedEntryId.value) ?? null)
+
+watch(selectedEntry, (entry) => {
+  if (entry?.source === 'inventory') {
+    inventory.markEquipmentSeen(entry.id)
+  }
+})
+
+const stackFilterOptions = [
+  { value: 'consumable', label: '消耗品' },
+  { value: 'material', label: '宝石' },
 ] as const
 
-type FilterId = typeof filterOptions[number]['value']
+type StackFilter = (typeof stackFilterOptions)[number]['value']
 
-const filter = ref<FilterId>('all')
+const stackFilter = ref<StackFilter>('consumable')
+const stackSectionOpen = ref(false)
+
+const stackByFilter = computed(() => {
+  return stackEntries.value.reduce<Record<StackFilter, BackpackStackEntry[]>>(
+    (acc, entry) => {
+      if (entry.type === 'consumable') acc.consumable.push(entry)
+      else acc.material.push(entry)
+      return acc
+    },
+    { consumable: [], material: [] },
+  )
+})
+
+const visibleStacks = computed(() => stackByFilter.value[stackFilter.value])
 
 const actionLocked = ref(false)
 const feedbackMessage = ref('')
@@ -331,15 +214,6 @@ function withActionLock(run: () => void) {
   }, 500)
 }
 
-onBeforeUnmount(() => {
-  if (lockTimer) {
-    window.clearTimeout(lockTimer)
-  }
-  if (feedbackTimer) {
-    window.clearTimeout(feedbackTimer)
-  }
-})
-
 function showFeedback(message: string, success: boolean) {
   if (feedbackTimer) {
     window.clearTimeout(feedbackTimer)
@@ -352,17 +226,26 @@ function showFeedback(message: string, success: boolean) {
   }, 2000)
 }
 
-function enhanceEntryKey(entry: BackpackEquipmentEntry): string {
+onBeforeUnmount(() => {
+  if (lockTimer) {
+    window.clearTimeout(lockTimer)
+  }
+  if (feedbackTimer) {
+    window.clearTimeout(feedbackTimer)
+  }
+})
+
+function enhanceEntryKey(entry: EquipmentGridEntry): string {
   if (entry.source === 'equipped') {
     const slotId = entry.slotKey ?? entry.slot
     return `equipped-${slotId}`
   }
-  const index = inventory.equipment.indexOf(entry.equipment)
-  const suffix = index >= 0 ? index : entry.equipment.id
+  const index = inventory.equipment.findIndex((candidate) => candidate.id === entry.id)
+  const suffix = index >= 0 ? index : entry.id
   return `inventory-${suffix}`
 }
 
-function goEnhance(entry: BackpackEquipmentEntry) {
+function goEnhance(entry: EquipmentGridEntry) {
   const key = enhanceEntryKey(entry)
   router.push({ name: 'enhance', params: { entryKey: key } })
 }
@@ -378,12 +261,10 @@ function handleEquip(equipment: Equipment) {
       const replacedNames = result.unequipped.map((item) => item.name)
       const replacedText = replacedNames.length > 0 ? `（替换：${replacedNames.join('、')}）` : ''
       showFeedback(`已穿戴 ${result.equipped.name}${replacedText}`, true)
+    } else if (result.reason === 'already-equipped' && result.slot) {
+      showFeedback('该装备已穿戴', false)
     } else {
-      if (result.reason === 'already-equipped' && result.slot) {
-        showFeedback('该装备已穿戴', false)
-      } else {
-        showFeedback('装备失败，请稍后再试', false)
-      }
+      showFeedback('装备失败，请稍后再试', false)
     }
   })
 }
@@ -401,7 +282,6 @@ function handleUnequip(slot: EquipSlotKey) {
 
 function handleDiscard(equipment: Equipment) {
   if (actionLocked.value) return
-
   if (window.confirm(`确定要丢弃 ${equipment.name}？此操作无法撤销。`)) {
     withActionLock(() => {
       const success = inventory.discardEquipment(equipment.id)
@@ -412,20 +292,7 @@ function handleDiscard(equipment: Equipment) {
   }
 }
 
-function describeEquipped(slot: EquipSlotKey): string {
-  const equipped = player.equips[slot]
-  return equipped ? `${equipped.name}（+${equipped.level}）` : '未装备'
-}
-
-function currentEquipmentName(slot: EquipSlot) {
-  if (slot === 'ring') {
-    const ringSlots: EquipSlotKey[] = ['ring1', 'ring2']
-    return ringSlots.map((key) => `${slotKeyLabels[key]}：${describeEquipped(key)}`).join(' / ')
-  }
-  return describeEquipped(slot as EquipSlotKey)
-}
-
-function handleUseItem(itemId: string, itemName: string) {
+function handleStackUse(itemId: string, itemName: string) {
   withActionLock(async () => {
     const used = inventory.spend(itemId, 1)
     if (!used) {
@@ -435,7 +302,6 @@ function handleUseItem(itemId: string, itemName: string) {
 
     const effectApplied = await player.useItem(itemId)
     if (!effectApplied) {
-      // Return the item if no effect was applied
       inventory.add(itemId, 1)
       showFeedback('状态已满，无需使用', false)
       return
@@ -446,426 +312,287 @@ function handleUseItem(itemId: string, itemName: string) {
 }
 
 function canUseConsumable(itemId: string): boolean {
-  const def = ITEMS.find(item => item.id === itemId)
+  const def = ITEMS.find((item) => item.id === itemId)
   if (!def) return false
-
-  // Check if item has restorative effects or breakthrough
   if ('heal' in def && def.heal && def.heal > 0 && player.res.hp < player.res.hpMax) return true
   if ('restoreQi' in def && def.restoreQi && def.restoreQi > 0 && player.res.qi < player.res.qiMax) return true
   if ('breakthroughMethod' in def && def.breakthroughMethod) return true
   return false
 }
 
-const filteredEntries = computed(() => {
-  if (filter.value === 'all') return allEntries.value
-
-  // 处理主要类型筛选
-  if (['consumable', 'material', 'equipment'].includes(filter.value)) {
-    return allEntries.value.filter((entry) => entry.type === filter.value)
-  }
-
-  // 处理装备子类型筛选
-  return allEntries.value.filter((entry) => {
-    if (entry.kind === 'equipment') {
-      return entry.subType === filter.value
-    }
-    return false
-  })
-})
-
-const currentRealmIndex = computed(() => realmTierIndex(player.cultivation.realm.tier))
-
-function isRealmRequirementMet(required?: RealmTier): boolean {
-  if (!required) return true
-  const requirement = realmTierIndex(required)
-  return requirement <= currentRealmIndex.value
-}
-
-function entryTypeLabel(type: BackpackEntryType): string {
-  switch (type) {
-    case 'consumable':
-      return '消耗品'
-    case 'material':
-      return '宝石'
-    case 'equipment':
-      return '装备'
-    default:
-      return '其他'
+function handleGridEnter(entry: EquipmentGridEntry | null) {
+  if (!entry) return
+  if (entry.source === 'inventory') {
+    handleEquip(entry.equipment)
+  } else if (entry.slotKey) {
+    handleUnequip(entry.slotKey)
   }
 }
+
+function handleEntryUnequip(entry: EquipmentGridEntry) {
+  if (!entry.slotKey) return
+  handleUnequip(entry.slotKey)
+}
+
+const displayAttributeOverview = computed(() =>
+  attributeOverviewForEquipment(selectedEntry.value?.equipment ?? null, { slotKey: selectedEntry.value?.slotKey }),
+)
 </script>
 
 <template>
-  <section class="panel">
-    <h2 class="section-title">背包</h2>
-    <p class="text-muted text-small">查看当前持有的道具、宝石与备用装备，可用于战斗、强化或后续换装。</p>
+  <section class="panel inventory-shell">
+    <div class="inventory-stage">
+      <div class="inventory-stage__left">
+        <EquipmentGrid
+          :items="filteredEquipmentEntries"
+          :filters="equipmentFilterOptions"
+          :filter="equipmentFilter"
+          :selected-id="selectedEntryId"
+          @update:filter="equipmentFilter = $event as EquipmentFilterId"
+          @select="selectedEntryId = $event"
+          @enter="handleGridEnter"
+        />
 
-    <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
-      <div class="filter-row">
-        <span class="text-small text-muted">按类型筛选：</span>
-        <div class="filter-buttons">
-          <button
-            v-for="option in filterOptions"
-            :key="option.value"
-            class="filter-button"
-            :class="{ active: filter === option.value }"
-            type="button"
-            @click="filter = option.value"
-          >
-            {{ option.label }}
-          </button>
-        </div>
-      </div>
-
-      <div
-        class="feedback-banner"
-        :class="[
-          feedbackMessage ? (feedbackSuccess ? 'feedback-success' : 'feedback-error') : 'feedback-empty',
-          !feedbackMessage && 'feedback-placeholder'
-        ]"
-      >
-        {{ feedbackMessage }}
-      </div>
-
-      <div v-if="filteredEntries.length > 0" class="inventory-grid">
-        <article v-for="entry in filteredEntries" :key="entry.id" class="inventory-card">
-          <header class="inventory-card__header">
-            <div class="inventory-card__icon">
-              <img
-                v-if="entry.icon.type === 'image'"
-                :src="entry.icon.src"
-                :alt="entry.icon.alt || entry.name"
-              >
-              <span v-else>{{ entry.icon.text }}</span>
-            </div>
+        <section class="stack-panel">
+          <header class="stack-panel__header">
             <div>
-              <div class="inventory-card__name">
-                <template v-if="entry.kind === 'equipment'">
-                  <span class="inventory-card__name-text" :style="{ color: entry.qualityColor }">
-                    {{ entry.name }}
-                  </span>
-                  <span
-                    class="inventory-card__quality-tag"
-                    :style="{ borderColor: entry.qualityColor, color: entry.qualityColor }"
-                  >
-                    {{ entry.qualityLabel }}
-                  </span>
-                </template>
-                <template v-else>
-                  {{ entry.name }}
-                </template>
-              </div>
-              <div class="inventory-card__meta text-small text-muted">
-                <template v-if="entry.kind === 'equipment' && entry.source === 'equipped'">已穿戴装备</template>
-                <template v-else-if="entry.kind === 'equipment'">
-                  {{ getEquipmentSubTypeLabel(entry.subType) }}
-                </template>
-                <template v-else>{{ entryTypeLabel(entry.type) }}</template>
-              </div>
+              <p class="stack-panel__title">随身物资</p>
+              <p class="stack-panel__subtitle">消耗品、宝石等非装备物品整合至此</p>
             </div>
+            <button class="stack-panel__toggle" type="button" @click="stackSectionOpen = !stackSectionOpen">
+              {{ stackSectionOpen ? '收起' : '展开' }}
+            </button>
           </header>
 
-          <template v-if="entry.kind === 'stack'">
-            <div class="inventory-card__body">
-              <div class="text-small">库存：{{ entry.quantity }}</div>
-              <div class="text-small text-muted" style="margin-top: 4px;">{{ entry.detail }}</div>
-              <div v-if="entry.type === 'consumable'" class="inventory-card__actions">
-                <button
-                  class="use-button"
-                  type="button"
-                  :disabled="actionLocked || entry.quantity <= 0 || !canUseConsumable(entry.id)"
-                  @click="handleUseItem(entry.id, entry.name)"
-                >使用</button>
-              </div>
+          <div v-if="stackSectionOpen" class="stack-panel__body">
+            <div class="stack-panel__tabs">
+              <button
+                v-for="option in stackFilterOptions"
+                :key="option.value"
+                class="stack-tab"
+                :class="{ 'stack-tab--active': stackFilter === option.value }"
+                type="button"
+                @click="stackFilter = option.value"
+              >
+                {{ option.label }}
+              </button>
             </div>
-          </template>
 
-          <template v-else>
-            <div class="inventory-card__body">
-              <div class="text-small">部位：{{ entry.slotLabel }}</div>
-              <div v-if="entry.requiredRealmTier" class="text-small text-muted">
-                需求境界：{{ formatRealmTierLabel(entry.requiredRealmTier) }}
-                <span
-                  v-if="!isRealmRequirementMet(entry.requiredRealmTier)"
-                  class="text-warning text-small"
-                  style="margin-left: 6px;"
+            <div v-if="visibleStacks.length > 0" class="stack-list">
+              <article v-for="entry in visibleStacks" :key="entry.id" class="stack-card">
+                <div class="stack-card__icon">
+                  <img
+                    v-if="entry.icon.type === 'image'"
+                    :src="entry.icon.src"
+                    :alt="entry.icon.alt || entry.name"
+                  >
+                  <span v-else>{{ entry.icon.text }}</span>
+                </div>
+                <div class="stack-card__info">
+                  <p class="stack-card__name">{{ entry.name }}</p>
+                  <p class="stack-card__detail">{{ entry.detail }}</p>
+                  <p class="stack-card__quantity">库存：{{ entry.quantity }}</p>
+                </div>
+                <div
+                  v-if="entry.type === 'consumable'"
+                  class="stack-card__actions"
                 >
-                  境界不足，无法穿戴
-                </span>
-              </div>
-              <div class="text-small">强化等级：+{{ entry.level }}</div>
-              <div class="text-small" style="margin-top: 6px;" :title="getMainStatTooltip(entry.equipment)">
-                {{ entry.mainDetail }}
-              </div>
-              <ul class="inventory-card__list">
-                <li v-for="line in entry.subDetails" :key="line" class="text-small text-muted">{{ line }}</li>
-              </ul>
-              <div v-if="entry.source === 'inventory'" class="inventory-card__current text-small text-muted">
-                当前：{{ currentEquipmentName(entry.slot) }}
-              </div>
-              <div v-else class="inventory-card__state text-small text-muted">状态：已穿戴</div>
-              <div class="inventory-card__actions">
-                <button
-                  class="enhance-button"
-                  type="button"
-                  @click="goEnhance(entry)"
-                >强化</button>
-                <template v-if="entry.source === 'inventory'">
                   <button
-                    class="equip-button"
+                    class="stack-card__button"
                     type="button"
-                    :disabled="actionLocked || !isRealmRequirementMet(entry.requiredRealmTier)"
-                    :title="!isRealmRequirementMet(entry.requiredRealmTier) ? '境界不足，无法穿戴' : ''"
-                    @click="handleEquip(entry.equipment)"
-                  >穿戴</button>
-                  <button
-                    class="discard-button"
-                    type="button"
-                    :disabled="actionLocked"
-                    @click="handleDiscard(entry.equipment)"
-                  >丢弃</button>
-                </template>
-                <template v-else>
-                  <button
-                    class="unequip-button"
-                    type="button"
-                    :disabled="actionLocked"
-                    @click="handleUnequip(entry.slotKey!)"
-                  >卸下</button>
-                </template>
-              </div>
+                    :disabled="actionLocked || entry.quantity <= 0 || !canUseConsumable(entry.id)"
+                    @click="handleStackUse(entry.id, entry.name)"
+                  >
+                    使用
+                  </button>
+                </div>
+              </article>
             </div>
-          </template>
-        </article>
+            <p v-else class="stack-panel__empty">当前筛选下暂无物品</p>
+          </div>
+        </section>
       </div>
-      <div v-else class="text-small text-muted" style="padding: 12px; text-align: center;">背包暂时为空，快去冒险或商店补给吧！</div>
+
+      <div class="inventory-stage__right">
+        <AttributeOverviewPanel :attributes="displayAttributeOverview" />
+        <EquipmentDetailPanel
+          :entry="selectedEntry"
+          :action-locked="actionLocked"
+          :feedback-message="feedbackMessage"
+          :feedback-success="feedbackSuccess"
+          @equip="handleEquip($event.equipment)"
+          @unequip="handleEntryUnequip($event)"
+          @enhance="goEnhance($event)"
+          @discard="handleDiscard($event.equipment)"
+        />
+      </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.filter-row {
+.inventory-shell {
   display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.filter-buttons {
+.inventory-stage {
+  display: flex;
+  flex-direction: row;
+  gap: 20px;
+}
+
+.inventory-stage__left {
+  flex: 1.1;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.inventory-stage__right {
+  flex: 0.9;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.stack-panel {
+  padding: 16px;
+  border-radius: 20px;
+  background: rgba(6, 8, 14, 0.8);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.stack-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.stack-panel__title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.stack-panel__subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.stack-panel__toggle {
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: transparent;
+  color: #fff;
+  padding: 4px 14px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.stack-panel__body {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.stack-panel__tabs {
   display: flex;
   gap: 8px;
 }
 
-.filter-button {
-  padding: 6px 12px;
+.stack-tab {
+  padding: 4px 12px;
   border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.2);
-  color: #fff;
-  font-size: 13px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.75);
   cursor: pointer;
-  transition: background 0.2s ease;
 }
 
-.filter-button:hover {
+.stack-tab--active {
   background: rgba(255, 255, 255, 0.12);
+  color: #fff;
 }
 
-.filter-button.active {
-  background: rgba(255, 255, 255, 0.18);
-  border-color: rgba(255, 255, 255, 0.4);
+.stack-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
-.inventory-grid {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 12px;
-}
-
-@media (max-width: 768px) {
-  .inventory-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 480px) {
-  .inventory-grid {
-    grid-template-columns: 1fr;
-  }
-}
-
-.inventory-card {
-  background: rgba(0, 0, 0, 0.25);
-  border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 12px;
-}
-
-.inventory-card__header {
+.stack-card {
   display: flex;
   gap: 12px;
   align-items: center;
-  margin-bottom: 10px;
+  padding: 10px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
-.inventory-card__icon {
-  display: inline-flex;
+.stack-card__icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.06);
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  font-size: 24px;
-  line-height: 1;
+  font-size: 26px;
 }
 
-.inventory-card__icon img {
-  width: 100%;
-  height: 100%;
+.stack-card__icon img {
+  width: 32px;
+  height: 32px;
   object-fit: contain;
 }
 
-.inventory-card__name {
-  font-weight: 600;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  align-items: center;
-}
-
-.inventory-card__name-text {
-  font-weight: inherit;
-}
-
-.inventory-card__quality-tag {
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.inventory-card__body {
-  line-height: 1.6;
-}
-
-.inventory-card__list {
-  margin: 8px 0 0;
-  padding-left: 18px;
-}
-
-.inventory-card__list li {
-  margin-bottom: 4px;
-}
-
-.inventory-card__current {
-  margin-top: 8px;
-}
-
-.inventory-card__state {
-  margin-top: 8px;
-}
-
-.inventory-card__actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 10px;
-}
-
-.equip-button,
-.unequip-button,
-.enhance-button,
-.use-button {
+.stack-card__info {
   flex: 1;
-  padding: 6px 0;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(0, 0, 0, 0.35);
-  color: #fff;
+}
+
+.stack-card__name {
+  margin: 0;
+  font-size: 15px;
+}
+
+.stack-card__detail {
+  margin: 4px 0;
   font-size: 13px;
-  cursor: pointer;
-  transition: background 0.2s ease;
+  color: rgba(255, 255, 255, 0.6);
 }
 
-.equip-button:hover,
-.unequip-button:hover,
-.enhance-button:hover,
-.use-button:hover {
-  background: rgba(255, 255, 255, 0.12);
+.stack-card__quantity {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
 }
 
-.equip-button:disabled,
-.unequip-button:disabled,
-.enhance-button:disabled,
-.use-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-.enhance-button {
-  border-color: rgba(255, 215, 0, 0.35);
-  background: rgba(255, 215, 0, 0.2);
-  color: #fff6d5;
-}
-
-.enhance-button:hover {
-  background: rgba(255, 215, 0, 0.28);
-}
-
-.use-button {
-  border-color: rgba(76, 175, 80, 0.35);
-  background: rgba(76, 175, 80, 0.2);
-  color: #e8f5e8;
-}
-
-.use-button:hover {
-  background: rgba(76, 175, 80, 0.32);
-}
-
-.discard-button {
-  border-color: rgba(244, 67, 54, 0.35);
-  background: rgba(244, 67, 54, 0.2);
-  color: #ffcdd2;
-}
-
-.discard-button:hover {
-  background: rgba(244, 67, 54, 0.32);
-}
-
-.feedback-banner {
-  margin-bottom: 12px;
-  padding: 8px 12px;
-  border-radius: 8px;
-  font-size: 13px;
-  min-height: 37px; /* 固定高度防止跳动 */
+.stack-card__actions {
   display: flex;
-  align-items: center;
-  transition: all 0.3s ease;
 }
 
-.feedback-success {
-  background: rgba(76, 175, 80, 0.2);
-  border: 1px solid rgba(76, 175, 80, 0.35);
-  color: #e8f5e8;
+.stack-card__button {
+  border-radius: 999px;
+  border: 1px solid rgba(125, 224, 148, 0.4);
+  padding: 6px 16px;
+  background: rgba(125, 224, 148, 0.16);
+  color: #fff;
+  cursor: pointer;
 }
 
-.feedback-error {
-  background: rgba(244, 67, 54, 0.2);
-  border: 1px solid rgba(244, 67, 54, 0.35);
-  color: #ffcdd2;
+.stack-panel__empty {
+  text-align: center;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.5);
 }
 
-.feedback-empty {
-  background: transparent;
-  border: 1px solid transparent;
-  color: transparent;
-}
-
-.text-warning {
-  color: #ffc107;
-}
-
-.text-tiny {
-  font-size: 11px;
-  opacity: 0.8;
+@media (max-width: 960px) {
+  .inventory-stage {
+    flex-direction: column;
+  }
 }
 </style>

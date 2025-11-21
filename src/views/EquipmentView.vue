@@ -1,50 +1,121 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
+import PaperDollCanvas from '@/components/equipment/PaperDollCanvas.vue'
+import EquipmentDetailPanel from '@/components/equipment/EquipmentDetailPanel.vue'
+import AttributeOverviewPanel from '@/components/equipment/AttributeOverviewPanel.vue'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
+import { useEquipmentSelection } from '@/composables/useEquipmentSelection'
+import { useEquipmentActions } from '@/composables/useEquipmentActions'
+import { createEquipmentGridEntry, type EquipmentEntryBuilderContext } from '@/utils/equipmentEntry'
+import { iconForEquipSlot } from '@/utils/equipmentIcons'
 import { ITEMS, quickConsumableIds } from '@/data/items'
-import { resolveMainStatBreakdown } from '@/composables/useEnhance'
-import { getEquipmentStatLabel, formatEquipmentSubstats, getEquipmentQualityMeta } from '@/utils/equipmentStats'
-import type { EquipmentSubStat } from '@/types/domain'
+import type { EquipSlot, EquipSlotKey } from '@/types/domain'
+import type { EquipmentGridEntry } from '@/types/equipment-ui'
+import type { PaperDollSlotState } from '@/types/paperDoll'
 
 const player = usePlayerStore()
 const inventory = useInventoryStore()
 const router = useRouter()
+const { requestUnequip } = useEquipmentActions()
+const {
+  attributeOverview,
+  getSlotLabel,
+  getSlotKeyLabel,
+  formatMainStatLine,
+  getMainStatTooltip,
+  formatSubstatsList,
+  getEquipmentRequiredRealmTier,
+  isRealmRequirementMet,
+  requirementLabel,
+} = useEquipmentSelection()
 
-const slots = [
-  ['helmet', '头盔'],
-  ['shieldL', '左手盾牌'],
-  ['weaponR', '右手武器'],
-  ['weapon2H', '双手武器'],
-  ['armor', '铠甲'],
-  ['ring1', '戒指 1'],
-  ['ring2', '戒指 2'],
-] as const
+const entryContext: EquipmentEntryBuilderContext = {
+  getSlotLabel,
+  formatMainStatLine,
+  getMainStatTooltip,
+  formatSubstatsList,
+  getEquipmentRequiredRealmTier,
+  isRealmRequirementMet,
+  requirementLabel,
+}
 
-const equipList = computed(() =>
-  slots.map(([key, label]) => {
-    const item = player.equips[key]
-    const breakdown = item ? resolveMainStatBreakdown(item)[0] ?? null : null
-    const qualityMeta = item ? getEquipmentQualityMeta(item.quality) : null
-    return { key, label, item, breakdown, qualityMeta }
+const SLOT_LAYOUT: Array<{ key: EquipSlotKey; label: string; baseSlot: EquipSlot }> = [
+  { key: 'helmet', label: '头盔', baseSlot: 'helmet' },
+  { key: 'shieldL', label: '左手盾牌', baseSlot: 'shieldL' },
+  { key: 'weaponR', label: '右手武器', baseSlot: 'weaponR' },
+  { key: 'armor', label: '铠甲', baseSlot: 'armor' },
+  { key: 'ring1', label: '戒指 1', baseSlot: 'ring' },
+  { key: 'ring2', label: '戒指 2', baseSlot: 'ring' },
+  { key: 'weapon2H', label: '双手武器', baseSlot: 'weapon2H' },
+]
+
+const paperDollSlots = computed<PaperDollSlotState[]>(() =>
+  SLOT_LAYOUT.map((definition) => {
+    const equipment = player.equips[definition.key] ?? null
+    const entry = equipment
+      ? createEquipmentGridEntry(equipment, entryContext, {
+          source: 'equipped',
+          slotKey: definition.key,
+        })
+      : null
+    return {
+      key: definition.key,
+      label: getSlotKeyLabel(definition.key),
+      placeholderIcon: iconForEquipSlot(definition.baseSlot),
+      entry,
+    }
   }),
 )
 
-const quickSlotOptions = ITEMS.filter(item => quickConsumableIds.has(item.id))
+const selectedSlotKey = ref<EquipSlotKey | null>(null)
+
+watch(
+  paperDollSlots,
+  (slots) => {
+    if (selectedSlotKey.value && slots.some((slot) => slot.key === selectedSlotKey.value)) {
+      return
+    }
+    const fallback = slots.find((slot) => slot.entry)?.key ?? slots[0]?.key ?? null
+    selectedSlotKey.value = fallback
+  },
+  { immediate: true },
+)
+
+const selectedEntry = computed(() => {
+  if (!selectedSlotKey.value) return null
+  return paperDollSlots.value.find((slot) => slot.key === selectedSlotKey.value)?.entry ?? null
+})
+
+const quickSlotOptions = ITEMS.filter((item) => quickConsumableIds.has(item.id))
+
+function handleSlotSelect(key: EquipSlotKey) {
+  selectedSlotKey.value = key
+}
+
+function enhanceEntryKey(entry: EquipmentGridEntry) {
+  const slotId = entry.slotKey ?? entry.slot
+  return `equipped-${slotId}`
+}
+
+function goEnhance(entry: EquipmentGridEntry | null) {
+  if (!entry) return
+  const entryKey = enhanceEntryKey(entry)
+  router.push({ name: 'enhance', params: { entryKey } })
+}
+
+function goBackpack() {
+  router.push({ name: 'backpack' })
+}
 
 function handleQuickSlotChange(index: number, value: string) {
   inventory.setQuickSlot(index, value.length > 0 ? value : null)
 }
 
-function formatPercent(value: number | undefined | null) {
-  if (value === null || value === undefined) return ''
-  return `${Math.round(value * 100)}%`
-}
-
 function quickSlotEffectText(itemId: string | null) {
   if (!itemId) return ''
-  const item = quickSlotOptions.find(option => option.id === itemId)
+  const item = quickSlotOptions.find((option) => option.id === itemId)
   if (!item) return ''
   const effects: string[] = []
   if ('heal' in item && item.heal) effects.push(`HP+${item.heal}`)
@@ -52,184 +123,299 @@ function quickSlotEffectText(itemId: string | null) {
   return effects.join(' ')
 }
 
-function formatSubStats(substats: EquipmentSubStat[] | undefined | null) {
-  if (!substats) return '无'
-  const stats = formatEquipmentSubstats(substats)
-  return stats.length > 0 ? stats.join(', ') : '无'
+function quickSlotName(itemId: string | null) {
+  if (!itemId) return '空'
+  const item = quickSlotOptions.find((option) => option.id === itemId)
+  return item?.name ?? itemId
 }
 
-function goEnhance(slotKey: typeof slots[number][0]) {
-  router.push({ name: 'enhance', params: { entryKey: `equipped-${slotKey}` } })
+const actionLocked = ref(false)
+const feedbackMessage = ref('')
+const feedbackSuccess = ref(true)
+let lockTimer: number | null = null
+let feedbackTimer: number | null = null
+
+function withActionLock(run: () => void) {
+  if (actionLocked.value) return
+  actionLocked.value = true
+  run()
+  lockTimer = window.setTimeout(() => {
+    actionLocked.value = false
+    lockTimer = null
+  }, 500)
 }
+
+function showFeedback(message: string, success: boolean) {
+  if (feedbackTimer) {
+    window.clearTimeout(feedbackTimer)
+  }
+  feedbackMessage.value = message
+  feedbackSuccess.value = success
+  feedbackTimer = window.setTimeout(() => {
+    feedbackMessage.value = ''
+    feedbackTimer = null
+  }, 2000)
+}
+
+function handleUnequip(entry: EquipmentGridEntry) {
+  if (!entry.slotKey) return
+  withActionLock(() => {
+    const result = requestUnequip(entry.slotKey as EquipSlotKey)
+    if (result.ok) {
+      showFeedback(`已卸下 ${result.equipment.name}`, true)
+    } else {
+      showFeedback('该槽位没有装备', false)
+    }
+  })
+}
+
+function handleDetailEnhance(entry: EquipmentGridEntry) {
+  goEnhance(entry)
+}
+
+const quickSlotCards = computed(() =>
+  inventory.quickSlots.map((slotId, index) => ({
+    index,
+    itemId: slotId,
+    name: quickSlotName(slotId),
+    effect: quickSlotEffectText(slotId) || '—',
+    quantity: slotId ? inventory.quantity(slotId) : 0,
+  })),
+)
+
+const selectedSlotLabel = computed(() => {
+  if (!selectedSlotKey.value) return ''
+  return getSlotKeyLabel(selectedSlotKey.value)
+})
+
+watch(
+  () => selectedEntry.value?.id ?? null,
+  () => {
+    feedbackMessage.value = ''
+  },
+)
+
+function formatQuickSlotOptionLabel(itemId: string) {
+  const item = quickSlotOptions.find((option) => option.id === itemId)
+  if (!item) return itemId
+  return `${item.name}（库存 ${inventory.quantity(item.id)}）`
+}
+
+onBeforeUnmount(() => {
+  if (lockTimer) window.clearTimeout(lockTimer)
+  if (feedbackTimer) window.clearTimeout(feedbackTimer)
+})
 </script>
 
 <template>
-  <section class="panel">
-    <h2 class="section-title">装备</h2>
-    <p class="text-muted text-small">当前穿戴的装备与其属性加成，后续换装功能将从背包中选择装备进行替换。</p>
+  <section class="panel equipment-shell">
+    <div class="equipment-stage">
+      <div class="equipment-main">
+        <div class="equipment-main__left">
+          <div class="paper-doll-wrapper">
+            <PaperDollCanvas
+              :slots="paperDollSlots"
+              :selected-key="selectedSlotKey"
+              @select="handleSlotSelect"
+            />
+          </div>
+        </div>
 
-    <div class="panel equipment-table-panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
-      <div class="equipment-table-wrapper">
-        <table class="stat-table equipment-table">
-        <thead>
-          <tr>
-            <th>部位</th>
-            <th>名称</th>
-            <th>强化等级</th>
-            <th>主属性</th>
-            <th>副属性</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr v-for="slot in equipList" :key="slot.key">
-            <td>{{ slot.label }}</td>
-            <td>
-              <template v-if="slot.item">
-                <div class="equip-name-cell">
-                  <div class="equip-name">
-                    <span class="equip-name__text" :style="{ color: slot.qualityMeta?.color }">
-                      {{ slot.item.name }}
-                    </span>
-                  </div>
-                  <button
-                    class="btn btn-secondary enhance-button"
-                    type="button"
-                    @click="goEnhance(slot.key)"
-                  >
-                    强化
-                  </button>
-                </div>
-              </template>
-              <template v-else>未装备</template>
-            </td>
-            <td>{{ slot.item ? `+${slot.item.level}` : '-' }}</td>
-            <td>
-              <template v-if="slot.item && slot.breakdown">
-                <span>{{ getEquipmentStatLabel(slot.breakdown.key) }} {{ slot.breakdown.total }}</span>
-                <span class="text-muted text-tiny" style="display: block;">
-                  基础 {{ slot.breakdown.base }} + 固定 {{ slot.breakdown.flat }}，百分比 {{ formatPercent(slot.breakdown.percent) }}
-                </span>
-              </template>
-              <template v-else-if="slot.item && slot.item.mainStat">
-                <span>{{ getEquipmentStatLabel(slot.item.mainStat.type) }} {{ slot.item.mainStat.value }}</span>
-              </template>
-              <template v-else>-</template>
-            </td>
-            <td>
-              <template v-if="slot.item">
-                <span class="text-small">{{ formatSubStats(slot.item.substats) }}</span>
-              </template>
-              <template v-else>-</template>
-            </td>
-          </tr>
-        </tbody>
-        </table>
+        <div class="equipment-main__right">
+          <AttributeOverviewPanel :attributes="attributeOverview" />
+          <EquipmentDetailPanel
+            :entry="selectedEntry"
+            :action-locked="actionLocked"
+            :feedback-message="feedbackMessage"
+            :feedback-success="feedbackSuccess"
+            :show-comparison="false"
+            equipped-action="replace"
+            :empty-title="selectedSlotLabel ? `${selectedSlotLabel} 未装备` : '未选择装备槽位'"
+            empty-action-label="从背包选择装备"
+            @unequip="handleUnequip"
+            @enhance="handleDetailEnhance"
+            @replace="goBackpack"
+            @empty-action="goBackpack"
+          />
+        </div>
       </div>
-    </div>
 
-    <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
-      <h3 class="section-title" style="font-size: 16px;">快捷物品栏</h3>
-      <div
-        v-for="(slotId, index) in inventory.quickSlots"
-        :key="index"
-        class="quick-slot-row"
-      >
-        <label :for="`quick-slot-${index}`" class="text-small quick-slot-label">槽位 {{ index + 1 }}</label>
-        <select
-          :id="`quick-slot-${index}`"
-          class="quick-slot-select"
-          :value="slotId ?? ''"
-          @change="handleQuickSlotChange(index, ($event.target as HTMLSelectElement).value)"
-        >
-          <option value="">空</option>
-          <option v-for="item in quickSlotOptions" :key="item.id" :value="item.id">
-            {{ item.name }}（库存 {{ inventory.quantity(item.id) }}）
-          </option>
-        </select>
-        <div class="text-small text-muted quick-slot-meta">效果 {{ quickSlotEffectText(slotId) || '—' }}</div>
-        <div class="text-small text-muted quick-slot-meta">当前 {{ slotId ? inventory.quantity(slotId) : 0 }}</div>
-      </div>
-      <div class="text-small text-muted">提示：可在此处预设战斗中使用的药水，空槽位将不会在战斗界面显示。</div>
+      <section class="quick-slot-panel">
+        <header>
+          <h3>快捷物品栏</h3>
+          <p>战斗中可立即使用，保持药水充足可减少准备时间。</p>
+        </header>
+        <div class="quick-slot-panel__grid">
+          <article
+            v-for="slot in quickSlotCards"
+            :key="slot.index"
+            class="quick-slot-card"
+            :class="{ 'quick-slot-card--armed': slot.itemId }"
+          >
+            <div class="quick-slot-card__head">
+              <p class="quick-slot-card__label">槽位 {{ slot.index + 1 }}</p>
+              <span class="quick-slot-card__qty">库存 {{ slot.quantity }}</span>
+            </div>
+            <select
+              class="quick-slot-card__select"
+              :value="slot.itemId ?? ''"
+              @change="handleQuickSlotChange(slot.index, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">空</option>
+              <option
+                v-for="item in quickSlotOptions"
+                :key="item.id"
+                :value="item.id"
+              >
+                {{ formatQuickSlotOptionLabel(item.id) }}
+              </option>
+            </select>
+            <p class="quick-slot-card__name">{{ slot.name }}</p>
+            <p class="quick-slot-card__effect">效果：{{ slot.effect }}</p>
+          </article>
+        </div>
+      </section>
     </div>
   </section>
 </template>
 
 <style scoped>
-.equipment-table-wrapper {
-  overflow-x: auto;
+.equipment-shell {
+  padding: 20px;
+  border-radius: 28px;
+  background: rgba(6, 8, 16, 0.92);
 }
 
-.equipment-table {
-  min-width: 520px;
-}
-
-.equip-name-cell {
+.equipment-head {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 16px;
 }
 
-.equip-name {
+.equipment-head__meta {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.equipment-stage {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.equip-name__text {
-  font-weight: inherit;
-}
-
-.equip-quality-tag {
-  font-size: 12px;
-  padding: 2px 6px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.enhance-button {
-  padding: 6px 12px;
-  font-size: 12px;
-}
-
-.quick-slot-row {
+.equipment-main {
   display: grid;
-  grid-template-columns: 80px minmax(0, 1fr) auto auto;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: stretch;
 }
 
-.quick-slot-label {
+.equipment-main__left {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.paper-doll-wrapper {
+  height: 100%;
+}
+
+.paper-doll-wrapper :deep(.paper-doll) {
+  height: 100%;
+}
+
+.equipment-main__right {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  gap: 16px;
+  height: 100%;
+  min-height: 0;
+}
+
+.quick-slot-panel {
+  padding: 16px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.quick-slot-panel header h3 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.quick-slot-panel header p {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.quick-slot-panel__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.quick-slot-card {
+  padding: 12px;
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.quick-slot-card--armed {
+  border-color: rgba(123, 220, 158, 0.4);
+  background: rgba(123, 220, 158, 0.08);
+}
+
+.quick-slot-card__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.quick-slot-card__label {
+  margin: 0;
+  font-size: 13px;
   font-weight: 600;
 }
 
-.quick-slot-select {
-  padding: 6px 8px;
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background: rgba(0, 0, 0, 0.35);
+.quick-slot-card__qty {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.quick-slot-card__select {
+  width: 100%;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: rgba(0, 0, 0, 0.4);
   color: #fff;
 }
 
-.quick-slot-meta {
-  text-align: right;
+.quick-slot-card__name {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
 }
 
-@media (max-width: 640px) {
-  .equipment-table {
-    min-width: 100%;
-  }
+.quick-slot-card__effect {
+  margin: 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.7);
+}
 
-  .quick-slot-row {
+@media (max-width: 1024px) {
+  .equipment-main {
     grid-template-columns: 1fr;
-    gap: 8px;
-    align-items: stretch;
-  }
-
-  .quick-slot-meta {
-    text-align: left;
   }
 }
 </style>

@@ -17,7 +17,7 @@ import {
 } from '@/composables/useLeveling'
 import type { RealmBodyFoundation } from '@/composables/useLeveling'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
-import { getStartingEquipment } from '@/data/equipment'
+import { applyEquipmentTemplateMetadata, getStartingEquipment } from '@/data/equipment'
 import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
 import { applySkillUsage, createDefaultSkillProgress } from '@/composables/useSkills'
 import type { SkillUsageResult } from '@/composables/useSkills'
@@ -381,6 +381,14 @@ export const usePlayerStore = defineStore('player', {
 
       const hasEquipment = Object.keys(merged.equips || {}).length > 0
       const finalPlayer = hasEquipment ? merged : withStartingEquipment(merged)
+
+      const equipsWithMetadata = Object.fromEntries(
+        Object.entries(finalPlayer.equips || {}).map(([slot, equip]) => {
+          if (!equip) return [slot, equip]
+          return [slot, applyEquipmentTemplateMetadata(equip)]
+        }),
+      ) as typeof finalPlayer.equips
+      finalPlayer.equips = equipsWithMetadata
 
       Object.assign(this, finalPlayer)
       this.ensureAllSkillProgress()

@@ -1161,7 +1161,7 @@ export const useBattleStore = defineStore('battle', {
           const levelRange: [number, number] = monster.isBoss ? [2, 5] : [0, 2]
           const equipment = drawEquipmentFromTier(choice.tier, lootRng, { initialLevelRange: levelRange })
           if (!equipment) continue
-          inventory.addEquipment(equipment)
+          inventory.addEquipment(equipment, { markNew: true })
           equipmentDrops.push({
             kind: 'equipment',
             equipment,
