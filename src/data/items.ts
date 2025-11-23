@@ -8,6 +8,7 @@ const baseItems: ItemDefinition[] = [
   { id: 'blessGem', name: '祝福宝石', price: 1000, usage: '装备1-5级强化耗材' },
   { id: 'soulGem', name: '灵魂宝石', price: 2000, usage: '装备6-10级强化耗材' },
   { id: 'miracleGem', name: '奇迹宝石', price: 5000, usage: '装备11-15级强化耗材' },
+  { id: 'goldenFleece', name: '金羊毛', price: 500, usage: '黄金绵羊的稀有材料' },
 ]
 
 const coreShardItems: ItemDefinition[] = CORE_SHARD_CONFIGS.map((config) => ({

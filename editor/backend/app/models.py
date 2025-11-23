@@ -109,3 +109,53 @@ class MapMetadataFile(BaseModel):
 
 
 MapList = List[MapMetadata]
+
+
+# Equipment models
+class EquipmentStat(BaseModel):
+    """Equipment stat (main or sub)."""
+    type: str
+    value: float
+    value_type: Optional[str] = None
+
+
+class EquipmentPrice(BaseModel):
+    """Equipment price information."""
+    buy: Optional[int] = None
+    sell: Optional[int] = None
+
+
+class EnhanceMaterial(BaseModel):
+    """Material required for enhancement."""
+    id: str
+    quantity: Optional[int] = 1
+
+
+class EnhanceMaterialRequirement(BaseModel):
+    """Enhancement material requirement for a specific level."""
+    target_level: Optional[int] = None
+    materials: Optional[List[EnhanceMaterial]] = Field(default_factory=list)
+
+
+class EquipmentItem(BaseModel):
+    """Representation of equipment item stored in JSON."""
+    
+    model_config = ConfigDict(extra="allow")
+    
+    id: str
+    name: str
+    description: Optional[str] = None
+    artwork: Optional[str] = None
+    slot: str
+    base_quality: str
+    required_tier: Optional[int] = None
+    base_main: EquipmentStat
+    substats: Optional[List[EquipmentStat]] = Field(default_factory=list)
+    price: Optional[EquipmentPrice] = None
+    flags: Optional[List[str]] = Field(default_factory=list)
+    exclusive: Optional[str] = None
+    flatCapMultiplier: Optional[float] = None
+    enhance_materials: Optional[List[EnhanceMaterialRequirement]] = Field(default_factory=list)
+
+
+EquipmentList = List[EquipmentItem]

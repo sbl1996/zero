@@ -1,117 +1,125 @@
 [
     {
-        "id": "starter-sword",
+        "id": "bronze-helmet",
+        "name": "青铜头盔",
+        "description": "普通青铜打造的简单头盔，提供基础的头部防护。",
+        "artwork": "eq-bronze-helmet.webp",
+        "slot": "helmet",
         "base_quality": "normal",
-        "slot": "weaponR",
         "required_tier": 1,
-        "name": "新手长剑",
-        "description": "冒险者的第一把武器，能为旅途带来一些帮助。也许经历无数战斗之后，你会发现它的真正价值。",
-        "base_main": {
-            "type": "ATK",
-            "value": 10
-        },
-        "substats": [],
-        "price": {
-            "sell": 100,
-            "buy": 120
-        },
-        "flags": [
-            "starter"
-        ]
-    },
-    {
-        "id": "leather-armor",
-        "base_quality": "normal",
-        "slot": "armor",
-        "required_tier": 1,
-        "name": "皮甲",
-        "description": "由动物皮革制成的轻便护甲，能防御一些基本攻击。",
         "base_main": {
             "type": "DEF",
-            "value": 8
+            "value": 5.0
         },
         "substats": [],
         "price": {
-            "sell": 80,
-            "buy": 100
+            "buy": 200,
+            "sell": 100
         },
-        "flags": [
-            "starter"
-        ]
+        "flags": [],
+        "enhance_materials": []
+    },
+    {
+        "id": "rough-leather-cap",
+        "name": "粗皮帽",
+        "description": "由粗糙皮革缝制而成的简易头帽，虽然外观朴实，但足够耐用，适合新手冒险者上路时使用。",
+        "artwork": "eq-rough-leather-cap.webp",
+        "slot": "helmet",
+        "base_quality": "normal",
+        "required_tier": 1,
+        "base_main": {
+            "type": "DEF",
+            "value": 2.0
+        },
+        "substats": [],
+        "price": {
+            "buy": 100,
+            "sell": 50
+        },
+        "flags": [],
+        "enhance_materials": []
     },
     {
         "id": "straw-hat",
-        "base_quality": "normal",
-        "slot": "helmet",
-        "required_tier": 1,
         "name": "草帽",
         "description": "一顶简单的草帽，戴着很有少年感。",
+        "artwork": "eq-straw-hat.webp",
+        "slot": "helmet",
+        "base_quality": "normal",
+        "required_tier": 1,
         "base_main": {
             "type": "DEF",
-            "value": 4
+            "value": 4.0
         },
         "substats": [],
         "price": {
-            "sell": 50,
-            "buy": 65
+            "buy": 65,
+            "sell": 50
         },
         "flags": [
             "starter"
-        ]
+        ],
+        "enhance_materials": []
     },
     {
-        "id": "iron-sword",
-        "base_quality": "normal",
-        "slot": "weaponR",
+        "id": "phoenix-helmet",
+        "name": "凤凰冠冕",
+        "description": "传说中的凤凰羽毛编织而成的不灭冠冕，佩戴者能获得凤凰般的重生之力。",
+        "artwork": "eq-phoenix-helmet.webp",
+        "slot": "helmet",
+        "base_quality": "epic",
         "required_tier": 2,
-        "name": "铁剑",
-        "description": "10级冒险者常用的铁剑，剑身经过淬火处理，比新手武器更耐用。",
-        "base_main": {
-            "type": "ATK",
-            "value": 20
-        },
-        "substats": [],
-        "price": {
-            "sell": 500,
-            "buy": 600
-        },
-        "flags": []
-    },
-    {
-        "id": "iron-hammer",
-        "base_quality": "normal",
-        "slot": "weapon2H",
-        "required_tier": 2,
-        "name": "铁锤",
-        "description": "沉重的铁制锤子，适合力量型战士使用。",
-        "base_main": {
-            "type": "ATK",
-            "value": 20
-        },
-        "substats": [],
-        "price": {
-            "sell": 500,
-            "buy": 600
-        },
-        "flags": []
-    },
-    {
-        "id": "steel-armor",
-        "base_quality": "normal",
-        "slot": "armor",
-        "required_tier": 2,
-        "name": "钢制铠甲",
-        "description": "由冷轧钢板拼接而成的铠甲，能有效抵御中等强度的物理攻击。",
         "base_main": {
             "type": "DEF",
-            "value": 20
+            "value": 55.0
         },
-        "substats": [],
+        "substats": [
+            {
+                "type": "HP",
+                "value": 200.0
+            },
+            {
+                "type": "REC",
+                "value": 15.0
+            },
+            {
+                "type": "HpRec",
+                "value": 10.0
+            },
+            {
+                "type": "QiRec",
+                "value": 8.0
+            }
+        ],
         "price": {
-            "sell": 450,
-            "buy": 550
+            "sell": 5500
         },
-        "flags": []
+        "flags": [],
+        "enhance_materials": []
+    },
+    {
+        "id": "refined-iron-helmet",
+        "name": "精铁盔",
+        "description": "以高纯度锻铁反复淬火制成的头盔，金属纹理细密而坚韧。能显著减轻头部所受冲击。",
+        "artwork": "eq-refined-iron-helmet.webp",
+        "slot": "helmet",
+        "base_quality": "fine",
+        "required_tier": 2,
+        "base_main": {
+            "type": "DEF",
+            "value": 10.0
+        },
+        "substats": [
+            {
+                "type": "DEF",
+                "value": 2.0
+            }
+        ],
+        "price": {
+            "sell": 380
+        },
+        "flags": [],
+        "enhance_materials": []
     },
     {
         "id": "bronze-shield",
@@ -132,20 +140,255 @@
         "flags": []
     },
     {
-        "id": "iron-ring",
-        "base_quality": "normal",
-        "slot": "ring",
+        "id": "thunder-shield",
+        "base_quality": "rare",
+        "slot": "shieldL",
         "required_tier": 2,
-        "name": "铁指环",
-        "description": "简单的铁制指环，能小幅提升佩戴者的生命值。",
+        "name": "雷鸣之盾",
+        "description": "蕴含雷电之力的稀有盾牌，受到攻击时有概率释放雷电反击敌人。",
         "base_main": {
-            "type": "HP",
-            "value": 10
+            "type": "DEF",
+            "value": 30
+        },
+        "substats": [
+            {
+                "type": "HP",
+                "value": 60
+            },
+            {
+                "type": "QiMax",
+                "value": 15
+            }
+        ],
+        "price": {
+            "sell": 1400
+        },
+        "flags": []
+    },
+    {
+        "id": "novice-sword",
+        "name": "初心者之剑",
+        "description": "你的第一把武器，曾被无数只手紧握，挥起时却意外地顺手。\n虽历经漫长岁月，它的剑刃从未卷曲，仿佛在等待真正的归宿。\n“行路漫漫，切勿忘记为何出发。”",
+        "artwork": "eq-novice-sword.webp",
+        "slot": "weaponR",
+        "base_quality": "normal",
+        "required_tier": 1,
+        "base_main": {
+            "type": "ATK",
+            "value": 10.0
         },
         "substats": [],
         "price": {
-            "sell": 300,
-            "buy": 360
+            "buy": 100,
+            "sell": 0
+        },
+        "flags": [
+            "starter"
+        ],
+        "enhance_materials": []
+    },
+    {
+        "id": "crystal-dagger",
+        "name": "水晶匕首",
+        "description": "透明水晶打造的优质匕首，锋利异常，是刺客们的首选武器。",
+        "artwork": "eq-crystal-dagger.webp",
+        "slot": "weaponR",
+        "base_quality": "rare",
+        "required_tier": 2,
+        "base_main": {
+            "type": "ATK",
+            "value": 22.0
+        },
+        "substats": [
+            {
+                "type": "AGI",
+                "value": 6.0
+            },
+            {
+                "type": "WeaknessDmgPct",
+                "value": 10.0
+            }
+        ],
+        "price": {
+            "buy": 900,
+            "sell": 750
+        },
+        "flags": [],
+        "enhance_materials": []
+    },
+    {
+        "id": "eternal-sword",
+        "base_quality": "epic",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "永恒圣剑",
+        "description": "“以曜日之辉，行救赎之誓。”\n融合炽天使的纯洁与骄阳的暖意，净化尘世污秽，终结无尽长夜。\n唯有怀抱“慈悲之心”者方能唤醒。",
+        "artwork": "eq-eternal-sword.webp",
+        "base_main": {
+            "type": "ATK",
+            "value": 80
+        },
+        "substats": [
+            {
+                "type": "ATK",
+                "value": 20
+            },
+            {
+                "type": "AGI",
+                "value": 25
+            },
+            {
+                "type": "WeaknessRate",
+                "value": 20
+            },
+            {
+                "type": "WeaknessDmgPct",
+                "value": 25
+            }
+        ],
+        "price": {
+            "sell": 8800
+        },
+        "flags": []
+    },
+    {
+        "id": "iron-sword",
+        "base_quality": "normal",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "铁剑",
+        "description": "10级冒险者常用的铁剑，剑身经过淬火处理，比新手武器更耐用。",
+        "base_main": {
+            "type": "ATK",
+            "value": 20
+        },
+        "substats": [],
+        "price": {
+            "sell": 500,
+            "buy": 600
+        },
+        "flags": []
+    },
+    {
+        "id": "lionheart-judgment",
+        "base_quality": "epic",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "狮心圣裁",
+        "description": "“以雷霆之威，行君王之令。”\n汇聚上古龙魂与圣光之力，无视任何阻碍，斩断一切混沌。唯有拥有“无畏之心”者方能驾驭。",
+        "artwork": "eq-lionheart-judgment.webp",
+        "base_main": {
+            "type": "ATK",
+            "value": 80
+        },
+        "substats": [
+            {
+                "type": "ATK",
+                "value": 20
+            },
+            {
+                "type": "AGI",
+                "value": 25
+            },
+            {
+                "type": "WeaknessRate",
+                "value": 20
+            },
+            {
+                "type": "WeaknessDmgPct",
+                "value": 25
+            }
+        ],
+        "price": {
+            "sell": 8800
+        },
+        "flags": []
+    },
+    {
+        "id": "heirloom-sword",
+        "base_quality": "epic",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "传承者之剑",
+        "description": "洗尽铅华，这柄流转于无数之手的古剑，终于回应了真正的意志。\n剑锋所指，不仅是你的前路，亦承载着所有先驱的未尽之愿。\n“万千初心汇聚于此，我们终将抵达彼岸。”",
+        "artwork": "eq-heirloom-sword.webp",
+        "base_main": {
+            "type": "ATK",
+            "value": 80
+        },
+        "substats": [
+            {
+                "type": "ATK",
+                "value": 20
+            },
+            {
+                "type": "AGI",
+                "value": 25
+            },
+            {
+                "type": "WeaknessRate",
+                "value": 20
+            },
+            {
+                "type": "WeaknessDmgPct",
+                "value": 25
+            }
+        ],
+        "price": {
+            "sell": 8800
+        },
+        "flags": []
+    },
+    {
+        "id": "moonlight-sword",
+        "base_quality": "rare",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "月光长剑",
+        "description": "在月光下淬炼的稀有长剑，剑身散发着淡淡的银色光辉，夜间作战时更为锋利。",
+        "base_main": {
+            "type": "ATK",
+            "value": 35
+        },
+        "substats": [
+            {
+                "type": "AGI",
+                "value": 8
+            },
+            {
+                "type": "WeaknessRate",
+                "value": 5
+            }
+        ],
+        "price": {
+            "sell": 1200
+        },
+        "flags": []
+    },
+    {
+        "id": "rare-iron-sword",
+        "base_quality": "rare",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "百炼钢剑",
+        "description": "经过百炼锻打的稀有长剑，剑身坚韧无比，是经验战士的信赖之选。",
+        "base_main": {
+            "type": "ATK",
+            "value": 24
+        },
+        "substats": [
+            {
+                "type": "ATK",
+                "value": 6
+            },
+            {
+                "type": "WeaknessRate",
+                "value": 4
+            }
+        ],
+        "price": {
+            "sell": 800,
+            "buy": 1000
         },
         "flags": []
     },
@@ -172,96 +415,44 @@
         "flags": []
     },
     {
-        "id": "plate-armor",
-        "base_quality": "fine",
-        "slot": "armor",
+        "id": "iron-hammer",
+        "base_quality": "normal",
+        "slot": "weapon2H",
         "required_tier": 2,
-        "name": "板甲",
-        "description": "由多块钢板组成的重型铠甲，提供出色的防护性能。",
-        "base_main": {
-            "type": "DEF",
-            "value": 20
-        },
-        "substats": [
-            {
-                "type": "HP",
-                "value": 30
-            }
-        ],
-        "price": {
-            "sell": 580
-        },
-        "flags": []
-    },
-    {
-        "id": "iron-helmet",
-        "base_quality": "fine",
-        "slot": "helmet",
-        "required_tier": 2,
-        "name": "铁盔",
-        "description": "表层淬火的铁制头盔，能减少头部受到的冲击。",
-        "base_main": {
-            "type": "DEF",
-            "value": 10
-        },
-        "substats": [
-            {
-                "type": "DEF",
-                "value": 2
-            }
-        ],
-        "price": {
-            "sell": 380
-        },
-        "flags": []
-    },
-    {
-        "id": "steel-ring",
-        "base_quality": "fine",
-        "slot": "ring",
-        "required_tier": 2,
-        "name": "银边指环",
-        "description": "银质镶边的戒指，内部刻有斗气增幅符文，能提升斗气上限。",
-        "base_main": {
-            "type": "QiMax",
-            "value": 20
-        },
-        "substats": [
-            {
-                "type": "QiMax",
-                "value": 5
-            }
-        ],
-        "price": {
-            "sell": 420
-        },
-        "flags": []
-    },
-    {
-        "id": "rare-moonlight-sword",
-        "base_quality": "rare",
-        "slot": "weaponR",
-        "required_tier": 2,
-        "name": "月光长剑",
-        "description": "在月光下淬炼的稀有长剑，剑身散发着淡淡的银色光辉，夜间作战时更为锋利。",
+        "name": "铁锤",
+        "description": "沉重的铁制锤子，适合力量型战士使用。",
         "base_main": {
             "type": "ATK",
-            "value": 35
+            "value": 20
         },
-        "substats": [
-            {
-                "type": "AGI",
-                "value": 8
-            },
-            {
-                "type": "WeaknessRate",
-                "value": 5
-            }
-        ],
+        "substats": [],
         "price": {
-            "sell": 1200
+            "sell": 500,
+            "buy": 600
         },
         "flags": []
+    },
+    {
+        "id": "leather-armor",
+        "name": "皮甲",
+        "description": "由动物皮革制成的轻便护甲，能挡住哥布林的木棍吗？",
+        "artwork": "eq-leather-armor.webp",
+        "slot": "armor",
+        "base_quality": "normal",
+        "required_tier": 1,
+        "base_main": {
+            "type": "DEF",
+            "value": 8.0
+        },
+        "substats": [],
+        "price": {
+            "buy": 100,
+            "sell": 80
+        },
+        "flags": [
+            "starter"
+        ],
+        "enhance_materials": []
     },
     {
         "id": "excellent-dragon-armor",
@@ -294,64 +485,136 @@
         "flags": []
     },
     {
-        "id": "epic-phoenix-helmet",
-        "base_quality": "epic",
-        "slot": "helmet",
+        "id": "iron-armor",
+        "base_quality": "fine",
+        "slot": "armor",
         "required_tier": 2,
-        "name": "凤凰冠冕",
-        "description": "传说中的凤凰羽毛编织而成的不灭冠冕，佩戴者能获得凤凰般的重生之力。",
+        "name": "精铁胸甲",
+        "description": "精工打造的优质胸甲，比普通钢制铠甲更加坚固可靠。",
         "base_main": {
             "type": "DEF",
-            "value": 55
+            "value": 24
         },
         "substats": [
             {
                 "type": "HP",
-                "value": 200
-            },
-            {
-                "type": "REC",
-                "value": 15
-            },
-            {
-                "type": "HpRec",
-                "value": 10
-            },
-            {
-                "type": "QiRec",
-                "value": 8
+                "value": 40
             }
         ],
         "price": {
-            "sell": 5500
+            "sell": 600,
+            "buy": 750
         },
         "flags": []
     },
     {
-        "id": "rare-thunder-shield",
-        "base_quality": "rare",
-        "slot": "shieldL",
+        "id": "plate-armor",
+        "base_quality": "fine",
+        "slot": "armor",
         "required_tier": 2,
-        "name": "雷鸣之盾",
-        "description": "蕴含雷电之力的稀有盾牌，受到攻击时有概率释放雷电反击敌人。",
+        "name": "板甲",
+        "description": "由多块钢板组成的重型铠甲，提供出色的防护性能。",
         "base_main": {
             "type": "DEF",
-            "value": 30
+            "value": 20
         },
         "substats": [
             {
                 "type": "HP",
-                "value": 60
-            },
-            {
-                "type": "QiMax",
-                "value": 15
+                "value": 30
             }
         ],
         "price": {
-            "sell": 1400
+            "sell": 580
         },
         "flags": []
+    },
+    {
+        "id": "steel-armor",
+        "base_quality": "normal",
+        "slot": "armor",
+        "required_tier": 2,
+        "name": "钢制铠甲",
+        "description": "由冷轧钢板拼接而成的铠甲，能有效抵御中等强度的物理攻击。",
+        "base_main": {
+            "type": "DEF",
+            "value": 20
+        },
+        "substats": [],
+        "price": {
+            "sell": 450,
+            "buy": 550
+        },
+        "flags": []
+    },
+    {
+        "id": "cracked-ring",
+        "name": "破损的戒指",
+        "description": "一枚古朴的戒指，内侧隐约刻有模糊的远古符文 —— 若能修复，或许能唤醒沉睡的力量。",
+        "artwork": "eq-cracked-ring.webp",
+        "slot": "ring",
+        "base_quality": "normal",
+        "required_tier": 1,
+        "base_main": {
+            "type": "QiMax",
+            "value": 10.0,
+            "value_type": "flat"
+        },
+        "substats": [],
+        "price": {
+            "buy": 1,
+            "sell": 1
+        },
+        "flags": [],
+        "enhance_materials": []
+    },
+    {
+        "id": "harvest-ring",
+        "name": "丰收戒指",
+        "description": "寓意丰收的戒指，能给人带来好运与活力。",
+        "artwork": "eq-harvest-ring.webp",
+        "slot": "ring",
+        "base_quality": "fine",
+        "required_tier": 1,
+        "base_main": {
+            "type": "HP",
+            "value": 50.0
+        },
+        "substats": [],
+        "price": {
+            "buy": 1500,
+            "sell": 1200
+        },
+        "flags": [],
+        "enhance_materials": [
+            {
+                "target_level": 5,
+                "materials": [
+                    {
+                        "id": "goldenFleece",
+                        "quantity": 1
+                    }
+                ]
+            },
+            {
+                "target_level": 10,
+                "materials": [
+                    {
+                        "id": "goldenFleece",
+                        "quantity": 1
+                    }
+                ]
+            },
+            {
+                "target_level": 15,
+                "materials": [
+                    {
+                        "id": "goldenFleece",
+                        "quantity": 1
+                    }
+                ]
+            }
+        ]
     },
     {
         "id": "excellent-shadow-ring",
@@ -384,83 +647,27 @@
         "flags": []
     },
     {
-        "id": "eternal-sword",
-        "base_quality": "epic",
-        "slot": "weaponR",
-        "required_tier": 2,
-        "name": "永恒圣剑",
-        "description": "承诸神之炽焰，斩万古之长夜\n寄王者之誓约，开永恒之新界\n光能赐予荣耀，影亦吞没傲慢\n唯当意志不灭，此剑方能相随",
-        "artwork": "eq-eternal-sword.webp",
-        "base_main": {
-            "type": "ATK",
-            "value": 80
-        },
-        "substats": [
-            {
-                "type": "ATK",
-                "value": 20
-            },
-            {
-                "type": "AGI",
-                "value": 25
-            },
-            {
-                "type": "WeaknessRate",
-                "value": 20
-            },
-            {
-                "type": "WeaknessDmgPct",
-                "value": 25
-            }
-        ],
-        "price": {
-            "sell": 8800
-        },
-        "flags": []
-    },
-    {
-        "id": "fine-crystal-dagger",
-        "base_quality": "fine",
-        "slot": "weaponR",
-        "required_tier": 2,
-        "name": "水晶匕首",
-        "description": "透明水晶打造的优质匕首，锋利异常，是刺客们的首选武器。",
-        "base_main": {
-            "type": "ATK",
-            "value": 22
-        },
-        "substats": [
-            {
-                "type": "AGI",
-                "value": 6
-            }
-        ],
-        "price": {
-            "sell": 750,
-            "buy": 900
-        },
-        "flags": []
-    },
-    {
-        "id": "normal-bronze-helmet",
+        "id": "iron-ring",
+        "name": "铁指环",
+        "description": "由普通铁材打造的朴素指环，略有磨痕，结实耐用但毫不起眼。",
+        "artwork": "eq-iron-ring.webp",
+        "slot": "ring",
         "base_quality": "normal",
-        "slot": "helmet",
-        "required_tier": 1,
-        "name": "青铜头盔",
-        "description": "普通青铜打造的简单头盔，提供基础的头部防护。",
+        "required_tier": 2,
         "base_main": {
             "type": "DEF",
-            "value": 5
+            "value": 2.0
         },
         "substats": [],
         "price": {
-            "sell": 60,
-            "buy": 80
+            "buy": 360,
+            "sell": 300
         },
-        "flags": []
+        "flags": [],
+        "enhance_materials": []
     },
     {
-        "id": "rare-life-ring",
+        "id": "life-ring",
         "base_quality": "rare",
         "slot": "ring",
         "required_tier": 2,
@@ -487,52 +694,24 @@
         "flags": []
     },
     {
-        "id": "fine-iron-armor",
+        "id": "steel-ring",
         "base_quality": "fine",
-        "slot": "armor",
+        "slot": "ring",
         "required_tier": 2,
-        "name": "精铁胸甲",
-        "description": "精工打造的优质胸甲，比普通钢制铠甲更加坚固可靠。",
+        "name": "银边指环",
+        "description": "银质镶边的戒指，内部刻有斗气增幅符文，能提升斗气上限。",
         "base_main": {
-            "type": "DEF",
-            "value": 24
+            "type": "QiMax",
+            "value": 20
         },
         "substats": [
             {
-                "type": "HP",
-                "value": 40
+                "type": "QiMax",
+                "value": 5
             }
         ],
         "price": {
-            "sell": 600,
-            "buy": 750
-        },
-        "flags": []
-    },
-    {
-        "id": "rare-iron-sword",
-        "base_quality": "rare",
-        "slot": "weaponR",
-        "required_tier": 2,
-        "name": "百炼钢剑",
-        "description": "经过百炼锻打的稀有长剑，剑身坚韧无比，是经验战士的信赖之选。",
-        "base_main": {
-            "type": "ATK",
-            "value": 24
-        },
-        "substats": [
-            {
-                "type": "ATK",
-                "value": 6
-            },
-            {
-                "type": "WeaknessRate",
-                "value": 4
-            }
-        ],
-        "price": {
-            "sell": 800,
-            "buy": 1000
+            "sell": 420
         },
         "flags": []
     }

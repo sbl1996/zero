@@ -12,6 +12,8 @@ import type {
   EquipmentTemplate,
   EquipmentStatValueType,
   RealmTier,
+  EquipmentEnhanceRequirement,
+  EnhanceMaterialCost,
 } from '@/types/domain'
 
 interface RawEquipmentStat {
@@ -39,6 +41,7 @@ interface RawEquipmentItem {
   flatCapMultiplier?: number
   price?: RawEquipmentPrice
   flags?: string[]
+  enhance_materials?: RawEnhanceMaterialRequirement[]
 }
 
 const EQUIP_SLOTS: EquipSlot[] = ['helmet', 'shieldL', 'weaponR', 'weapon2H', 'armor', 'ring']
@@ -62,6 +65,16 @@ const SUB_STAT_TYPES: EquipmentSubStatType[] = [
   'PenPct',
   'Toughness',
 ]
+
+interface RawEnhanceMaterial {
+  id: string
+  quantity?: number
+}
+
+interface RawEnhanceMaterialRequirement {
+  target_level?: number
+  materials?: RawEnhanceMaterial[]
+}
 
 const DEFAULT_PERCENT_SUB_STATS = new Set<EquipmentSubStatType>([
   'WeaknessRate',
@@ -148,6 +161,29 @@ function clonePrice(price?: RawEquipmentPrice | null): EquipmentPrice | undefine
   return Object.keys(next).length > 0 ? next : undefined
 }
 
+function sanitizeMaterialCost(raw?: RawEnhanceMaterial): EnhanceMaterialCost | null {
+  if (!raw?.id) return null
+  const qty = Number(raw.quantity ?? 1)
+  if (!Number.isFinite(qty)) return null
+  const quantity = Math.max(1, Math.round(qty))
+  return { id: raw.id, quantity }
+}
+
+function toEnhanceRequirements(raw?: RawEnhanceMaterialRequirement[]): EquipmentEnhanceRequirement[] | undefined {
+  if (!raw) return undefined
+  const requirements: EquipmentEnhanceRequirement[] = []
+  raw.forEach((entry) => {
+    const targetLevel = Number(entry.target_level)
+    if (!Number.isFinite(targetLevel) || targetLevel <= 0) return
+    const materials = (entry.materials ?? [])
+      .map((material) => sanitizeMaterialCost(material))
+      .filter((material): material is EnhanceMaterialCost => Boolean(material))
+    if (!materials.length) return
+    requirements.push({ targetLevel, materials })
+  })
+  return requirements.length ? requirements : undefined
+}
+
 const rawItems = rawEquipmentData as RawEquipmentItem[]
 
 export const BASE_EQUIPMENT_TEMPLATES: EquipmentTemplate[] = rawItems.map((item) => {
@@ -172,6 +208,7 @@ export const BASE_EQUIPMENT_TEMPLATES: EquipmentTemplate[] = rawItems.map((item)
     flatCapMultiplier: item.flatCapMultiplier,
     price: clonePrice(item.price),
     flags: item.flags?.slice(),
+    enhanceMaterials: toEnhanceRequirements(item.enhance_materials),
   }
 })
 

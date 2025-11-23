@@ -30,7 +30,16 @@
       >
         <div class="flex gap-md">
           <div class="item-icon">
-            {{ getItemIcon(item) }}
+            <template v-if="getItemIcon(item).type === 'image'">
+              <img
+                class="item-icon__img"
+                :src="getItemIcon(item).src"
+                :alt="getItemIcon(item).alt || item.name"
+              >
+            </template>
+            <template v-else>
+              {{ getItemIcon(item).text }}
+            </template>
           </div>
           <div class="flex-1">
             <h3 style="margin: 0 0 8px 0; font-size: 16px;">
@@ -103,7 +112,10 @@ import { BASE_EQUIPMENT_TEMPLATES, instantiateEquipment } from '@/data/equipment
 import { MONSTERS } from '@/data/monsters'
 import { formatRealmTierLabel, realmTierIndex } from '@/utils/realm'
 import { formatEquipmentStat, formatEquipmentSubstats, getEquipmentQualityMeta } from '@/utils/equipmentStats'
+import { resolveEquipmentIcon } from '@/utils/equipmentIcons'
+import { resolveItemIcon } from '@/utils/itemIcon'
 import type { ItemDefinition, EquipmentTemplate, EquipSlot } from '@/types/domain'
+import type { ItemIcon } from '@/utils/itemIcon'
 
 const playerStore = usePlayerStore()
 const inventoryStore = useInventoryStore()
@@ -200,23 +212,22 @@ watch(currentItems, (items) => {
   })
 }, { immediate: true })
 
-const getItemIcon = (item: ItemDefinition | EquipmentTemplate) => {
-  if ('heal' in item && item.heal) return '🧪'
-  if ('restoreQi' in item && item.restoreQi) return '✨'
-  if ('usage' in item) {
-    if (item.name.includes('祝福')) return '💎'
-    if (item.name.includes('灵魂')) return '💗'
-    if (item.name.includes('奇迹')) return '💧'
-    if (item.name.includes('虚空')) return '⚪'
-  }
+const iconCache = new Map<string, ItemIcon>()
+
+const getItemIcon = (item: ItemDefinition | EquipmentTemplate): ItemIcon => {
+  const cached = iconCache.get(item.id)
+  if (cached) return cached
+
+  let resolved: ItemIcon
   if ('slot' in item) {
-    if (item.slot === 'helmet') return '🎩'
-    if (item.slot === 'shieldL') return '🛡️'
-    if (item.slot === 'weaponR' || item.slot === 'weapon2H') return '⚔️'
-    if (item.slot === 'armor') return '🦺'
-    if (item.slot === 'ring') return '💍'
+    const equipment = instantiateEquipment(item, { id: item.id, level: 0 })
+    resolved = resolveEquipmentIcon(equipment)
+  } else {
+    resolved = resolveItemIcon(item.id)
   }
-  return '📦'
+
+  iconCache.set(item.id, resolved)
+  return resolved
 }
 
 const getItemQualityMeta = (item: ItemDefinition | EquipmentTemplate) => {
@@ -374,6 +385,13 @@ const showPurchaseMessage = (message: string, success: boolean) => {
   background: rgba(0,0,0,0.25);
   border-radius: 8px;
   flex-shrink: 0;
+}
+
+.item-icon__img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 6px;
 }
 
 .btn.disabled {

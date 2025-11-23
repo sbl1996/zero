@@ -82,3 +82,71 @@ export async function updateMap(id: string, map: MapMetadata) {
 export async function deleteMap(id: string) {
   await api.delete(`/maps/${id}`);
 }
+
+// Equipment APIs
+export async function fetchEquipment(params?: {
+  slot?: string;
+  quality?: string;
+  tier_min?: number;
+  tier_max?: number;
+  search?: string;
+}) {
+  const response = await api.get<import("@/types/equipment").EquipmentItem[]>("/equipment", { params });
+  return response.data;
+}
+
+export async function getEquipment(id: string) {
+  const response = await api.get<import("@/types/equipment").EquipmentItem>(`/equipment/${id}`);
+  return response.data;
+}
+
+export async function upsertEquipment(equipment: import("@/types/equipment").EquipmentItem) {
+  const response = await api.post<import("@/types/equipment").EquipmentItem>("/equipment", equipment);
+  return response.data;
+}
+
+export async function updateEquipment(id: string, equipment: import("@/types/equipment").EquipmentItem) {
+  const response = await api.put<import("@/types/equipment").EquipmentItem>(`/equipment/${id}`, equipment);
+  return response.data;
+}
+
+export async function deleteEquipment(id: string) {
+  await api.delete(`/equipment/${id}`);
+}
+
+export async function uploadEquipmentImage(id: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post<{ path: string; filename: string }>(
+    `/equipment/${id}/image`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return response.data;
+}
+
+export async function uploadEquipmentPng(id: string, file: File) {
+  const formData = new FormData();
+  formData.append("file", file);
+  const response = await api.post<{ path: string; filename: string }>(
+    `/equipment/${id}/image/png`,
+    formData,
+    { headers: { "Content-Type": "multipart/form-data" } }
+  );
+  return response.data;
+}
+
+export async function convertEquipmentImages() {
+  const response = await api.post<{ succeeded: boolean; stdout?: string; stderr?: string }>(
+    "/equipment/convert"
+  );
+  return response.data;
+}
+
+export async function deleteEquipmentImage(id: string) {
+  await api.delete(`/equipment/${id}/image`);
+}
+
+export function getEquipmentImageUrl(id: string) {
+  return `/api/equipment/${id}/image`;
+}

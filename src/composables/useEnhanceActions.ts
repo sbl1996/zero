@@ -6,6 +6,8 @@ import {
   mainEnhanceCost,
   mainEnhanceTier,
   MAX_EQUIP_LEVEL,
+  type EnhanceCost,
+  type EnhanceMaterialCost,
 } from './useEnhance'
 import type { Equipment, EquipSlotKey } from '@/types/domain'
 
@@ -23,14 +25,16 @@ export interface MainEnhanceFeedback {
     | 'not-found'
     | 'max-level'
     | 'insufficient-gold'
-    | 'insufficient-gem'
+    | 'insufficient-material'
     | 'apply-error'
   success?: boolean
   levelBefore?: number
   levelAfter?: number
   chance?: number
-  cost?: { gold: number; gemId: string }
+  cost?: EnhanceCost
   gemConsumed?: boolean
+  materialsConsumed?: EnhanceMaterialCost[]
+  missingMaterialId?: string
   goldConsumed?: boolean
   floorApplied?: number
   equipment?: Equipment
@@ -75,19 +79,39 @@ export function useEnhanceActions() {
       return { ok: false, reason: 'max-level', levelBefore: currentLevel, equipment }
     }
 
-    const cost = mainEnhanceCost(currentLevel)
+    const cost = mainEnhanceCost(equipment)
     if (player.gold < cost.gold) {
       return { ok: false, reason: 'insufficient-gold', cost, equipment }
     }
-    if (inventory.quantity(cost.gemId) < 1) {
-      return { ok: false, reason: 'insufficient-gem', cost, equipment }
+    const lackingMaterial = cost.materials.find((material) => inventory.quantity(material.id) < material.quantity)
+    if (lackingMaterial) {
+      return {
+        ok: false,
+        reason: 'insufficient-material',
+        cost,
+        missingMaterialId: lackingMaterial.id,
+        equipment,
+      }
     }
 
     const goldDeducted = player.spendGold(cost.gold)
-    const gemDeducted = inventory.spend(cost.gemId, 1)
-    if (!goldDeducted || !gemDeducted) {
+    const spentMaterials: EnhanceMaterialCost[] = []
+    let materialError: EnhanceMaterialCost | null = null
+    cost.materials.forEach((material) => {
+      if (materialError) return
+      const ok = inventory.spend(material.id, material.quantity)
+      if (!ok) {
+        materialError = material
+        return
+      }
+      spentMaterials.push(material)
+    })
+
+    if (!goldDeducted || materialError) {
       if (goldDeducted) player.gainGold(cost.gold)
-      if (gemDeducted) inventory.addItem(cost.gemId, 1)
+      spentMaterials.forEach((material) => {
+        inventory.addItem(material.id, material.quantity)
+      })
       return { ok: false, reason: 'apply-error', cost, equipment }
     }
 
@@ -103,7 +127,9 @@ export function useEnhanceActions() {
     if (!applied) {
       // attempt to revert resource consumption if update failed
       player.gainGold(cost.gold)
-      inventory.addItem(cost.gemId, 1)
+      spentMaterials.forEach((material) => {
+        inventory.addItem(material.id, material.quantity)
+      })
       return { ok: false, reason: 'apply-error', cost, equipment }
     }
 
@@ -116,7 +142,8 @@ export function useEnhanceActions() {
       levelBefore: currentLevel,
       levelAfter: newLevel,
       cost,
-      gemConsumed: true,
+      gemConsumed: Boolean(cost.materials.find((material) => material.id === cost.gemId)),
+      materialsConsumed: spentMaterials,
       goldConsumed: true,
       floorApplied: roll.ok ? undefined : tier.floor,
       equipment: updated,

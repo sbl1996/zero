@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .routes import monsters_router, maps_router, music_router
+from .routes import monsters_router, maps_router, music_router, equipment_router
 
 
 def create_app() -> FastAPI:
@@ -19,6 +19,7 @@ def create_app() -> FastAPI:
     app.include_router(monsters_router)
     app.include_router(maps_router)
     app.include_router(music_router)
+    app.include_router(equipment_router)
     return app
 
 

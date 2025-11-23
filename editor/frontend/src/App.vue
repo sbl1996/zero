@@ -193,6 +193,9 @@
 
       <!-- Music Editor -->
       <MusicEditor v-else-if="activeSection === 'music'" />
+      
+      <!-- Equipment Editor -->
+      <EquipmentEditor v-else-if="activeSection === 'equipment'" />
       </section>
     </div>
 
@@ -348,6 +351,7 @@ import {
 } from "@/utils/realmMapping";
 import MapEditor from "@/components/MapEditor.vue";
 import MusicEditor from "@/components/MusicEditor.vue";
+import EquipmentEditor from "@/components/EquipmentEditor.vue";
 
 const store = useMonsterStore();
 const dialogVisible = ref(false);
@@ -384,6 +388,7 @@ const navItems = [
   { id: "monsters", label: "怪物", icon: "👾" },
   { id: "maps", label: "地图", icon: "🗺️" },
   { id: "music", label: "音乐", icon: "🎵" },
+  { id: "equipment", label: "装备", icon: "⚔️" },
 ];
 const activeSection = ref(navItems[0].id);
 const filterRealm = ref<number | "">("");

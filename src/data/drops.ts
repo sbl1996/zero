@@ -298,6 +298,14 @@ export function getDropEntries(monster: Monster): DropEntry[] {
 
   entries.push(...normalizeGoldEntries(band.boss.gold, BOSS_SLOT_WEIGHTS.gold))
 
+  if (monster.id === 'boss-golden-sheep') {
+    entries.push({
+      kind: 'item',
+      itemId: 'goldenFleece',
+      weight: 100,
+    })
+  }
+
   return entries
 }
 

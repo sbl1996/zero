@@ -1,4 +1,11 @@
-import type { Equipment, EquipSlot, EquipmentMainStatType } from '@/types/domain'
+import type {
+  Equipment,
+  EquipSlot,
+  EquipmentMainStatType,
+  EquipmentEnhanceRequirement,
+  EnhanceMaterialCost,
+} from '@/types/domain'
+import { EQUIPMENT_TEMPLATE_MAP } from '@/data/equipment'
 import { randBool } from './useRng'
 
 export type MainEnhanceGem = 'blessGem' | 'soulGem' | 'miracleGem'
@@ -13,6 +20,12 @@ interface MainEnhanceTier {
   dropOnFail: number
   goldCost: number
   floor?: number
+}
+
+export interface EnhanceCost {
+  gold: number
+  gemId: MainEnhanceGem
+  materials: EnhanceMaterialCost[]
 }
 
 const MAIN_ENHANCE_TABLE: MainEnhanceTier[] = [
@@ -46,11 +59,41 @@ export function mainEnhanceChance(level: number) {
   return mainEnhanceTier(level).successChance
 }
 
-export function mainEnhanceCost(level: number) {
+function findTemplateRequirements(equipment: Equipment): EquipmentEnhanceRequirement[] {
+  const templateId = equipment.templateId ?? equipment.id
+  const template = templateId ? EQUIPMENT_TEMPLATE_MAP.get(templateId) : undefined
+  return template?.enhanceMaterials ?? []
+}
+
+function mergeMaterialCosts(entries: EnhanceMaterialCost[]): EnhanceMaterialCost[] {
+  const acc = new Map<string, number>()
+  entries.forEach((entry) => {
+    if (!entry?.id) return
+    const qty = Math.max(0, Math.round(entry.quantity ?? 0))
+    if (!qty) return
+    const current = acc.get(entry.id) ?? 0
+    acc.set(entry.id, current + qty)
+  })
+  return Array.from(acc.entries()).map(([id, quantity]) => ({ id, quantity }))
+}
+
+function specialMaterialsForLevel(equipment: Equipment, targetLevel: number): EnhanceMaterialCost[] {
+  const requirements = findTemplateRequirements(equipment)
+  const matches = requirements.filter((entry) => entry.targetLevel === targetLevel)
+  const materials = matches.flatMap((entry) => entry.materials)
+  return mergeMaterialCosts(materials)
+}
+
+export function mainEnhanceCost(equipment: Equipment): EnhanceCost {
+  const level = equipment.level
   const tier = mainEnhanceTier(level)
+  const targetLevel = Math.min(level + 1, MAX_EQUIP_LEVEL)
+  const baseMaterials: EnhanceMaterialCost[] = [{ id: tier.id, quantity: 1 }]
+  const special = specialMaterialsForLevel(equipment, targetLevel)
   return {
     gemId: tier.id,
     gold: tier.goldCost,
+    materials: mergeMaterialCosts([...baseMaterials, ...special]),
   }
 }
 

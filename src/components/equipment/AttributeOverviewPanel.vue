@@ -46,7 +46,7 @@ onBeforeUnmount(() => {
   <section class="equipment-attribute-panel">
     <header class="equipment-attribute-panel__header">
       <h3>属性总览</h3>
-      <p>换装后数值即时更新</p>
+      <p>数值即时更新</p>
     </header>
 
     <div class="equipment-attribute-panel__grid">

@@ -37,6 +37,12 @@ class Settings(BaseModel):
             _default_repo_root() / "src/data/map-metadata.json",
         )
     )
+    equipment_items_file: Path = Field(
+        default_factory=lambda: _path_from_env(
+            "EQUIPMENT_ITEMS_FILE",
+            _default_repo_root() / "src/data/equipment_items.json",
+        )
+    )
     raw_assets_dir: Path = Field(
         default_factory=lambda: _path_from_env(
             "MONSTER_RAW_ASSETS_DIR", _default_repo_root() / "src/assets/raw"

@@ -239,6 +239,16 @@ export interface Equipment {
   flags?: string[]
 }
 
+export interface EnhanceMaterialCost {
+  id: string
+  quantity: number
+}
+
+export interface EquipmentEnhanceRequirement {
+  targetLevel: number
+  materials: EnhanceMaterialCost[]
+}
+
 export interface EquipmentTemplate {
   id: string
   name: string
@@ -253,6 +263,7 @@ export interface EquipmentTemplate {
   flatCapMultiplier?: number
   price?: EquipmentPrice
   flags?: string[]
+  enhanceMaterials?: EquipmentEnhanceRequirement[]
 }
 
 export interface EquipmentInventoryMetaEntry {

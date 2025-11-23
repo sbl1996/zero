@@ -25,6 +25,21 @@ const auraClass = computed(() => props.slot.entry?.enhanceAura ?? '')
 const badgeClass = computed(() => (props.slot.entry ? props.slot.entry.enhanceBadge.className : 'paper-slot__badge--empty'))
 const badgeText = computed(() => (props.slot.entry ? props.slot.entry.enhanceBadge.text : ''))
 const qualityColor = computed(() => props.slot.entry?.qualityColor ?? 'rgba(255, 255, 255, 0.85)')
+const qualityBadgeVars = computed(() => {
+  const accent = props.slot.entry?.qualityColor
+  if (!accent) return {}
+  return {
+    '--quality-accent': accent,
+    '--quality-accent-soft': withAlpha(accent, 'c8'),
+    '--quality-accent-faint': withAlpha(accent, '66'),
+  }
+})
+
+function withAlpha(hex: string, alphaHex: string) {
+  if (!hex.startsWith('#')) return hex
+  if (hex.length !== 7) return hex
+  return `${hex}${alphaHex}`
+}
 
 const styleVars = computed(() => {
   const visual = props.slot.entry?.qualityVisual
@@ -88,8 +103,14 @@ function handleMouseLeave() {
       {{ slot.entry?.name ?? '未装备' }}
     </p>
     <p class="paper-slot__meta">
-      <span v-if="slot.entry">{{ slot.entry.qualityLabel }}</span>
-      <span v-else></span>
+      <span
+        v-if="slot.entry"
+        class="paper-slot__quality-badge"
+        :style="qualityBadgeVars"
+      >
+        {{ slot.entry.qualityLabel }}
+      </span>
+      <span v-else class="paper-slot__quality-placeholder">品质</span>
     </p>
   </button>
 </template>
@@ -190,6 +211,10 @@ function handleMouseLeave() {
   font-size: 12px;
   color: rgba(255, 255, 255, 0.6);
   text-align: center;
+  min-height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 .paper-slot--empty {
@@ -212,5 +237,31 @@ function handleMouseLeave() {
   box-shadow:
     inset 0 0 16px rgba(255, 179, 71, 0.55),
     0 0 0 1px rgba(255, 115, 34, 0.36);
+}
+
+.paper-slot__quality-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 5px 12px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.3px;
+  background: linear-gradient(
+    135deg,
+    var(--quality-accent),
+    var(--quality-accent-soft, rgba(255, 255, 255, 0.14))
+  );
+  color: #0c0c12;
+  border: 1px solid var(--quality-accent-faint, rgba(255, 255, 255, 0.24));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 8px 20px var(--quality-accent-faint, rgba(0, 0, 0, 0.45));
+  text-shadow: 0 1px 4px rgba(255, 255, 255, 0.28);
+}
+
+.paper-slot__quality-placeholder {
+  opacity: 0.25;
 }
 </style>
