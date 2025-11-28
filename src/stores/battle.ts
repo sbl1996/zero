@@ -1791,6 +1791,9 @@ export const useBattleStore = defineStore('battle', {
         timestamp: nowMs,
       })
       if (usage) {
+        if (usage.xpWholeGained > 0) {
+          this.pushFloat(`【${skill.name}】熟练度+${usage.xpWholeGained}`, 'loot')
+        }
         if (usage.blockedByRealm && !this.skillRealmNotified[skillId]) {
           this.skillRealmNotified[skillId] = true
         }

@@ -26,6 +26,7 @@ function resolveEquipmentSubType(slot: EquipSlot): EquipmentSubType {
       return 'weapon'
     case 'helmet':
     case 'armor':
+    case 'boots':
       return 'armor'
     case 'shieldL':
       return 'shield'

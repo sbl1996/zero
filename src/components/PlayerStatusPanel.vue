@@ -280,20 +280,14 @@ function getItemEffect(item: any) {
           @click="useItem(item.id)"
           :title="`${item.name} - ${(item as any).description || ''} ${getItemEffect(item)}${item.locked ? ' · 冥想中无法使用' : ''}`"
         >
-          <div class="quick-item-content">
-            <span class="quick-item-icon">
-              <img
-                v-if="item.icon.type === 'image'"
-                :src="item.icon.src"
-                :alt="item.icon.alt || item.name"
-              >
-              <span v-else>{{ item.icon.text }}</span>
-            </span>
-            <div class="quick-item-info">
-              <div class="quick-item-name">{{ item.name }}</div>
-              <div class="quick-item-effect">{{ getItemEffect(item) }}</div>
-            </div>
-          </div>
+          <span class="quick-item-icon">
+            <img
+              v-if="item.icon.type === 'image'"
+              :src="item.icon.src"
+              :alt="item.icon.alt || item.name"
+            >
+            <span v-else>{{ item.icon.text }}</span>
+          </span>
           <div class="quick-item-quantity">×{{ item.quantity }}</div>
         </button>
       </div>
@@ -387,24 +381,27 @@ function getItemEffect(item: any) {
 
 /* 快速道具栏样式 */
 .quick-items-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
+  gap: 6px;
   margin-top: 8px;
 }
 
 .quick-item-button {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: center;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
-  padding: 8px 10px;
+  padding: 4px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: white;
-  font-size: 14px;
+  font-size: 13px;
+  aspect-ratio: 1;
+  min-height: 46px;
 }
 
 .quick-item-button:hover:not(.disabled) {
@@ -425,19 +422,12 @@ function getItemEffect(item: any) {
   border-color: rgba(255, 255, 255, 0.08);
 }
 
-.quick-item-content {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex: 1;
-}
-
 .quick-item-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: calc(100% - 10px);
+  height: calc(100% - 10px);
   font-size: 26px;
   line-height: 1;
 }
@@ -446,24 +436,6 @@ function getItemEffect(item: any) {
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-
-.quick-item-info {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  text-align: left;
-}
-
-.quick-item-name {
-  font-weight: 600;
-  font-size: 15px;
-}
-
-.quick-item-effect {
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.7);
-  font-weight: 500;
 }
 
 .quick-items-lock {
@@ -476,22 +448,20 @@ function getItemEffect(item: any) {
 }
 
 .quick-item-quantity {
+  position: absolute;
+  right: 4px;
+  bottom: 4px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  position: static;
-  font-size: 13px;
-  font-weight: 600;
-  color: rgba(255, 255, 255, 0.9);
+  font-size: 11px;
+  font-weight: 700;
+  color: #fff;
   background: rgba(255, 255, 255, 0.1);
-  padding: 3px 6px;
-  border-radius: 12px;
-  min-width: 32px;
+  padding: 2px 5px;
+  border-radius: 9px;
+  min-width: 22px;
   text-align: center;
-  flex-shrink: 0;
-  opacity: 1;
-  visibility: visible;
-  margin-left: 8px;
 }
 
 .quick-items-hint {
@@ -513,7 +483,8 @@ function getItemEffect(item: any) {
 /* 响应式调整 */
 @media (max-width: 768px) {
   .quick-item-button {
-    padding: 8px;
+    padding: 4px;
+    min-height: 44px;
   }
 
   .qi-progress {
@@ -522,17 +493,9 @@ function getItemEffect(item: any) {
   }
 
   .quick-item-icon {
-    width: 28px;
-    height: 28px;
+    width: calc(100% - 10px);
+    height: calc(100% - 10px);
     font-size: 22px;
-  }
-
-  .quick-item-name {
-    font-size: 14px;
-  }
-
-  .quick-item-effect {
-    font-size: 11px;
   }
 }
 </style>

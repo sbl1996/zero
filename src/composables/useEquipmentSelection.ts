@@ -14,19 +14,21 @@ import type {
 
 const SLOT_CATEGORY_LABELS: Record<EquipSlot, string> = {
   helmet: '头盔',
-  shieldL: '左手盾牌',
-  weaponR: '右手武器',
-  weapon2H: '双手武器',
+  shieldL: '盾牌',
+  weaponR: '武器',
+  weapon2H: '武器',
   armor: '铠甲',
+  boots: '靴子',
   ring: '戒指',
 }
 
 const SLOT_KEY_LABELS: Record<EquipSlotKey, string> = {
   helmet: '头盔',
-  shieldL: '左手盾牌',
-  weaponR: '右手武器',
-  weapon2H: '双手武器',
+  shieldL: '盾牌',
+  weaponR: '武器',
+  weapon2H: '武器',
   armor: '铠甲',
+  boots: '靴子',
   ring1: '戒指 1',
   ring2: '戒指 2',
 }
@@ -355,11 +357,31 @@ export function useEquipmentSelection() {
 
   function diffAgainstEquipped(equipment: Equipment): EquipmentDiffEntry[] {
     const candidateMain = resolveMainStatBreakdown(equipment)[0] ?? null
+    const targetSlot = resolveTargetSlot(equipment)
+    const slotsCleared = targetSlot ? slotsToClear(targetSlot, equipment) : slotKeysForEquipment(equipment)
     return slotKeysForEquipment(equipment).map((slotKey) => {
-      const equipped = player.equips[slotKey] ?? null
+      const comparisonSlots = targetSlot && slotKey === targetSlot ? slotsCleared : [slotKey]
+      const equipped =
+        comparisonSlots.map((slot) => player.equips[slot]).find((item): item is Equipment => Boolean(item)) ?? null
       const equippedMain = equipped ? resolveMainStatBreakdown(equipped)[0] ?? null : null
+      const removedMainTotal =
+        candidateMain?.key && comparisonSlots.length
+          ? comparisonSlots.reduce((total, slot) => {
+              const eq = player.equips[slot]
+              if (!eq) return total
+              const main = resolveMainStatBreakdown(eq)[0]
+              if (main?.key === candidateMain.key) {
+                return total + main.total
+              }
+              return total
+            }, 0)
+          : null
       const delta =
-        candidateMain && equippedMain ? candidateMain.total - equippedMain.total : candidateMain?.total ?? null
+        candidateMain && removedMainTotal !== null
+          ? candidateMain.total - removedMainTotal
+          : candidateMain && equippedMain
+            ? candidateMain.total - equippedMain.total
+            : candidateMain?.total ?? null
       return {
         slotKey,
         slotLabel: getSlotKeyLabel(slotKey),

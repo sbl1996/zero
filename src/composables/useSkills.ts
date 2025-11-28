@@ -1,31 +1,29 @@
 import type { RealmStage, SkillDefinition, SkillProgress } from '@/types/domain'
 import { resolveRealmTierValue } from '@/utils/realm'
 
-const XP_BASE = 1.0
-const XP_COOLDOWN_WEIGHT = 0.15
-const XP_HIT_BONUS = 0.5
-const XP_MIN = 1
+const XP_BASE = 1.0 // X0
+const XP_COOLDOWN_WEIGHT = 0.25 // B
+const XP_HIT_MULTIPLIER = 0.5 // C
+const XP_SCALE = 0.2
+const XP_MIN = 0
 const XP_MAX = 10
-const SPAM_DECAY = 0.95
-
-const BREAK_BASE = 0.06
-const BREAK_STACK = 0.03
-const BREAK_LIMIT = 0.35
+const SPAM_DECAY = 0.8
+const SKILL_XP_CAP_TABLE = [10, 30, 80, 150, 300, 500, 800, 1200, 2000]
 
 export function createDefaultSkillProgress(skillId: string): SkillProgress {
   return {
     skillId,
     level: 1,
     xp: 0,
-    atCap: false,
-    btStack: 0,
     lastUsedAt: null,
   }
 }
 
 export function getSkillXpCap(level: number): number {
-  const safeLevel = Math.max(1, Math.floor(level))
-  return Math.round(80 * Math.pow(1.25, safeLevel - 1))
+  const index = Math.max(1, Math.floor(level)) - 1
+  const cappedIndex = Math.min(index, SKILL_XP_CAP_TABLE.length - 1)
+  const value = SKILL_XP_CAP_TABLE[cappedIndex]
+  return typeof value === 'number' ? value : SKILL_XP_CAP_TABLE[SKILL_XP_CAP_TABLE.length - 1]!
 }
 
 export function getSkillMaxLevel(definition: SkillDefinition | null | undefined): number {
@@ -59,6 +57,7 @@ export interface SkillUsageOptions {
 
 export interface SkillUsageResult {
   xpGained: number
+  xpWholeGained: number
   leveledUp: boolean
   breakthrough: boolean
   blockedByRealm: boolean
@@ -66,11 +65,12 @@ export interface SkillUsageResult {
 }
 
 export function applySkillUsage(options: SkillUsageOptions): SkillUsageResult {
-  const { progress, definition, realm, rng } = options
+  const { progress, definition, realm } = options
   const baseCooldown = Number.isFinite(options.baseCooldown) ? Math.max(options.baseCooldown, 0) : 0
   const hit = Boolean(options.hit)
   const streak = Math.max(1, Math.floor(options.streak))
   const timestamp = options.timestamp ?? Date.now()
+  const xpBefore = Number.isFinite(progress.xp) ? progress.xp : 0
 
   progress.lastUsedAt = timestamp
 
@@ -78,13 +78,12 @@ export function applySkillUsage(options: SkillUsageOptions): SkillUsageResult {
   const realmCap = getRealmSkillLevelCap(realm)
   const allowedMax = Math.min(skillMax, realmCap)
 
-  const blockedByRealm = progress.level >= allowedMax && skillMax > realmCap
+  const blockedByRealm = skillMax > realmCap
 
   if (progress.level >= allowedMax) {
-    progress.atCap = false
-    progress.btStack = 0
     return {
       xpGained: 0,
+      xpWholeGained: 0,
       leveledUp: false,
       breakthrough: false,
       blockedByRealm,
@@ -92,58 +91,40 @@ export function applySkillUsage(options: SkillUsageOptions): SkillUsageResult {
     }
   }
 
-  if (progress.atCap) {
-    if (progress.level < allowedMax) {
-      const baseChance = BREAK_BASE + BREAK_STACK * progress.btStack
-      const chance = Math.min(BREAK_LIMIT, baseChance)
-      const roll = Math.max(0, Math.min(1, rng()))
-      if (roll < chance) {
-        progress.level = Math.min(allowedMax, progress.level + 1)
-        progress.xp = 0
-        progress.atCap = false
-        progress.btStack = 0
-        return {
-          xpGained: 0,
-          leveledUp: true,
-          breakthrough: true,
-          blockedByRealm: false,
-          reachedCap: progress.level >= allowedMax,
-        }
-      }
-      progress.btStack += 1
-    }
-    return {
-      xpGained: 0,
-      leveledUp: false,
-      breakthrough: false,
-      blockedByRealm: false,
-      reachedCap: true,
-    }
-  }
-
-  const baseGainRaw = XP_BASE + XP_COOLDOWN_WEIGHT * baseCooldown + (hit ? XP_HIT_BONUS : 0)
-  const baseGainRounded = Math.round(baseGainRaw)
-  const clampedGain = Math.max(XP_MIN, Math.min(XP_MAX, baseGainRounded))
+  const hitBonus = hit ? 1 : 0
+  const baseGainRaw = (XP_BASE + XP_COOLDOWN_WEIGHT * baseCooldown) * (XP_HIT_MULTIPLIER * hitBonus) * XP_SCALE
+  const baseGain = Math.min(XP_MAX, Math.max(XP_MIN, baseGainRaw))
   const penalty = Math.pow(SPAM_DECAY, Math.max(streak - 1, 0))
-  const gain = clampedGain * penalty
+  const gain = baseGain * penalty
 
   progress.xp += gain
 
-  const xpCap = getSkillXpCap(progress.level)
-  let reachedCap = false
+  const wholeBefore = Math.floor(xpBefore)
+  const wholeAfterGain = Math.floor(progress.xp ?? 0)
+  const xpWholeGained = Math.max(0, wholeAfterGain - wholeBefore)
 
-  if (progress.xp >= xpCap) {
-    progress.xp = xpCap
-    progress.atCap = true
-    progress.btStack = 0
-    reachedCap = true
+  let leveledUp = false
+  let xpCap = getSkillXpCap(progress.level)
+
+  while (progress.level < allowedMax && progress.xp >= xpCap) {
+    progress.xp -= xpCap
+    progress.level = Math.min(allowedMax, progress.level + 1)
+    leveledUp = true
+    if (progress.level >= allowedMax) {
+      progress.xp = Math.min(progress.xp, getSkillXpCap(progress.level))
+      break
+    }
+    xpCap = getSkillXpCap(progress.level)
   }
+
+  const reachedCap = progress.level >= allowedMax
 
   return {
     xpGained: gain,
-    leveledUp: false,
+    xpWholeGained,
+    leveledUp,
     breakthrough: false,
-    blockedByRealm: false,
+    blockedByRealm: reachedCap && blockedByRealm,
     reachedCap,
   }
 }

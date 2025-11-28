@@ -1,4 +1,4 @@
-export type EquipSlot = 'helmet' | 'shieldL' | 'weaponR' | 'weapon2H' | 'armor' | 'ring'
+export type EquipSlot = 'helmet' | 'shieldL' | 'weaponR' | 'weapon2H' | 'armor' | 'boots' | 'ring'
 
 export type EquipSlotKey =
   | 'helmet'
@@ -6,6 +6,7 @@ export type EquipSlotKey =
   | 'weaponR'
   | 'weapon2H'
   | 'armor'
+  | 'boots'
   | 'ring1'
   | 'ring2'
 
@@ -160,7 +161,7 @@ export interface BasePowerState {
   lastUpdatedAt: number | null
 }
 
-export type CultivationMethodId = 'star_soul' | 'vajra' | 'tiger_stripe' | 'purple_flame'
+export type CultivationMethodId = 'dragon_blood' | 'vajra' | 'tiger_stripe' | 'purple_flame'
 
 export interface QiFocusProfile {
   atk: number
@@ -216,8 +217,6 @@ export interface SkillProgress {
   skillId: string
   level: number
   xp: number
-  atCap: boolean
-  btStack: number
   lastUsedAt: number | null
 }
 
@@ -736,7 +735,6 @@ export interface QuestDefinition {
   giver: string
   location: string
   description: string
-  summary?: string
   recommendedRealmTier?: RealmTier
   difficultyLabel?: string
   prerequisites?: QuestPrerequisites

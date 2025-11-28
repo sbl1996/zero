@@ -1,8 +1,10 @@
 import type { CultivationMethodId, QiFocusProfile } from '@/types/domain'
+import { resolveAssetUrl } from '@/utils/assetUrls'
 
 export interface CultivationMethodDefinition {
   id: CultivationMethodId
   name: string
+  icon?: string
   focus: QiFocusProfile
   description: string
   effects: string[]
@@ -17,10 +19,11 @@ const toFocus = (focus: QiFocusProfile): QiFocusProfile => ({
 
 export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
   {
-    id: 'star_soul',
-    name: '星魂斗气',
+    id: 'dragon_blood',
+    name: '龙血斗气',
+    icon: resolveAssetUrl('cult-dragon-blood.webp'),
     focus: toFocus({ atk: 0.4, def: 0.4, agi: 0.2 }),
-    description: '星魂一脉的古老传承，凝聚星辰之力运转斗气，攻守兼备，如星辉般稳定而坚韧。',
+    description: '引动体内沉睡的“青龙”血脉，使血液如奔腾河流般在血管中轰鸣。修炼至深处，体表将覆盖细密的青色龙鳞，肉体力量与防御力呈几何级数暴增，不仅能免疫大部分低阶魔法，更能以纯粹的蛮力粉碎一切阻碍。',
     effects: [
       '均衡流派，进可攻退可守。',
     ],
@@ -28,8 +31,9 @@ export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
   {
     id: 'vajra',
     name: '金刚斗气',
+    icon: resolveAssetUrl('cult-vajra.webp'),
     focus: toFocus({ atk: 0.45, def: 0.5, agi: 0.05 }),
-    description: '传承自北方玄武神兽的不世绝学，取其长寿不灭、固若金汤之神髓，成就万劫不磨之身。',
+    description: '源自“玄武”血脉的苦修法门，通过特殊的呼吸吐纳，将斗气凝练得如同水银般沉重。它并不追求花哨的技巧，而是极致地强化骨骼密度与内脏韧性，让身躯化为战场上不可撼动的移动堡垒，生命气息悠长深厚。',
     effects: [
       '防御大师的选择，拥有惊人的耐受力。',
     ],
@@ -37,8 +41,9 @@ export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
   {
     id: 'tiger_stripe',
     name: '虎纹斗气',
+    icon: resolveAssetUrl('cult-tiger-stripe.webp'),
     focus: toFocus({ atk: 0.5, def: 0.1, agi: 0.4 }),
-    description: '传承自西方白虎神兽的杀伐绝学，取其庚金之锐利、白虎之威猛，剑锋所指，所向披靡。',
+    description: '激发“白虎”血脉中原始的杀戮本能，斗气呈锐利的白金色。该功法极度压榨肌肉纤维的爆发力，使攻击带有天然的撕裂效果。修炼者往往攻势如狂风骤雨，在敌人反应过来之前，便已用武器撕开了对方的喉咙。',
     effects: [
       '爆发流的极致，擅长快速突进与连击爆发。',
     ],
@@ -46,8 +51,9 @@ export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
   {
     id: 'purple_flame',
     name: '紫焰斗气',
+    icon: resolveAssetUrl('cult-purple-flame.webp'),
     focus: toFocus({ atk: 0.3, def: 0.3, agi: 0.15, recovery: 0.25 }),
-    description: '传承自南方朱雀神兽的不灭神火，取其浴火重生之玄妙，焚尽万邪，生生不息。',
+    description: '唤醒“朱雀”血脉中的不死特性，将斗气转化为一种拥有奇特治愈力的紫色热流。它能极大程度激活细胞活性，使伤口以肉眼可见的速度愈合。战斗时全身血液如熔岩般灼热，每一次呼吸都在为身体重新注入勃勃生机。',
     effects: [
       '不灭紫焰：斗气恢复速度翻倍。',
     ],

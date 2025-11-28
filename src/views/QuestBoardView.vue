@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import QuestDetailCard from '@/components/QuestDetailCard.vue'
 import { ITEMS } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import { getSkillDefinition } from '@/data/skills'
 import { useQuestStore } from '@/stores/quests'
-import type { QuestDefinition, QuestObjective, QuestReward, QuestRuntimeStatus } from '@/types/domain'
-import { REALM_TIER_LABELS } from '@/utils/realm'
+import type { QuestDefinition, QuestReward, QuestRuntimeStatus } from '@/types/domain'
 
 const questStore = useQuestStore()
 
@@ -63,40 +63,19 @@ const selectedProgress = computed(() => {
   return questStore.progressOf(id)
 })
 
-interface ObjectiveEntry {
-  objective: QuestObjective
-  current: number
-  target: number
-  description: string
-  completed: boolean
+const itemNameMap = new Map(ITEMS.map(item => [item.id, item.name]))
+const equipmentNameMap = new Map(BASE_EQUIPMENT_TEMPLATES.map(template => [template.id, template.name]))
+
+function formatItemName(itemId: string) {
+  return itemNameMap.get(itemId) ?? itemId
 }
 
-const objectiveEntries = computed<ObjectiveEntry[]>(() => {
-  const quest = selectedQuest.value
-  if (!quest) return []
-  const progress = selectedProgress.value
-  return quest.objectives.map(objective => {
-    const progressEntry = progress?.objectives[objective.id]
-    const current = progressEntry ? progressEntry.current : 0
-    const target = objective.amount
-    const description = objective.description ?? formatObjectiveDescription(objective)
-    const completed = !!progressEntry?.completed
-    return {
-      objective,
-      current,
-      target,
-      description,
-      completed,
-    }
-  })
-})
+function formatEquipmentName(templateId: string) {
+  return equipmentNameMap.get(templateId) ?? templateId
+}
 
-const statusTextMap: Record<QuestRuntimeStatus, string> = {
-  locked: '未解锁',
-  available: '可接受',
-  active: '进行中',
-  readyToTurnIn: '可交付',
-  completed: '已完成',
+function formatSkillName(skillId: string) {
+  return getSkillDefinition(skillId)?.name ?? skillId
 }
 
 const feedback = ref<{ message: string; kind: 'success' | 'error' } | null>(null)
@@ -132,52 +111,6 @@ function submitQuest(id: string) {
   } else {
     setFeedback('尚未满足提交条件。', 'error')
   }
-}
-
-function formatObjectiveDescription(objective: QuestObjective): string {
-  const fallback = objective.description ?? '完成任务目标'
-  if (objective.type === 'kill') {
-    return objective.description ?? `击杀指定敌人 ${objective.amount} 次`
-  }
-  if (objective.type === 'killCollect') {
-    return objective.description ?? `收集 ${objective.amount} 个指定任务物品`
-  }
-  if (objective.type === 'collect') {
-    return objective.description ?? `收集 ${objective.amount} 个 ${objective.itemId}`
-  }
-  return fallback
-}
-
-function difficultyLabel(quest: QuestDefinition) {
-  return quest.difficultyLabel ?? '—'
-}
-
-function recommendedRealmLabel(quest: QuestDefinition) {
-  if (!quest.recommendedRealmTier) return '无'
-  return `${REALM_TIER_LABELS[quest.recommendedRealmTier]}`
-}
-
-function showAcceptButton(status: QuestRuntimeStatus) {
-  return status === 'available'
-}
-
-function showSubmitButton(status: QuestRuntimeStatus) {
-  return status === 'readyToTurnIn'
-}
-
-const itemNameMap = new Map(ITEMS.map(item => [item.id, item.name]))
-const equipmentNameMap = new Map(BASE_EQUIPMENT_TEMPLATES.map(template => [template.id, template.name]))
-
-function formatItemName(itemId: string) {
-  return itemNameMap.get(itemId) ?? itemId
-}
-
-function formatEquipmentName(templateId: string) {
-  return equipmentNameMap.get(templateId) ?? templateId
-}
-
-function formatSkillName(skillId: string) {
-  return getSkillDefinition(skillId)?.name ?? skillId
 }
 
 interface RewardNotice {
@@ -292,7 +225,11 @@ onBeforeUnmount(() => {
               :class="{ active: quest.id === selectedQuestId }"
               @click="selectQuest(quest.id)"
             >
-              <span class="quest-list-name">{{ quest.name }}</span>
+              <span class="quest-list-indicator" />
+              <div class="quest-list-content">
+                <span class="quest-list-name">{{ quest.name }}</span>
+                <span class="quest-list-meta">发布人：{{ quest.giver }}</span>
+              </div>
               <span class="quest-list-tag">可交付</span>
             </button>
           </section>
@@ -307,7 +244,11 @@ onBeforeUnmount(() => {
               :class="{ active: quest.id === selectedQuestId }"
               @click="selectQuest(quest.id)"
             >
-              <span class="quest-list-name">{{ quest.name }}</span>
+              <span class="quest-list-indicator" />
+              <div class="quest-list-content">
+                <span class="quest-list-name">{{ quest.name }}</span>
+                <span class="quest-list-meta">发布人：{{ quest.giver }}</span>
+              </div>
               <span class="quest-list-tag">进行中</span>
             </button>
           </section>
@@ -322,7 +263,11 @@ onBeforeUnmount(() => {
               :class="{ active: quest.id === selectedQuestId }"
               @click="selectQuest(quest.id)"
             >
-              <span class="quest-list-name">{{ quest.name }}</span>
+              <span class="quest-list-indicator" />
+              <div class="quest-list-content">
+                <span class="quest-list-name">{{ quest.name }}</span>
+                <span class="quest-list-meta">发布人：{{ quest.giver }}</span>
+              </div>
               <span class="quest-list-tag">可接受</span>
             </button>
           </section>
@@ -332,102 +277,16 @@ onBeforeUnmount(() => {
           </p>
         </aside>
 
-        <article v-if="selectedQuest" class="quest-board__detail">
-          <header class="quest-detail-header">
-            <div>
-              <h3 class="quest-detail-title">{{ selectedQuest.name }}</h3>
-              <p class="quest-detail-subtitle">
-                {{ selectedQuest.summary ?? selectedQuest.description }}
-              </p>
-            </div>
-            <ul class="quest-detail-meta">
-              <li>
-                <span class="meta-label">难度</span>
-                <span class="meta-value">{{ difficultyLabel(selectedQuest) }}</span>
-              </li>
-              <li>
-                <span class="meta-label">推荐</span>
-                <span class="meta-value">{{ recommendedRealmLabel(selectedQuest) }}</span>
-              </li>
-              <li>
-                <span class="meta-label">状态</span>
-                <span class="meta-value">{{ statusTextMap[selectedStatus] }}</span>
-              </li>
-            </ul>
-          </header>
-
-          <section class="quest-detail-section">
-            <p class="text-muted">发布人：{{ selectedQuest.giver }}</p>
-            <p class="quest-detail-description">{{ selectedQuest.description }}</p>
-          </section>
-
-          <section class="quest-detail-section">
-            <h4>任务目标</h4>
-            <ul class="objective-list">
-              <li v-for="entry in objectiveEntries" :key="entry.objective.id" :class="{ completed: entry.completed }">
-                <div>
-                  <p class="objective-title">{{ entry.description }}</p>
-                  <p class="objective-progress">
-                    {{ entry.current }} / {{ entry.target }}
-                  </p>
-                </div>
-              </li>
-            </ul>
-          </section>
-
-          <section class="quest-detail-section">
-            <h4>任务奖励</h4>
-            <ul class="reward-list">
-              <li v-if="selectedQuest.rewards.gold">
-                GOLD {{ selectedQuest.rewards.gold }}
-              </li>
-              <li v-for="item in selectedQuest.rewards.items ?? []" :key="`${selectedQuest.id}-reward-item-${item.itemId}`">
-                {{ formatItemName(item.itemId) }} ×{{ item.quantity }}
-              </li>
-              <li
-                v-for="equipment in selectedQuest.rewards.equipmentTemplates ?? []"
-                :key="`${selectedQuest.id}-reward-equipment-${equipment.templateId}`"
-              >
-                {{ formatEquipmentName(equipment.templateId) }}
-                {{ equipment.initialLevel ? `（初始 Lv.${equipment.initialLevel}）` : '' }}
-              </li>
-              <li
-                v-for="skillId in selectedQuest.rewards.skillUnlocks ?? []"
-                :key="`${selectedQuest.id}-reward-skill-${skillId}`"
-              >
-                解锁技能 {{ formatSkillName(skillId) }}
-              </li>
-              <li v-if="selectedQuest.rewards.notes">
-                {{ selectedQuest.rewards.notes }}
-              </li>
-            </ul>
-          </section>
-
-          <footer class="quest-detail-actions">
-            <button
-              v-if="showAcceptButton(selectedStatus)"
-              type="button"
-              class="action-button primary"
-              @click="acceptQuest(selectedQuest.id)"
-            >
-              接受任务
-            </button>
-            <button
-              v-if="showSubmitButton(selectedStatus)"
-              type="button"
-              class="action-button success"
-              @click="submitQuest(selectedQuest.id)"
-            >
-              提交任务
-            </button>
-            <span v-if="selectedQuest.repeatable" class="text-small text-muted">
-              此任务可重复接取
-            </span>
-            <span v-if="selectedQuest.allowAbandon === false" class="text-small text-muted">
-              此任务不可放弃
-            </span>
-          </footer>
-        </article>
+        <QuestDetailCard
+          v-if="selectedQuest"
+          :quest="selectedQuest"
+          :status="selectedStatus"
+          :progress="selectedProgress"
+          :show-accept="selectedStatus === 'available'"
+          :show-submit="selectedStatus === 'readyToTurnIn'"
+          @accept="acceptQuest(selectedQuest.id)"
+          @submit="submitQuest(selectedQuest.id)"
+        />
 
         <div v-else class="quest-board__empty">
           选择左侧任务以查看详情。
@@ -449,44 +308,22 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .quest-board {
-  --qb-surface: rgba(255, 255, 255, 0.04);
-  --qb-surface-strong: rgba(255, 255, 255, 0.06);
-  --qb-surface-hover: rgba(255, 255, 255, 0.08);
-  --qb-surface-soft: rgba(255, 255, 255, 0.03);
-  --qb-outline-subtle: rgba(148, 208, 255, 0.14);
-  --qb-outline: rgba(168, 224, 255, 0.3);
-  --qb-outline-strong: rgba(208, 240, 255, 0.45);
-  --qb-glow: rgba(118, 198, 255, 0.22);
-  --qb-muted: rgba(212, 228, 255, 0.75);
-  --qb-muted-strong: rgba(236, 246, 255, 0.92);
-  --qb-bright: #f9fbff;
-  --qb-tag-bg: rgba(128, 176, 255, 0.28);
-  --qb-tag-text: #f1f6ff;
-  --qb-ready-bg: rgba(62, 201, 144, 0.3);
-  --qb-ready-text: #dafbef;
-  --qb-active-bg: rgba(118, 186, 255, 0.28);
-  --qb-active-text: #ecf4ff;
-  --qb-available-bg: rgba(255, 210, 120, 0.32);
-  --qb-available-text: #fff4d0;
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.quest-board__panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 24px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-  margin: 0;
 }
 
 .quest-board__panel {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 22px;
+  border-radius: 18px;
+  background: linear-gradient(165deg, rgba(18, 20, 32, 0.86), rgba(10, 14, 26, 0.88));
+  border: 1px solid var(--quest-border-faint);
+  box-shadow: 0 20px 38px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
 }
 
 .quest-board__reward-card {
@@ -494,12 +331,12 @@ onBeforeUnmount(() => {
   top: 16px;
   right: 16px;
   width: 280px;
-  padding: 16px 20px;
-  background: var(--qb-surface-strong);
-  border: 1px solid var(--qb-outline);
+  padding: 16px 18px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--quest-outline);
   border-radius: 16px;
-  box-shadow: 0 18px 42px rgba(4, 12, 34, 0.52), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-  color: var(--qb-bright);
+  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  color: var(--quest-text);
   display: flex;
   flex-direction: column;
   gap: 8px;
@@ -510,30 +347,30 @@ onBeforeUnmount(() => {
 .reward-card__close {
   position: absolute;
   top: 8px;
-  right: 12px;
+  right: 10px;
   background: transparent;
-  color: var(--qb-muted-strong);
+  color: var(--quest-text-dim);
   border: none;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1;
   cursor: pointer;
-  transition: color 0.2s ease;
+  transition: color 0.18s ease;
 }
 
 .reward-card__close:hover {
-  color: var(--qb-bright);
+  color: var(--quest-text);
 }
 
 .reward-card__title {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.04em;
-  text-transform: uppercase;
 }
 
 .reward-card__subtitle {
-  font-size: 14px;
-  color: var(--qb-muted);
+  font-size: 13px;
+  color: var(--quest-text-dim);
+  margin: 0;
 }
 
 .reward-card__list {
@@ -542,23 +379,22 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .reward-card__item {
   list-style: disc;
-  color: var(--qb-muted-strong);
 }
 
 .reward-card__empty {
-  font-size: 14px;
-  color: var(--qb-muted);
+  font-size: 13px;
+  color: var(--quest-text-dim);
 }
 
 .reward-card__notes {
-  font-size: 13px;
-  color: var(--qb-muted-strong);
-  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  font-size: 12px;
+  color: var(--quest-text-dim);
+  border-top: 1px solid var(--quest-outline);
   padding-top: 8px;
 }
 
@@ -579,37 +415,33 @@ onBeforeUnmount(() => {
   align-items: flex-start;
   gap: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(148, 198, 255, 0.16);
+  border-bottom: 1px solid var(--quest-outline);
 }
 
 .quest-board__feedback {
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 600;
-  border: 1px solid rgba(59, 130, 246, 0.45);
-  background: rgba(59, 130, 246, 0.18);
-  color: #dbeafe;
-  box-shadow: 0 6px 12px rgba(31, 84, 180, 0.28);
+  font-weight: 700;
+  border: 1px solid rgba(76, 201, 240, 0.35);
+  background: rgba(76, 201, 240, 0.14);
+  color: var(--quest-text);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
 }
 
 .quest-board__feedback.success {
-  background: rgba(16, 185, 129, 0.24);
-  color: #bbf7d0;
-  border-color: rgba(16, 185, 129, 0.4);
-  box-shadow: 0 6px 12px rgba(16, 137, 62, 0.25);
+  background: rgba(99, 241, 178, 0.2);
+  border-color: rgba(99, 241, 178, 0.32);
 }
 
 .quest-board__feedback.error {
-  background: rgba(248, 113, 113, 0.2);
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.38);
-  box-shadow: 0 6px 12px rgba(248, 113, 113, 0.24);
+  background: rgba(255, 144, 144, 0.2);
+  border-color: rgba(255, 144, 144, 0.32);
 }
 
 .quest-board__layout {
   display: grid;
-  grid-template-columns: 240px 1fr;
+  grid-template-columns: 260px 1fr;
   gap: 16px;
 }
 
@@ -617,7 +449,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  max-height: 520px;
+  max-height: 540px;
   overflow-y: auto;
   padding-right: 8px;
 }
@@ -630,245 +462,111 @@ onBeforeUnmount(() => {
 
 .quest-list-title {
   font-size: 14px;
-  font-weight: 600;
-  color: var(--qb-muted);
+  font-weight: 700;
+  color: var(--quest-text-dim);
   letter-spacing: 0.02em;
 }
 
 .quest-list-item {
-  display: flex;
-  justify-content: space-between;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
+  gap: 10px;
   padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--qb-outline-subtle);
-  background: linear-gradient(140deg, var(--qb-surface), rgba(14, 22, 40, 0.88));
+  border-radius: 14px;
+  border: 1px solid var(--quest-outline);
+  background: rgba(255, 255, 255, 0.04);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.quest-list-item:hover {
-  border-color: var(--qb-outline);
-  background: linear-gradient(140deg, var(--qb-surface-hover), rgba(24, 38, 64, 0.96));
-  box-shadow: 0 14px 28px var(--qb-glow);
-  transform: translateY(-1px);
+.quest-list-indicator {
+  width: 6px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.quest-list-item.active {
-  border-color: var(--qb-outline-strong);
-  background: linear-gradient(145deg, rgba(45, 67, 108, 0.96), rgba(24, 49, 92, 0.94));
-  box-shadow: 0 0 0 1px rgba(164, 207, 255, 0.45), 0 18px 40px rgba(14, 32, 68, 0.65);
-}
-
-.quest-list-item.ready .quest-list-tag {
-  background: var(--qb-ready-bg);
-  color: var(--qb-ready-text);
-}
-
-.quest-list-item.active-state .quest-list-tag {
-  background: var(--qb-active-bg);
-  color: var(--qb-active-text);
-}
-
-.quest-list-item.available .quest-list-tag {
-  background: var(--qb-available-bg);
-  color: var(--qb-available-text);
+.quest-list-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .quest-list-name {
   font-size: 14px;
-  font-weight: 600;
-  color: var(--qb-bright);
+  font-weight: 700;
+  color: var(--quest-text);
+}
+
+.quest-list-meta {
+  font-size: 12px;
+  color: var(--quest-text-dim);
 }
 
 .quest-list-tag {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   padding: 4px 10px;
   border-radius: 999px;
-  background: var(--qb-tag-bg);
-  color: var(--qb-tag-text);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  background: rgba(76, 201, 240, 0.18);
+  border: 1px solid rgba(76, 201, 240, 0.4);
+  color: var(--quest-text);
+  letter-spacing: 0.06em;
+}
+
+.quest-list-item.ready .quest-list-tag {
+  background: rgba(246, 211, 101, 0.18);
+  border-color: rgba(246, 211, 101, 0.42);
+}
+
+.quest-list-item.active-state .quest-list-tag {
+  background: rgba(99, 241, 178, 0.18);
+  border-color: rgba(99, 241, 178, 0.42);
+}
+
+.quest-list-item.available .quest-list-tag {
+  background: rgba(236, 179, 101, 0.18);
+  border-color: rgba(236, 179, 101, 0.42);
+}
+
+.quest-list-item.active {
+  border-color: rgba(76, 201, 240, 0.5);
+  background: linear-gradient(145deg, rgba(28, 38, 58, 0.9), rgba(22, 30, 46, 0.86));
+  box-shadow: 0 14px 32px rgba(76, 201, 240, 0.18);
+}
+
+.quest-list-item.active .quest-list-indicator {
+  background: linear-gradient(180deg, #2dd4bf, #4cc9f0);
+  box-shadow: 0 0 18px rgba(76, 201, 240, 0.5);
+}
+
+.quest-list-item:hover {
+  border-color: rgba(76, 201, 240, 0.35);
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .quest-list-empty {
   font-size: 13px;
-  color: var(--qb-muted);
-}
-
-.quest-board__detail {
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-  padding: 20px;
-  border-radius: 16px;
-  background: linear-gradient(160deg, rgba(28, 46, 80, 0.64), rgba(14, 26, 48, 0.72));
-  border: 1px solid rgba(196, 232, 255, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 26px 48px rgba(12, 20, 40, 0.5);
-}
-
-.quest-detail-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 12px;
-  padding-bottom: 12px;
-  border-bottom: 1px solid rgba(118, 174, 255, 0.2);
-}
-
-.quest-detail-title {
-  font-size: 20px;
-  font-weight: 700;
-  color: var(--qb-bright);
-  margin: 0;
-}
-
-.quest-detail-subtitle {
-  font-size: 13px;
-  color: var(--qb-muted-strong);
-  margin: 8px 0 0;
-  line-height: 1.5;
-}
-
-.quest-detail-meta {
-  list-style: none;
-  margin: 0;
-  padding: 8px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  border-radius: 12px;
-  background: rgba(13, 25, 44, 0.78);
-  border: 1px solid rgba(118, 174, 255, 0.2);
-}
-
-.meta-label {
-  color: var(--qb-muted);
-  margin-right: 4px;
-}
-
-.meta-value {
-  font-weight: 600;
-  color: var(--qb-bright);
-}
-
-.quest-detail-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
-  border-radius: 12px;
-  background: rgba(18, 34, 62, 0.58);
-  border: 1px solid rgba(168, 216, 255, 0.18);
-}
-
-.quest-detail-section h4 {
-  font-size: 14px;
-  font-weight: 700;
-  margin: 0;
-  color: var(--qb-muted-strong);
-}
-
-.quest-detail-description {
-  color: var(--qb-muted-strong);
-  line-height: 1.6;
-  margin: 0;
-}
-
-.objective-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.objective-list li {
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(168, 216, 255, 0.26);
-  background: linear-gradient(145deg, rgba(24, 40, 70, 0.72), rgba(32, 54, 92, 0.72));
-}
-
-.objective-list li.completed {
-  border-color: rgba(96, 165, 250, 0.55);
-  background: linear-gradient(145deg, rgba(30, 64, 175, 0.5), rgba(37, 99, 235, 0.35));
-  box-shadow: 0 12px 26px rgba(22, 78, 179, 0.35);
-}
-
-.objective-title {
-  font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: var(--qb-bright);
-}
-
-.objective-progress {
-  font-size: 13px;
-  color: var(--qb-muted);
-}
-
-.reward-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  font-size: 13px;
-  color: var(--qb-muted-strong);
-}
-
-.quest-detail-actions {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.action-button {
-  padding: 12px 18px;
-  border-radius: 10px;
-  border: none;
-  font-weight: 600;
-  cursor: pointer;
-  transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
-}
-
-.action-button.primary {
-  background: linear-gradient(135deg, #2563eb, #3b82f6);
-  color: #f8fafc;
-  box-shadow: 0 14px 32px rgba(37, 99, 235, 0.45);
-}
-
-.action-button.success {
-  background: linear-gradient(135deg, #059669, #10b981);
-  color: #ecfdf5;
-  box-shadow: 0 14px 32px rgba(5, 150, 105, 0.45);
-}
-
-.action-button:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
+  color: var(--quest-text-dim);
 }
 
 .quest-board__empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed rgba(148, 198, 255, 0.35);
+  border: 1px dashed var(--quest-outline);
   border-radius: 14px;
-  color: var(--qb-muted-strong);
+  color: var(--quest-text-dim);
   font-size: 14px;
-  background: rgba(13, 23, 43, 0.6);
+  background: rgba(255, 255, 255, 0.04);
   padding: 24px;
 }
 
 .quest-board__inventory {
-  border-top: 1px solid rgba(118, 174, 255, 0.16);
+  border-top: 1px solid var(--quest-outline);
   padding-top: 12px;
   display: flex;
   flex-direction: column;
@@ -877,8 +575,8 @@ onBeforeUnmount(() => {
 
 .inventory-title {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--qb-muted-strong);
+  font-weight: 700;
+  color: var(--quest-text);
 }
 
 .inventory-list {
@@ -896,11 +594,11 @@ onBeforeUnmount(() => {
   align-items: center;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.18);
-  color: #dbeafe;
+  background: rgba(76, 201, 240, 0.16);
+  color: var(--quest-text);
   font-size: 12px;
-  font-weight: 600;
-  border: 1px solid rgba(96, 165, 250, 0.35);
+  font-weight: 700;
+  border: 1px solid rgba(76, 201, 240, 0.4);
 }
 
 .inventory-name {
@@ -909,5 +607,18 @@ onBeforeUnmount(() => {
 
 .inventory-quantity {
   opacity: 0.8;
+}
+
+@media (max-width: 900px) {
+  .quest-board__layout {
+    grid-template-columns: 1fr;
+  }
+  .quest-board__reward-card {
+    position: static;
+    width: auto;
+  }
+  .quest-board__list {
+    max-height: none;
+  }
 }
 </style>

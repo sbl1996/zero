@@ -247,28 +247,29 @@ watch(
       @pointercancel="handlePointerCancel($event)"
       @pointerleave="handlePointerCancel($event)"
     >
-      <span
-        class="quick-item-icon"
-        :class="{ 'quick-item-icon--text': slot.icon.type === 'text' }"
-      >
-        <img
-          v-if="slot.icon.type === 'image'"
-          :src="slot.icon.src"
-          :alt="slot.icon.alt || slot.label"
-        >
+      <template v-if="!slot.isEmpty">
         <span
-          v-else
-          class="quick-item-icon__text"
+          class="quick-item-icon"
+          :class="{ 'quick-item-icon--text': slot.icon.type === 'text' }"
         >
-          {{ slot.icon.text }}
+          <img
+            v-if="slot.icon.type === 'image'"
+            :src="slot.icon.src"
+            :alt="slot.icon.alt || slot.label"
+          >
+          <span
+            v-else
+            class="quick-item-icon__text"
+          >
+            {{ slot.icon.text }}
+          </span>
         </span>
-      </span>
-      <span
-        v-if="!slot.isEmpty"
-        class="quick-item-quantity"
-      >
-        ×{{ slot.quantity }}
-      </span>
+        <span
+          class="quick-item-quantity"
+        >
+          ×{{ slot.quantity }}
+        </span>
+      </template>
       <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>
     </button>
   </div>

@@ -8,6 +8,8 @@ import type {
 import { EQUIPMENT_TEMPLATE_MAP } from '@/data/equipment'
 import { randBool } from './useRng'
 
+export type { EnhanceMaterialCost } from '@/types/domain'
+
 export type MainEnhanceGem = 'blessGem' | 'soulGem' | 'miracleGem'
 
 export const MAX_EQUIP_LEVEL = 15
@@ -133,6 +135,7 @@ const SLOT_FLAT_CAP: Record<EquipSlot, number> = {
   weapon2H: 0.25,
   shieldL: 0.18,
   armor: 0.18,
+  boots: 0.18,
   helmet: 0.15,
   ring: 0.15,
 }

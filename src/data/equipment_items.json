@@ -22,7 +22,7 @@
     {
         "id": "rough-leather-cap",
         "name": "粗皮帽",
-        "description": "由粗糙皮革缝制而成的简易头帽，虽然外观朴实，但足够耐用，适合新手冒险者上路时使用。",
+        "description": "由粗糙皮革缝制而成的简易头帽，虽然外观朴实，但足够耐用。",
         "artwork": "eq-rough-leather-cap.webp",
         "slot": "helmet",
         "base_quality": "normal",
@@ -140,6 +140,26 @@
         "flags": []
     },
     {
+        "id": "little-leather-shield",
+        "name": "小皮盾",
+        "description": "用粗制兽皮加固而成的小盾牌，轻便易用。",
+        "artwork": "eq-little-leather-shield.webp",
+        "slot": "shieldL",
+        "base_quality": "normal",
+        "required_tier": 2,
+        "base_main": {
+            "type": "DEF",
+            "value": 10.0
+        },
+        "substats": [],
+        "price": {
+            "buy": 480,
+            "sell": 400
+        },
+        "flags": [],
+        "enhance_materials": []
+    },
+    {
         "id": "thunder-shield",
         "base_quality": "rare",
         "slot": "shieldL",
@@ -168,7 +188,7 @@
     {
         "id": "novice-sword",
         "name": "初心者之剑",
-        "description": "你的第一把武器，曾被无数只手紧握，挥起时却意外地顺手。\n虽历经漫长岁月，它的剑刃从未卷曲，仿佛在等待真正的归宿。\n“行路漫漫，切勿忘记为何出发。”",
+        "description": "你的第一把武器，曾被无数只手紧握，挥起时意外地顺手。\n虽历经漫长岁月，它的剑刃从未卷曲，仿佛在等待真正的归宿。\n“行路漫漫，切勿忘记为何出发。”",
         "artwork": "eq-novice-sword.webp",
         "slot": "weaponR",
         "base_quality": "normal",
@@ -252,65 +272,12 @@
         "flags": []
     },
     {
-        "id": "iron-sword",
-        "base_quality": "normal",
-        "slot": "weaponR",
-        "required_tier": 2,
-        "name": "铁剑",
-        "description": "10级冒险者常用的铁剑，剑身经过淬火处理，比新手武器更耐用。",
-        "base_main": {
-            "type": "ATK",
-            "value": 20
-        },
-        "substats": [],
-        "price": {
-            "sell": 500,
-            "buy": 600
-        },
-        "flags": []
-    },
-    {
-        "id": "lionheart-judgment",
-        "base_quality": "epic",
-        "slot": "weaponR",
-        "required_tier": 2,
-        "name": "狮心圣裁",
-        "description": "“以雷霆之威，行君王之令。”\n汇聚上古龙魂与圣光之力，无视任何阻碍，斩断一切混沌。唯有拥有“无畏之心”者方能驾驭。",
-        "artwork": "eq-lionheart-judgment.webp",
-        "base_main": {
-            "type": "ATK",
-            "value": 80
-        },
-        "substats": [
-            {
-                "type": "ATK",
-                "value": 20
-            },
-            {
-                "type": "AGI",
-                "value": 25
-            },
-            {
-                "type": "WeaknessRate",
-                "value": 20
-            },
-            {
-                "type": "WeaknessDmgPct",
-                "value": 25
-            }
-        ],
-        "price": {
-            "sell": 8800
-        },
-        "flags": []
-    },
-    {
         "id": "heirloom-sword",
         "base_quality": "epic",
         "slot": "weaponR",
         "required_tier": 2,
         "name": "传承者之剑",
-        "description": "洗尽铅华，这柄流转于无数之手的古剑，终于回应了真正的意志。\n剑锋所指，不仅是你的前路，亦承载着所有先驱的未尽之愿。\n“万千初心汇聚于此，我们终将抵达彼岸。”",
+        "description": "洗尽铅华，这柄流转于无数之手的古剑，终于回应了你的意志。\n剑锋所指，不仅是你的前路，亦承载着所有先驱的未尽之愿。\n“万千初心汇聚于此，我们终将抵达彼岸。”",
         "artwork": "eq-heirloom-sword.webp",
         "base_main": {
             "type": "ATK",
@@ -338,6 +305,60 @@
             "sell": 8800
         },
         "flags": []
+    },
+    {
+        "id": "iron-sword",
+        "base_quality": "normal",
+        "slot": "weaponR",
+        "required_tier": 2,
+        "name": "铁剑",
+        "description": "冒险者常用的铁剑，剑身经过淬火处理。",
+        "base_main": {
+            "type": "ATK",
+            "value": 20
+        },
+        "substats": [],
+        "price": {
+            "sell": 500,
+            "buy": 600
+        },
+        "flags": []
+    },
+    {
+        "id": "lionheart-judgment",
+        "name": "狮心圣裁",
+        "description": "“以雷霆之威，行君王之令。”\n汇聚上古龙魂与圣光之力，无视任何阻碍，斩断一切混沌。\n唯有拥有“无畏之心”者方能驾驭。",
+        "artwork": "eq-lionheart-judgment.webp",
+        "slot": "weaponR",
+        "base_quality": "epic",
+        "required_tier": 2,
+        "base_main": {
+            "type": "ATK",
+            "value": 80.0
+        },
+        "substats": [
+            {
+                "type": "ATK",
+                "value": 20.0
+            },
+            {
+                "type": "AGI",
+                "value": 25.0
+            },
+            {
+                "type": "WeaknessRate",
+                "value": 20.0
+            },
+            {
+                "type": "WeaknessDmgPct",
+                "value": 25.0
+            }
+        ],
+        "price": {
+            "sell": 8800
+        },
+        "flags": [],
+        "enhance_materials": []
     },
     {
         "id": "moonlight-sword",
@@ -420,7 +441,7 @@
         "slot": "weapon2H",
         "required_tier": 2,
         "name": "铁锤",
-        "description": "沉重的铁制锤子，适合力量型战士使用。",
+        "description": "由整块铁坯锻打而成的锤子，造型朴实笨重。",
         "base_main": {
             "type": "ATK",
             "value": 20
@@ -431,6 +452,26 @@
             "buy": 600
         },
         "flags": []
+    },
+    {
+        "id": "rough-greatsword",
+        "name": "粗制大剑",
+        "description": "沉重而笨拙的铁剑，边缘略显参差，但挥下时仍能带来踏实的力量。",
+        "artwork": "eq-rough-greatsword.webp",
+        "slot": "weapon2H",
+        "base_quality": "normal",
+        "required_tier": 2,
+        "base_main": {
+            "type": "ATK",
+            "value": 20.0
+        },
+        "substats": [],
+        "price": {
+            "buy": 600,
+            "sell": 500
+        },
+        "flags": [],
+        "enhance_materials": []
     },
     {
         "id": "leather-armor",
@@ -714,5 +755,27 @@
             "sell": 420
         },
         "flags": []
+    },
+    {
+        "id": "leather-boots",
+        "name": "皮靴",
+        "description": "由动物皮革与坚固鞋底制成的轻便靴子，适合长时间行走。",
+        "artwork": "eq-leather-boots.webp",
+        "slot": "boots",
+        "base_quality": "normal",
+        "required_tier": 1,
+        "base_main": {
+            "type": "DEF",
+            "value": 4.0
+        },
+        "substats": [],
+        "price": {
+            "buy": 100,
+            "sell": 80
+        },
+        "flags": [
+            "starter"
+        ],
+        "enhance_materials": []
     }
 ]

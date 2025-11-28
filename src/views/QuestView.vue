@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
+import QuestDetailCard from '@/components/QuestDetailCard.vue'
 import { ITEMS } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import { getSkillDefinition } from '@/data/skills'
 import { useQuestStore } from '@/stores/quests'
-import type { QuestDefinition, QuestObjective, QuestRuntimeStatus } from '@/types/domain'
+import type { QuestDefinition, QuestRuntimeStatus } from '@/types/domain'
 
 const questStore = useQuestStore()
 
@@ -63,28 +64,6 @@ const selectedActiveProgress = computed(() => {
   return questStore.progressOf(id)
 })
 
-interface ObjectiveEntry {
-  title: string
-  current: number
-  target: number
-  completed: boolean
-}
-
-const activeObjectiveEntries = computed<ObjectiveEntry[]>(() => {
-  const quest = selectedActiveQuest.value
-  if (!quest) return []
-  const progress = selectedActiveProgress.value
-  return quest.objectives.map((objective) => {
-    const entry = progress?.objectives[objective.id]
-    return {
-      title: objective.description ?? formatObjectiveDescription(objective),
-      current: entry?.current ?? 0,
-      target: objective.amount,
-      completed: !!entry?.completed,
-    }
-  })
-})
-
 const completionLog = computed(() => questStore.completionLogView)
 
 const selectedLogIndex = ref(0)
@@ -140,20 +119,6 @@ function abandonQuest(id: string) {
   } else {
     setFeedback('无法放弃该任务。', 'error')
   }
-}
-
-function formatObjectiveDescription(objective: QuestObjective) {
-  const fallback = objective.description ?? '完成任务目标'
-  if (objective.type === 'kill') {
-    return objective.description ?? `击杀指定敌人 ${objective.amount} 次`
-  }
-  if (objective.type === 'killCollect') {
-    return objective.description ?? `收集 ${objective.amount} 个任务物品`
-  }
-  if (objective.type === 'collect') {
-    return objective.description ?? `收集 ${objective.amount} 个 ${objective.itemId}`
-  }
-  return fallback
 }
 
 function formatStatusLabel(status: QuestRuntimeStatus) {
@@ -239,7 +204,11 @@ function formatSkillName(skillId: string) {
             }"
             @click="selectActiveQuest(quest.id)"
           >
-            <span class="quest-list-name">{{ quest.name }}</span>
+            <span class="quest-list-indicator" />
+            <div class="quest-list-content">
+              <span class="quest-list-name">{{ quest.name }}</span>
+              <span class="quest-list-meta">发布人：{{ quest.giver }}</span>
+            </div>
             <span class="quest-list-tag">{{ formatStatusLabel(questStore.getStatus(quest.id)) }}</span>
           </button>
           <p v-if="!activeQuestList.length" class="quest-list-empty">
@@ -247,53 +216,14 @@ function formatSkillName(skillId: string) {
           </p>
         </aside>
 
-        <article v-if="selectedActiveQuest" class="quest-detail">
-          <header class="quest-detail-headline">
-            <h3>{{ selectedActiveQuest.name }}</h3>
-            <span
-              class="quest-status-label"
-              :class="{ ready: selectedActiveStatus === 'readyToTurnIn' }"
-            >
-              {{ formatStatusLabel(selectedActiveStatus) }}
-            </span>
-          </header>
-
-          <p class="quest-detail-summary">
-            {{ selectedActiveQuest.summary ?? selectedActiveQuest.description }}
-          </p>
-
-          <section class="quest-detail-section">
-            <h4>任务目标</h4>
-            <ul class="objective-list">
-              <li v-for="objective in activeObjectiveEntries" :key="objective.title" :class="{ completed: objective.completed }">
-                <p class="objective-title">{{ objective.title }}</p>
-                <p class="objective-progress">{{ objective.current }} / {{ objective.target }}</p>
-              </li>
-            </ul>
-          </section>
-
-          <section class="quest-detail-section info">
-            <p v-if="selectedActiveStatus === 'readyToTurnIn'" class="info-message">
-              已达成任务目标，请返回翡冷翠的任务板提交。
-            </p>
-            <p v-else class="info-message">
-              可在此查看进度，如需提交请前往任务板。
-            </p>
-          </section>
-
-          <footer class="quest-detail-actions">
-            <button
-              v-if="showAbandonButton(selectedActiveStatus, selectedActiveQuest.allowAbandon)"
-              type="button"
-              class="danger"
-              @click="abandonQuest(selectedActiveQuest.id)"
-            >
-              放弃任务
-            </button>
-            <span v-if="selectedActiveQuest.repeatable" class="text-small text-muted">此任务可重复接取。</span>
-            <span v-if="selectedActiveQuest.allowAbandon === false" class="text-small text-muted">此任务不可放弃。</span>
-          </footer>
-        </article>
+        <QuestDetailCard
+          v-if="selectedActiveQuest"
+          :quest="selectedActiveQuest"
+          :status="selectedActiveStatus"
+          :progress="selectedActiveProgress"
+          :show-abandon="showAbandonButton(selectedActiveStatus, selectedActiveQuest.allowAbandon)"
+          @abandon="abandonQuest(selectedActiveQuest.id)"
+        />
 
         <div v-else class="quest-empty-detail">
           选择左侧任务查看详情。
@@ -383,25 +313,6 @@ function formatSkillName(skillId: string) {
 
 <style scoped>
 .quest-view {
-  --qv-surface: rgba(255, 255, 255, 0.04);
-  --qv-surface-strong: rgba(255, 255, 255, 0.06);
-  --qv-surface-hover: rgba(255, 255, 255, 0.08);
-  --qv-outline-subtle: rgba(158, 216, 255, 0.16);
-  --qv-outline: rgba(180, 232, 255, 0.32);
-  --qv-outline-strong: rgba(216, 244, 255, 0.48);
-  --qv-glow: rgba(120, 200, 255, 0.24);
-  --qv-muted: rgba(210, 228, 255, 0.75);
-  --qv-muted-strong: rgba(234, 244, 255, 0.9);
-  --qv-bright: #f8fbff;
-  --qv-tag-bg: rgba(138, 188, 255, 0.28);
-  --qv-tag-text: #f0f6ff;
-  --qv-ready-bg: rgba(62, 201, 144, 0.3);
-  --qv-ready-text: #dafbef;
-  --qv-ready-border: rgba(62, 201, 144, 0.45);
-  --qv-primary-bg: rgba(118, 186, 255, 0.32);
-  --qv-primary-text: #ecf4ff;
-  --qv-archived-bg: rgba(176, 196, 216, 0.3);
-  --qv-archived-text: #f2f4f8;
   display: flex;
   flex-direction: column;
   gap: 16px;
@@ -411,20 +322,21 @@ function formatSkillName(skillId: string) {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  padding: 24px;
+  padding: 22px;
   border-radius: 18px;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.32), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-  margin: 0;
+  background: linear-gradient(165deg, rgba(20, 22, 32, 0.84), rgba(14, 18, 28, 0.9));
+  border: 1px solid var(--quest-border-faint);
+  box-shadow: 0 20px 38px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  backdrop-filter: blur(12px);
 }
 
 .quest-view__header {
   display: flex;
   justify-content: space-between;
-  gap: 16px;
+  align-items: flex-start;
+  gap: 12px;
   padding-bottom: 8px;
-  border-bottom: 1px solid rgba(138, 192, 255, 0.18);
+  border-bottom: 1px solid var(--quest-outline);
 }
 
 .quest-tabs {
@@ -435,59 +347,48 @@ function formatSkillName(skillId: string) {
 .quest-tabs button {
   padding: 8px 16px;
   border-radius: 999px;
-  border: 1px solid var(--qv-outline-subtle);
-  background: rgba(17, 29, 54, 0.6);
-  color: var(--qv-muted-strong);
-  font-weight: 600;
+  border: 1px solid var(--quest-outline);
+  background: rgba(255, 255, 255, 0.06);
+  color: var(--quest-text);
+  font-weight: 700;
   font-size: 13px;
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.quest-tabs button:hover {
-  border-color: var(--qv-outline);
-  background: rgba(29, 47, 80, 0.78);
-  box-shadow: 0 10px 22px var(--qv-glow);
+  transition: all 0.18s ease;
 }
 
 .quest-tabs button.active {
-  background: linear-gradient(135deg, rgba(59, 130, 246, 0.55), rgba(37, 99, 235, 0.75));
-  border-color: var(--qv-outline-strong);
-  color: var(--qv-bright);
-  box-shadow: 0 12px 28px rgba(37, 99, 235, 0.45);
-  transform: translateY(-1px);
+  background: linear-gradient(135deg, #2dd4bf, #4cc9f0);
+  color: #071019;
+  border-color: rgba(76, 201, 240, 0.5);
+  box-shadow: 0 10px 22px rgba(76, 201, 240, 0.32);
 }
 
 .quest-view__feedback {
   align-self: flex-start;
   padding: 6px 12px;
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 600;
-  border: 1px solid rgba(59, 130, 246, 0.45);
-  background: rgba(59, 130, 246, 0.18);
-  color: #dbeafe;
-  box-shadow: 0 6px 12px rgba(31, 84, 180, 0.28);
+  font-weight: 700;
+  border: 1px solid rgba(76, 201, 240, 0.35);
+  background: rgba(76, 201, 240, 0.14);
+  color: var(--quest-text);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.2);
 }
 
 .quest-view__feedback.success {
-  background: rgba(16, 185, 129, 0.24);
-  color: #bbf7d0;
-  border-color: rgba(16, 185, 129, 0.4);
-  box-shadow: 0 6px 12px rgba(16, 137, 62, 0.25);
+  background: rgba(99, 241, 178, 0.2);
+  border-color: rgba(99, 241, 178, 0.32);
 }
 
 .quest-view__feedback.error {
-  background: rgba(248, 113, 113, 0.2);
-  color: #fecaca;
-  border-color: rgba(248, 113, 113, 0.38);
-  box-shadow: 0 6px 12px rgba(248, 113, 113, 0.24);
+  background: rgba(255, 144, 144, 0.2);
+  border-color: rgba(255, 144, 144, 0.32);
 }
 
 .quest-active-layout,
 .quest-completed-layout {
   display: grid;
-  grid-template-columns: 220px 1fr;
+  grid-template-columns: 260px 1fr;
   gap: 16px;
 }
 
@@ -496,96 +397,105 @@ function formatSkillName(skillId: string) {
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 520px;
+  max-height: 540px;
   overflow-y: auto;
   padding-right: 6px;
 }
 
 .quest-list-item,
 .quest-log-item {
-  display: flex;
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   padding: 12px 14px;
-  border-radius: 12px;
-  border: 1px solid var(--qv-outline-subtle);
-  background: linear-gradient(140deg, var(--qv-surface), rgba(15, 26, 48, 0.88));
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--quest-outline);
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   cursor: pointer;
-  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
 
-.quest-list-item:hover,
-.quest-log-item:hover {
-  border-color: var(--qv-outline);
-  background: linear-gradient(140deg, var(--qv-surface-hover), rgba(26, 42, 74, 0.96));
-  box-shadow: 0 14px 28px var(--qv-glow);
-  transform: translateY(-1px);
+.quest-list-indicator {
+  width: 6px;
+  height: 36px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
 }
 
-.quest-list-item.active,
-.quest-log-item.active {
-  border-color: var(--qv-outline-strong);
-  background: linear-gradient(148deg, rgba(46, 72, 116, 0.96), rgba(30, 54, 96, 0.94));
-  box-shadow: 0 0 0 1px rgba(176, 214, 255, 0.45), 0 18px 40px rgba(16, 35, 70, 0.6);
-}
-
-.quest-list-item.ready .quest-list-tag {
-  background: var(--qv-ready-bg);
-  color: var(--qv-ready-text);
-  border-color: var(--qv-ready-border);
+.quest-list-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 .quest-list-name,
 .quest-log-name {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--qv-bright);
-  flex: 1 1 auto;
   margin: 0;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--quest-text);
+}
+
+.quest-list-meta {
+  font-size: 12px;
+  color: var(--quest-text-dim);
 }
 
 .quest-list-tag {
   font-size: 11px;
-  padding: 3px 9px;
+  padding: 4px 10px;
   border-radius: 999px;
-  background: var(--qv-tag-bg);
-  color: var(--qv-tag-text);
-  font-weight: 600;
-  border: 1px solid rgba(96, 152, 226, 0.35);
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  background: rgba(76, 201, 240, 0.18);
+  border: 1px solid rgba(76, 201, 240, 0.4);
+  color: var(--quest-text);
+  font-weight: 700;
+  letter-spacing: 0.06em;
 }
 
-.quest-log-time {
-  font-size: 11px;
-  color: var(--qv-muted);
-  white-space: nowrap;
-  text-align: right;
+.quest-list-item.ready .quest-list-tag {
+  background: rgba(246, 211, 101, 0.18);
+  border-color: rgba(246, 211, 101, 0.42);
 }
 
-.quest-log-count {
-  font-size: 11px;
-  color: var(--qv-muted-strong);
-  white-space: nowrap;
-  text-align: right;
+.quest-list-item.active {
+  border-color: rgba(76, 201, 240, 0.5);
+  background: linear-gradient(145deg, rgba(28, 38, 58, 0.9), rgba(22, 30, 46, 0.86));
+  box-shadow: 0 14px 32px rgba(76, 201, 240, 0.18);
+}
+
+.quest-list-item.active .quest-list-indicator {
+  background: linear-gradient(180deg, #2dd4bf, #4cc9f0);
+  box-shadow: 0 0 18px rgba(76, 201, 240, 0.5);
+}
+
+.quest-list-item:hover,
+.quest-log-item:hover {
+  border-color: rgba(76, 201, 240, 0.35);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.quest-log-item.active {
+  border-color: rgba(172, 196, 255, 0.4);
+  background: linear-gradient(145deg, rgba(28, 36, 62, 0.9), rgba(18, 24, 44, 0.86));
 }
 
 .quest-list-empty {
   font-size: 13px;
-  color: var(--qv-muted);
+  color: var(--quest-text-dim);
 }
 
 .quest-detail {
   display: flex;
   flex-direction: column;
-  gap: 16px;
-  padding: 20px;
+  gap: 12px;
+  padding: 18px;
   border-radius: 16px;
-  background: linear-gradient(160deg, rgba(26, 48, 84, 0.62), rgba(14, 28, 52, 0.7));
-  border: 1px solid rgba(200, 236, 255, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.04), 0 24px 40px rgba(10, 18, 38, 0.5);
+  background: linear-gradient(165deg, rgba(18, 24, 40, 0.84), rgba(14, 18, 30, 0.88));
+  border: 1px solid var(--quest-outline);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
 .quest-detail-headline {
@@ -596,139 +506,87 @@ function formatSkillName(skillId: string) {
 }
 
 .quest-status-label {
-  padding: 4px 10px;
+  padding: 4px 12px;
   border-radius: 999px;
   font-size: 12px;
-  font-weight: 600;
-  background: var(--qv-primary-bg);
-  color: var(--qv-primary-text);
-  border: 1px solid rgba(96, 165, 250, 0.45);
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
-.quest-status-label.ready {
-  background: var(--qv-ready-bg);
-  color: var(--qv-ready-text);
-  border-color: var(--qv-ready-border);
+  font-weight: 700;
+  background: rgba(76, 201, 240, 0.2);
+  border: 1px solid rgba(76, 201, 240, 0.45);
+  color: var(--quest-text);
+  letter-spacing: 0.05em;
 }
 
 .quest-status-label.archived {
-  background: var(--qv-archived-bg);
-  color: var(--qv-archived-text);
-  border-color: rgba(148, 163, 184, 0.45);
+  background: rgba(148, 163, 184, 0.22);
+  border-color: rgba(148, 163, 184, 0.35);
 }
 
 .quest-detail-summary {
   font-size: 13px;
-  color: var(--qv-muted-strong);
-  line-height: 1.5;
+  color: var(--quest-text-dim);
+  margin: 0;
 }
 
 .quest-detail-section {
   display: flex;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 16px;
+  gap: 8px;
+  padding: 12px 14px;
   border-radius: 12px;
-  background: rgba(22, 40, 72, 0.62);
-  border: 1px solid rgba(180, 224, 255, 0.22);
-}
-
-.quest-detail-section.info {
-  background: rgba(28, 50, 88, 0.66);
-  border-color: rgba(144, 202, 255, 0.34);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--quest-outline);
 }
 
 .quest-detail-section h4 {
-  font-size: 14px;
-  font-weight: 700;
   margin: 0;
-  color: var(--qv-muted-strong);
-}
-
-.objective-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.objective-list li {
-  padding: 12px;
-  border-radius: 10px;
-  border: 1px solid rgba(186, 226, 255, 0.24);
-  background: linear-gradient(145deg, rgba(24, 42, 72, 0.72), rgba(34, 56, 92, 0.72));
-}
-
-.objective-list li.completed {
-  border-color: rgba(96, 165, 250, 0.55);
-  background: linear-gradient(145deg, rgba(37, 99, 235, 0.35), rgba(59, 130, 246, 0.35));
-  box-shadow: 0 12px 26px rgba(22, 78, 179, 0.35);
-}
-
-.objective-title {
   font-size: 14px;
-  font-weight: 600;
-  margin-bottom: 4px;
-  color: var(--qv-bright);
-}
-
-.objective-progress {
-  font-size: 13px;
-  color: var(--qv-muted);
 }
 
 .reward-list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding-left: 14px;
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 13px;
-  color: var(--qv-muted-strong);
+  color: var(--quest-text);
 }
 
 .quest-detail-actions {
   display: flex;
-  align-items: center;
-  gap: 12px;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 .quest-detail-actions button.danger {
-  padding: 12px 18px;
-  border-radius: 10px;
-  border: none;
-  background: linear-gradient(135deg, #dc2626, #f87171);
-  color: #fee2e2;
-  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 99, 99, 0.4);
+  background: transparent;
+  color: #ffc6c6;
   cursor: pointer;
-  box-shadow: 0 14px 32px rgba(220, 38, 38, 0.4);
-  transition: transform 0.15s ease, filter 0.15s ease;
+  transition: all 0.15s ease;
 }
 
 .quest-detail-actions button.danger:hover {
-  transform: translateY(-1px);
-  filter: brightness(1.05);
+  background: rgba(255, 99, 99, 0.12);
 }
 
-.quest-empty-detail {
+.quest-empty-detail,
+.quest-board__empty {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px dashed rgba(138, 192, 255, 0.35);
+  border: 1px dashed var(--quest-outline);
   border-radius: 14px;
-  color: var(--qv-muted-strong);
+  color: var(--quest-text-dim);
   font-size: 14px;
-  background: rgba(13, 23, 43, 0.6);
+  background: rgba(255, 255, 255, 0.04);
   padding: 24px;
 }
 
 .quest-inventory {
-  border-top: 1px solid rgba(132, 188, 255, 0.18);
+  border-top: 1px solid var(--quest-outline);
   padding-top: 12px;
   display: flex;
   flex-direction: column;
@@ -737,30 +595,30 @@ function formatSkillName(skillId: string) {
 
 .inventory-title {
   font-size: 13px;
-  font-weight: 600;
-  color: var(--qv-muted-strong);
+  font-weight: 700;
+  color: var(--quest-text);
 }
 
 .inventory-list {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
+  gap: 10px;
   list-style: none;
   margin: 0;
   padding: 0;
 }
 
 .inventory-list li {
-  display: flex;
+  display: inline-flex;
   gap: 6px;
   align-items: center;
   padding: 6px 12px;
   border-radius: 999px;
-  background: rgba(59, 130, 246, 0.18);
-  color: #dbeafe;
+  background: rgba(76, 201, 240, 0.16);
+  color: var(--quest-text);
   font-size: 12px;
-  font-weight: 600;
-  border: 1px solid rgba(96, 165, 250, 0.35);
+  font-weight: 700;
+  border: 1px solid rgba(76, 201, 240, 0.4);
 }
 
 .inventory-count {
@@ -769,6 +627,17 @@ function formatSkillName(skillId: string) {
 
 .info-message {
   font-size: 13px;
-  color: var(--qv-muted-strong);
+  color: var(--quest-text-dim);
+}
+
+@media (max-width: 900px) {
+  .quest-active-layout,
+  .quest-completed-layout {
+    grid-template-columns: 1fr;
+  }
+  .quest-list,
+  .quest-log-list {
+    max-height: none;
+  }
 }
 </style>

@@ -124,6 +124,12 @@ function clearHover() {
   left: 50%;
 }
 
+.paper-doll__slot-wrapper--boots {
+  top: 93%;
+  left: 50%;
+  text-align: center;
+}
+
 .paper-doll__slot-wrapper--ring1 {
   top: 82%;
   left: 15%;

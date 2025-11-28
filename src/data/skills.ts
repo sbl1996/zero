@@ -40,6 +40,12 @@ function resolveSkillIcon(skillId: string): string {
   return resolveAssetUrl(`skill-${skillId.replace(/_/g, '-')}.webp`)
 }
 
+function resolvePerLevelCooldown(base: number, level: number, minimum: number): number {
+  const l = Math.max(level ?? 1, 1)
+  const multiplier = Math.max(0.2, 1 - 0.02 * l)
+  return Math.max(minimum, base * multiplier)
+}
+
 const META_DRAGON_BREATH = getSkillMeta('dragon_breath_slash')
 const META_FALLEN_DRAGON = getSkillMeta('fallen_dragon_smash')
 const META_STAR_REALM = getSkillMeta('star_realm_dragon_blood_break')
@@ -97,17 +103,13 @@ export const SKILLS: SkillDefinition[] = [
     id: META_DRAGON_BREATH.id,
     name: META_DRAGON_BREATH.name,
     description: describeDragonBreath(1),
+    cooldown: 2,
     cost: { type: 'qi', percentOfQiMax: 0.02 },
     flash: 'attack',
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_DRAGON_BREATH.id),
     maxLevel: 10,
-    getCooldown: (level) => {
-      const l = Math.max(level, 1)
-      const reduction = 0.02 * (l - 1)
-      const multiplier = Math.max(0.2, 1 - reduction)
-      return Math.max(0.5, 2 * multiplier)
-    },
+    getCooldown: (level) => resolvePerLevelCooldown(2, level, 0.5),
     getCostMultiplier: (level) => (level >= 6 ? 0.8 : 1),
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(DRAGON_BREATH_BASE_MULTIPLIER, DRAGON_BREATH_PER_LEVEL, level),
@@ -155,18 +157,14 @@ export const SKILLS: SkillDefinition[] = [
     id: META_FALLEN_DRAGON.id,
     name: META_FALLEN_DRAGON.name,
     description: describeFallenDragon(1),
+    cooldown: 5,
     cost: { type: 'qi', percentOfQiMax: 0.04 },
     flash: 'skill',
     chargeTime: 0.2,
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_FALLEN_DRAGON.id),
     maxLevel: 10,
-    getCooldown: (level) => {
-      const l = Math.max(level, 1)
-      const reduction = 0.02 * (l - 1)
-      const multiplier = Math.max(0.2, 1 - reduction)
-      return Math.max(1, 5 * multiplier)
-    },
+    getCooldown: (level) => resolvePerLevelCooldown(5, level, 1),
     getCostMultiplier: (_level) => 1.0,
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(FALLEN_DRAGON_BASE_MULTIPLIER, FALLEN_DRAGON_PER_LEVEL, level),
@@ -207,18 +205,14 @@ export const SKILLS: SkillDefinition[] = [
     id: META_STAR_REALM.id,
     name: META_STAR_REALM.name,
     description: describeStarRealm(1),
+    cooldown: 16,
     cost: { type: 'qi', percentOfQiMax: 0.1 },
     flash: 'ult',
     chargeTime: 0.5,
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_STAR_REALM.id),
     maxLevel: 10,
-    getCooldown: (level) => {
-      const l = Math.max(level, 1)
-      const reduction = 0.02 * (l - 1)
-      const multiplier = Math.max(0.2, 1 - reduction)
-      return Math.max(5, 16 * multiplier)
-    },
+    getCooldown: (level) => resolvePerLevelCooldown(16, level, 5),
     getCostMultiplier: (_level) => 1.0,
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(STAR_REALM_BASE_MULTIPLIER, STAR_REALM_PER_LEVEL, level),
@@ -267,6 +261,7 @@ export const SKILLS: SkillDefinition[] = [
     id: META_QI_DODGE.id,
     name: META_QI_DODGE.name,
     description: META_QI_DODGE.description,
+    cooldown: 0.7,
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
     aftercastTime: 0.3,

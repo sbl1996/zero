@@ -9,6 +9,7 @@ const SLOT_ICON_MAP: Record<EquipSlot, ItemIcon> = {
   weaponR: textIcon('⚔️'),
   weapon2H: textIcon('🗡️'),
   armor: textIcon('🦺'),
+  boots: textIcon('🥾'),
   ring: textIcon('💍'),
 }
 

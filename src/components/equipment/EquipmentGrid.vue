@@ -13,6 +13,7 @@ const props = defineProps<{
   filters: EquipmentFilterOption[]
   filter: string
   selectedId: string | null
+  showFilters?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -75,7 +76,7 @@ function handleKeydown(event: KeyboardEvent) {
 
 <template>
   <section class="grid-panel">
-    <div class="grid-panel__filters">
+    <div v-if="props.showFilters !== false" class="grid-panel__filters">
       <button
         v-for="option in props.filters"
         :key="option.value"
@@ -151,6 +152,7 @@ function handleKeydown(event: KeyboardEvent) {
   grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
   min-height: 240px;
+  align-content: start;
   outline: none;
 }
 

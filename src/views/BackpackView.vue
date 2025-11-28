@@ -9,12 +9,12 @@ import { usePlayerStore } from '@/stores/player'
 import { useEquipmentActions } from '@/composables/useEquipmentActions'
 import { useEquipmentSelection } from '@/composables/useEquipmentSelection'
 import { ITEMS, consumableIds } from '@/data/items'
+import { CORE_SHARD_BASE_ID } from '@/data/cultivationCores'
 import { resolveItemIcon, textIcon } from '@/utils/itemIcon'
 import { createEquipmentGridEntry, type EquipmentEntryBuilderContext } from '@/utils/equipmentEntry'
 import type { ItemIcon } from '@/utils/itemIcon'
 import type { EquipSlotKey, Equipment } from '@/types/domain'
 import type { EquipmentGridEntry, EquipmentSubType } from '@/types/equipment-ui'
-import type { EquipmentFilterOption } from '@/components/equipment/EquipmentGrid.vue'
 
 const inventory = useInventoryStore()
 const player = usePlayerStore()
@@ -41,7 +41,7 @@ const entryContext: EquipmentEntryBuilderContext = {
   requirementLabel,
 }
 
-type BackpackEntryType = 'consumable' | 'material' | 'unknown'
+type BackpackEntryType = 'potion' | 'coreShard' | 'material' | 'unknown'
 
 interface BackpackStackEntry {
   id: string
@@ -53,7 +53,11 @@ interface BackpackStackEntry {
 }
 
 const itemMeta = ITEMS.reduce<Record<string, { type: BackpackEntryType; name: string; detail?: string }>>((acc, def) => {
-  const type: BackpackEntryType = consumableIds.has(def.id) ? 'consumable' : 'material'
+  const type: BackpackEntryType = (() => {
+    if (consumableIds.has(def.id)) return 'potion'
+    if (def.id.startsWith(CORE_SHARD_BASE_ID)) return 'coreShard'
+    return 'material'
+  })()
   const detail = 'description' in def && def.description ? def.description : 'usage' in def ? def.usage : undefined
   acc[def.id] = { type, name: def.name, detail }
   return acc
@@ -84,18 +88,28 @@ const stackEntries = computed<BackpackStackEntry[]>(() =>
     }),
 )
 
-const equipmentFilterOptions: EquipmentFilterOption[] = [
-  { value: 'all', label: '全部' },
-  { value: 'equipped', label: '已穿戴' },
-  { value: 'weapon', label: '武器' },
-  { value: 'armor', label: '防具' },
-  { value: 'accessory', label: '饰品' },
-  { value: 'shield', label: '盾牌' },
+type EquipmentFilterId = 'all-equipment' | 'equipped' | EquipmentSubType
+type StackFilterId = 'potion' | 'coreShard' | 'material'
+type InventoryFilterId = EquipmentFilterId | StackFilterId
+
+const inventoryFilterOptions: Array<{ value: InventoryFilterId; label: string; kind: 'equipment' | 'stack' }> = [
+  { value: 'all-equipment', label: '全部装备', kind: 'equipment' },
+  { value: 'equipped', label: '已穿戴', kind: 'equipment' },
+  { value: 'weapon', label: '武器', kind: 'equipment' },
+  { value: 'armor', label: '防具', kind: 'equipment' },
+  { value: 'accessory', label: '饰品', kind: 'equipment' },
+  { value: 'shield', label: '盾牌', kind: 'equipment' },
+  { value: 'potion', label: '药水', kind: 'stack' },
+  { value: 'coreShard', label: '晶核', kind: 'stack' },
+  { value: 'material', label: '材料', kind: 'stack' },
 ]
 
-type EquipmentFilterId = 'all' | 'equipped' | EquipmentSubType
-
-const equipmentFilter = ref<EquipmentFilterId>('all')
+const inventoryFilter = ref<InventoryFilterId>('all-equipment')
+const viewingStacks = computed(() => inventoryFilter.value === 'potion' || inventoryFilter.value === 'coreShard' || inventoryFilter.value === 'material')
+const activeStackFilter = computed<StackFilterId | null>(() => (viewingStacks.value ? (inventoryFilter.value as StackFilterId) : null))
+const activeEquipmentFilter = computed<EquipmentFilterId>(() =>
+  viewingStacks.value ? 'all-equipment' : (inventoryFilter.value as EquipmentFilterId),
+)
 
 function createEquipmentEntry(
   equipment: Equipment,
@@ -144,10 +158,11 @@ const sortedEquipmentEntries = computed(() =>
 )
 
 const filteredEquipmentEntries = computed(() => {
+  if (viewingStacks.value) return []
   const list = sortedEquipmentEntries.value
-  if (equipmentFilter.value === 'all') return list
-  if (equipmentFilter.value === 'equipped') return list.filter((entry) => entry.source === 'equipped')
-  return list.filter((entry) => entry.subType === equipmentFilter.value)
+  if (activeEquipmentFilter.value === 'all-equipment') return list
+  if (activeEquipmentFilter.value === 'equipped') return list.filter((entry) => entry.source === 'equipped')
+  return list.filter((entry) => entry.subType === activeEquipmentFilter.value)
 })
 
 const selectedEntryId = ref<string | null>(null)
@@ -175,28 +190,26 @@ watch(selectedEntry, (entry) => {
   }
 })
 
-const stackFilterOptions = [
-  { value: 'consumable', label: '消耗品' },
-  { value: 'material', label: '宝石' },
-] as const
-
-type StackFilter = (typeof stackFilterOptions)[number]['value']
-
-const stackFilter = ref<StackFilter>('consumable')
-const stackSectionOpen = ref(false)
-
 const stackByFilter = computed(() => {
-  return stackEntries.value.reduce<Record<StackFilter, BackpackStackEntry[]>>(
+  return stackEntries.value.reduce<Record<StackFilterId, BackpackStackEntry[]>>(
     (acc, entry) => {
-      if (entry.type === 'consumable') acc.consumable.push(entry)
+      if (entry.type === 'potion') acc.potion.push(entry)
+      else if (entry.type === 'coreShard') acc.coreShard.push(entry)
       else acc.material.push(entry)
       return acc
     },
-    { consumable: [], material: [] },
+    { potion: [], coreShard: [], material: [] },
   )
 })
 
-const visibleStacks = computed(() => stackByFilter.value[stackFilter.value])
+const visibleStacks = computed(() => {
+  const filter = activeStackFilter.value
+  if (!filter) return []
+  return stackByFilter.value[filter]
+})
+
+const viewingEquipment = computed(() => !viewingStacks.value)
+const activeFilterLabel = computed(() => inventoryFilterOptions.find((option) => option.value === inventoryFilter.value)?.label ?? '')
 
 const actionLocked = ref(false)
 const feedbackMessage = ref('')
@@ -294,6 +307,7 @@ function handleDiscard(equipment: Equipment) {
 
 function handleStackUse(itemId: string, itemName: string) {
   withActionLock(async () => {
+    if (!consumableIds.has(itemId)) return
     const used = inventory.spend(itemId, 1)
     if (!used) {
       showFeedback('库存不足', false)
@@ -311,7 +325,8 @@ function handleStackUse(itemId: string, itemName: string) {
   })
 }
 
-function canUseConsumable(itemId: string): boolean {
+function canUsePotion(itemId: string): boolean {
+  if (!consumableIds.has(itemId)) return false
   const def = ITEMS.find((item) => item.id === itemId)
   if (!def) return false
   if ('heal' in def && def.heal && def.heal > 0 && player.res.hp < player.res.hpMax) return true
@@ -343,64 +358,58 @@ const displayAttributeOverview = computed(() =>
   <section class="panel inventory-shell">
     <div class="inventory-stage">
       <div class="inventory-stage__left">
+        <div class="inventory-nav">
+          <button
+            v-for="option in inventoryFilterOptions"
+            :key="option.value"
+            class="inventory-tab"
+            type="button"
+            :class="{ 'inventory-tab--active': inventoryFilter === option.value }"
+            @click="inventoryFilter = option.value"
+          >
+            {{ option.label }}
+          </button>
+        </div>
+
         <EquipmentGrid
+          v-if="viewingEquipment"
           :items="filteredEquipmentEntries"
-          :filters="equipmentFilterOptions"
-          :filter="equipmentFilter"
+          :filters="[]"
+          :filter="activeEquipmentFilter"
           :selected-id="selectedEntryId"
-          @update:filter="equipmentFilter = $event as EquipmentFilterId"
           @select="selectedEntryId = $event"
           @enter="handleGridEnter"
         />
 
-        <section class="stack-panel">
+        <section v-else class="stack-panel">
           <header class="stack-panel__header">
             <div>
-              <p class="stack-panel__title">随身物资</p>
-              <p class="stack-panel__subtitle">消耗品、宝石等非装备物品整合至此</p>
+              <p class="stack-panel__title">{{ activeFilterLabel }}</p>
             </div>
-            <button class="stack-panel__toggle" type="button" @click="stackSectionOpen = !stackSectionOpen">
-              {{ stackSectionOpen ? '收起' : '展开' }}
-            </button>
           </header>
 
-          <div v-if="stackSectionOpen" class="stack-panel__body">
-            <div class="stack-panel__tabs">
-              <button
-                v-for="option in stackFilterOptions"
-                :key="option.value"
-                class="stack-tab"
-                :class="{ 'stack-tab--active': stackFilter === option.value }"
-                type="button"
-                @click="stackFilter = option.value"
-              >
-                {{ option.label }}
-              </button>
-            </div>
-
-            <div v-if="visibleStacks.length > 0" class="stack-list">
+          <div class="stack-panel__body stack-panel__body--inline">
+            <div v-if="visibleStacks.length > 0" class="stack-grid">
               <article v-for="entry in visibleStacks" :key="entry.id" class="stack-card">
-                <div class="stack-card__icon">
-                  <img
-                    v-if="entry.icon.type === 'image'"
-                    :src="entry.icon.src"
-                    :alt="entry.icon.alt || entry.name"
-                  >
-                  <span v-else>{{ entry.icon.text }}</span>
-                </div>
-                <div class="stack-card__info">
+                <div class="stack-card__header">
+                  <div class="stack-card__icon">
+                    <img
+                      v-if="entry.icon.type === 'image'"
+                      :src="entry.icon.src"
+                      :alt="entry.icon.alt || entry.name"
+                    >
+                    <span v-else>{{ entry.icon.text }}</span>
+                  </div>
                   <p class="stack-card__name">{{ entry.name }}</p>
-                  <p class="stack-card__detail">{{ entry.detail }}</p>
-                  <p class="stack-card__quantity">库存：{{ entry.quantity }}</p>
                 </div>
-                <div
-                  v-if="entry.type === 'consumable'"
-                  class="stack-card__actions"
-                >
+                <p class="stack-card__detail">{{ entry.detail }}</p>
+                <div class="stack-card__footer">
+                  <p class="stack-card__quantity">库存：{{ entry.quantity }}</p>
                   <button
+                    v-if="entry.type === 'potion'"
                     class="stack-card__button"
                     type="button"
-                    :disabled="actionLocked || entry.quantity <= 0 || !canUseConsumable(entry.id)"
+                    :disabled="actionLocked || entry.quantity <= 0 || !canUsePotion(entry.id)"
                     @click="handleStackUse(entry.id, entry.name)"
                   >
                     使用
@@ -413,7 +422,7 @@ const displayAttributeOverview = computed(() =>
         </section>
       </div>
 
-      <div class="inventory-stage__right">
+      <div v-if="viewingEquipment" class="inventory-stage__right">
         <AttributeOverviewPanel :attributes="displayAttributeOverview" />
         <EquipmentDetailPanel
           :entry="selectedEntry"
@@ -450,6 +459,30 @@ const displayAttributeOverview = computed(() =>
   gap: 16px;
 }
 
+.inventory-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.inventory-tab {
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  background: transparent;
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+  font-size: 13px;
+  transition:
+    background 0.2s ease,
+    color 0.2s ease;
+}
+
+.inventory-tab--active {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
 .inventory-stage__right {
   flex: 0.9;
   display: flex;
@@ -482,15 +515,6 @@ const displayAttributeOverview = computed(() =>
   color: rgba(255, 255, 255, 0.6);
 }
 
-.stack-panel__toggle {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: transparent;
-  color: #fff;
-  padding: 4px 14px;
-  border-radius: 999px;
-  cursor: pointer;
-}
-
 .stack-panel__body {
   margin-top: 12px;
   display: flex;
@@ -498,44 +522,36 @@ const displayAttributeOverview = computed(() =>
   gap: 12px;
 }
 
-.stack-panel__tabs {
-  display: flex;
-  gap: 8px;
+.stack-panel__body--inline {
+  padding-top: 4px;
 }
 
-.stack-tab {
-  padding: 4px 12px;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: transparent;
-  color: rgba(255, 255, 255, 0.75);
-  cursor: pointer;
-}
-
-.stack-tab--active {
-  background: rgba(255, 255, 255, 0.12);
-  color: #fff;
-}
-
-.stack-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+.stack-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 12px;
 }
 
 .stack-card {
   display: flex;
-  gap: 12px;
-  align-items: center;
-  padding: 10px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
+  min-height: 168px;
+}
+
+.stack-card__header {
+  display: flex;
+  gap: 10px;
+  align-items: center;
 }
 
 .stack-card__icon {
-  width: 48px;
-  height: 48px;
+  width: 52px;
+  height: 52px;
   border-radius: 14px;
   background: rgba(255, 255, 255, 0.06);
   display: flex;
@@ -545,13 +561,9 @@ const displayAttributeOverview = computed(() =>
 }
 
 .stack-card__icon img {
-  width: 32px;
-  height: 32px;
+  width: 34px;
+  height: 34px;
   object-fit: contain;
-}
-
-.stack-card__info {
-  flex: 1;
 }
 
 .stack-card__name {
@@ -560,19 +572,23 @@ const displayAttributeOverview = computed(() =>
 }
 
 .stack-card__detail {
-  margin: 4px 0;
+  margin: 0;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.6);
+  flex: 1;
+}
+
+.stack-card__footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
 }
 
 .stack-card__quantity {
   margin: 0;
   font-size: 12px;
   color: rgba(255, 255, 255, 0.7);
-}
-
-.stack-card__actions {
-  display: flex;
 }
 
 .stack-card__button {
@@ -593,6 +609,10 @@ const displayAttributeOverview = computed(() =>
 @media (max-width: 960px) {
   .inventory-stage {
     flex-direction: column;
+  }
+
+  .stack-grid {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
   }
 }
 </style>

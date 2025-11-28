@@ -31,6 +31,7 @@ function formatFocusLines(focus: QiFocusProfile): string {
 const methodOptions = computed(() =>
   CULTIVATION_METHODS.map(method => ({
     ...method,
+    icon: method.icon ?? null,
     focusLabel: formatFocusLines(method.focus),
     selected: selectedMethod.value === method.id,
   })),
@@ -109,18 +110,25 @@ function handleMethodChange(methodId: CultivationMethodId) {
                 class="sr-only"
                 type="radio"
                 name="method"
-                :value="method.id"
-                :checked="method.selected"
-                @change="handleMethodChange(method.id)"
-              >
-              <div class="method-header">
-                <h3>{{ method.name }}</h3>
-                <span class="method-focus">{{ method.focusLabel }}</span>
+              :value="method.id"
+              :checked="method.selected"
+              @change="handleMethodChange(method.id)"
+            >
+              <div class="method-card-body" :class="{ 'has-icon': !!method.icon }">
+                <div v-if="method.icon" class="method-card-figure">
+                  <img :src="method.icon" :alt="`${method.name} 图标`" class="method-icon">
+                </div>
+                <div class="method-card-content">
+                  <div class="method-header">
+                    <h3>{{ method.name }}</h3>
+                    <span class="method-focus">{{ method.focusLabel }}</span>
+                  </div>
+                  <p class="method-description">{{ method.description }}</p>
+                  <ul class="method-effects">
+                    <li v-for="effect in method.effects" :key="effect">{{ effect }}</li>
+                  </ul>
+                </div>
               </div>
-              <p class="method-description">{{ method.description }}</p>
-              <ul class="method-effects">
-                <li v-for="effect in method.effects" :key="effect">{{ effect }}</li>
-              </ul>
             </label>
           </div>
         </div>
@@ -140,7 +148,7 @@ function handleMethodChange(methodId: CultivationMethodId) {
 }
 
 .creation-panel {
-  width: min(720px, 100%);
+  width: 100%;
   padding: 32px;
 }
 
@@ -200,7 +208,7 @@ function handleMethodChange(methodId: CultivationMethodId) {
 
 .method-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 16px;
 }
 
@@ -221,6 +229,40 @@ function handleMethodChange(methodId: CultivationMethodId) {
 .method-card.selected {
   border-color: rgba(245, 208, 111, 0.9);
   background: rgba(245, 208, 111, 0.08);
+}
+
+.method-card-body {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 14px;
+  align-items: stretch;
+}
+
+.method-card-body:not(.has-icon) {
+  grid-template-columns: 1fr;
+}
+
+.method-card-figure {
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  width: 100%;
+  height: 100%;
+  min-height: 180px;
+}
+
+.method-icon {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.method-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .method-header {
@@ -280,6 +322,10 @@ function handleMethodChange(methodId: CultivationMethodId) {
   }
 
   .method-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .method-card-body {
     grid-template-columns: 1fr;
   }
 

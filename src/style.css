@@ -15,6 +15,25 @@
   --battle-portrait-mobile-max-height: 360px;
   --battle-portrait-mobile-boss-width: clamp(240px, 82vw, 400px);
   --battle-portrait-mobile-boss-max-height: 420px;
+  /* Quest UI theme */
+  --quest-bg: #0f1016;
+  --quest-surface: rgba(22, 24, 35, 0.82);
+  --quest-surface-weak: rgba(22, 24, 35, 0.6);
+  --quest-surface-strong: rgba(38, 42, 62, 0.9);
+  --quest-outline: rgba(255, 255, 255, 0.08);
+  --quest-outline-strong: rgba(255, 255, 255, 0.14);
+  --quest-glow: rgba(76, 201, 240, 0.35);
+  --quest-primary: #4cc9f0;
+  --quest-primary-strong: #1dd3b0;
+  --quest-accent: #ecb347;
+  --quest-text: #f0f0f0;
+  --quest-text-dim: #94a3b8;
+  --quest-border-faint: rgba(255, 255, 255, 0.06);
+  --quest-rare-common: #d5d8df;
+  --quest-rare-uncommon: #9ad685;
+  --quest-rare-rare: #6fb6ff;
+  --quest-rare-epic: #b48efb;
+  --quest-rare-legendary: #f4b54a;
 }
 
 * {
@@ -725,9 +744,17 @@ button {
 }
 
 .battle-actions button.empty {
-  opacity: 0.75;
-  border-color: rgba(134, 143, 173, 0.55);
-  background: radial-gradient(circle at 25% 30%, rgba(206, 213, 229, 0.15) 0%, rgba(73, 82, 110, 0.45) 55%, rgba(15, 18, 26, 0.85) 100%);
+  opacity: 1;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.38), rgba(15, 23, 42, 0.46));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 0 0 2px rgba(15, 23, 42, 0.6);
+}
+
+.battle-actions button.empty::after {
+  display: none;
 }
 
 .battle-actions .skill-name {
@@ -807,8 +834,13 @@ button {
 }
 
 .quick-item-slot.empty {
-  opacity: 0.65;
-  background: rgba(255, 255, 255, 0.05);
+  opacity: 1;
+  border: 1px solid rgba(148, 163, 184, 0.55);
+  background:
+    linear-gradient(135deg, rgba(30, 41, 59, 0.38), rgba(15, 23, 42, 0.46));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 0 0 2px rgba(15, 23, 42, 0.6);
 }
 
 .quick-item-slot.disabled {

@@ -43,26 +43,34 @@ const entryContext: EquipmentEntryBuilderContext = {
 
 const SLOT_LAYOUT: Array<{ key: EquipSlotKey; label: string; baseSlot: EquipSlot }> = [
   { key: 'helmet', label: '头盔', baseSlot: 'helmet' },
-  { key: 'shieldL', label: '左手盾牌', baseSlot: 'shieldL' },
-  { key: 'weaponR', label: '右手武器', baseSlot: 'weaponR' },
+  { key: 'shieldL', label: '盾牌', baseSlot: 'shieldL' },
+  { key: 'weaponR', label: '武器', baseSlot: 'weaponR' },
   { key: 'armor', label: '铠甲', baseSlot: 'armor' },
+  { key: 'boots', label: '靴子', baseSlot: 'boots' },
   { key: 'ring1', label: '戒指 1', baseSlot: 'ring' },
   { key: 'ring2', label: '戒指 2', baseSlot: 'ring' },
-  { key: 'weapon2H', label: '双手武器', baseSlot: 'weapon2H' },
 ]
 
 const paperDollSlots = computed<PaperDollSlotState[]>(() =>
   SLOT_LAYOUT.map((definition) => {
-    const equipment = player.equips[definition.key] ?? null
+    let equipment = player.equips[definition.key] ?? null
+    let actualSlotKey = definition.key
+
+    // Special handling for weapon slot to show 2H weapon if equipped
+    if (definition.key === 'weaponR' && player.equips.weapon2H) {
+      equipment = player.equips.weapon2H
+      actualSlotKey = 'weapon2H'
+    }
+
     const entry = equipment
       ? createEquipmentGridEntry(equipment, entryContext, {
           source: 'equipped',
-          slotKey: definition.key,
+          slotKey: actualSlotKey,
         })
       : null
     return {
       key: definition.key,
-      label: getSlotKeyLabel(definition.key),
+      label: definition.label,
       placeholderIcon: iconForEquipSlot(definition.baseSlot),
       entry,
     }
@@ -242,8 +250,8 @@ onBeforeUnmount(() => {
 
       <section class="quick-slot-panel">
         <header>
-          <h3>快捷物品栏</h3>
-          <p>战斗中可立即使用，保持药水充足可减少准备时间。</p>
+          <h3>战斗中物品</h3>
+          <p>战斗中可使用的物品，相同物品会共享冷却时间。</p>
         </header>
         <div class="quick-slot-panel__grid">
           <article
@@ -270,7 +278,6 @@ onBeforeUnmount(() => {
                 {{ formatQuickSlotOptionLabel(item.id) }}
               </option>
             </select>
-            <p class="quick-slot-card__name">{{ slot.name }}</p>
             <p class="quick-slot-card__effect">效果：{{ slot.effect }}</p>
           </article>
         </div>

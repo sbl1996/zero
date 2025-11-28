@@ -1767,74 +1767,76 @@ onBeforeUnmount(() => {
               :key="slot.index"
               class="battle-action-slot"
             >
-            <button
-              :disabled="slot.disabled"
-              :class="{
-                empty: slot.isEmpty,
-                'auto-casting': slot.isAutoCasting,
-                'holding': slot.isHolding,
-                'on-cooldown': slot.isOnCooldown,
-                'has-image': slot.hasImage,
-                'requires-charge': slot.requiresCharge,
-                'is-charging': slot.isCharging,
-                'is-charge-ready': slot.isChargeReady,
-                'is-charge-rewinding': slot.isRewinding
-              }"
-              :title="slot.reason || undefined"
-              :style="slot.cooldownStyle"
-              @mousedown="handleSkillPress(slot.index, $event)"
-              @mouseup="handleSkillRelease(slot.index)"
-              @mouseleave="handleSkillCancel(slot.index)"
-              @touchstart.prevent="handleSkillPress(slot.index, $event)"
-              @touchend="handleSkillRelease(slot.index)"
-              @touchcancel="handleSkillCancel(slot.index)"
-            >
-              <template v-if="slot.hasImage">
-                <div class="skill-image-container">
-                  <img
-                    v-if="slot.imageSrc"
-                    :src="slot.imageSrc"
-                    :alt="slot.label"
-                    class="skill-image"
-                  >
-                </div>
-              </template>
-              <template v-else>
-                <span class="skill-name">{{ slot.label }}</span>
-                <span class="skill-cost">{{ slot.costLabel }}</span>
-              </template>
-              <div
-                v-if="slot.chargeProgress > 0"
-                class="skill-charge-progress"
+              <button
+                :disabled="slot.disabled"
                 :class="{
-                  'skill-charge-progress--ready': slot.isChargeReady,
-                  'skill-charge-progress--rewinding': slot.isRewinding
+                  empty: slot.isEmpty,
+                  'auto-casting': slot.isAutoCasting,
+                  holding: slot.isHolding,
+                  'on-cooldown': slot.isOnCooldown,
+                  'has-image': slot.hasImage,
+                  'requires-charge': slot.requiresCharge,
+                  'is-charging': slot.isCharging,
+                  'is-charge-ready': slot.isChargeReady,
+                  'is-charge-rewinding': slot.isRewinding
                 }"
-                :style="slot.chargeStyle"
-              />
-              <div class="skill-overlay">
-                <span
-                  v-if="slot.hasImage && slot.costBadge"
-                  class="skill-cost-badge"
-                  :class="slot.costType ? `skill-cost-badge--${slot.costType}` : ''"
-                >
-                  {{ slot.costBadge }}
-                </span>
-                <span
-                  v-if="slot.hotkeyLabel && !slot.isEmpty"
-                  class="skill-hotkey"
-                >
-                  {{ slot.hotkeyLabel }}
-                </span>
-              </div>
-              <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
-              <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
-            </button>
+                :title="slot.reason || undefined"
+                :style="slot.cooldownStyle"
+                @mousedown="handleSkillPress(slot.index, $event)"
+                @mouseup="handleSkillRelease(slot.index)"
+                @mouseleave="handleSkillCancel(slot.index)"
+                @touchstart.prevent="handleSkillPress(slot.index, $event)"
+                @touchend="handleSkillRelease(slot.index)"
+                @touchcancel="handleSkillCancel(slot.index)"
+              >
+                <template v-if="!slot.isEmpty">
+                  <template v-if="slot.hasImage">
+                    <div class="skill-image-container">
+                      <img
+                        v-if="slot.imageSrc"
+                        :src="slot.imageSrc"
+                        :alt="slot.label"
+                        class="skill-image"
+                      >
+                    </div>
+                  </template>
+                  <template v-else>
+                    <span class="skill-name">{{ slot.label }}</span>
+                    <span class="skill-cost">{{ slot.costLabel }}</span>
+                  </template>
+                  <div
+                    v-if="slot.chargeProgress > 0"
+                    class="skill-charge-progress"
+                    :class="{
+                      'skill-charge-progress--ready': slot.isChargeReady,
+                      'skill-charge-progress--rewinding': slot.isRewinding
+                    }"
+                    :style="slot.chargeStyle"
+                  />
+                  <div class="skill-overlay">
+                    <span
+                      v-if="slot.hasImage && slot.costBadge"
+                      class="skill-cost-badge"
+                      :class="slot.costType ? `skill-cost-badge--${slot.costType}` : ''"
+                    >
+                      {{ slot.costBadge }}
+                    </span>
+                    <span
+                      v-if="slot.hotkeyLabel && !slot.isEmpty"
+                      class="skill-hotkey"
+                    >
+                      {{ slot.hotkeyLabel }}
+                    </span>
+                  </div>
+                  <span v-if="slot.isAutoCasting" class="auto-cast-indicator">🔄</span>
+                  <span v-else-if="slot.isHolding" class="hold-indicator">⏱️</span>
+                </template>
+              </button>
             <div
               class="skill-slot-label"
               :class="{ 'skill-slot-label--empty': slot.isEmpty }"
             >
-              {{ slot.label }}
+              {{ slot.isEmpty ? '' : slot.label }}
             </div>
           </div>
           </div>

@@ -44,7 +44,7 @@ interface RawEquipmentItem {
   enhance_materials?: RawEnhanceMaterialRequirement[]
 }
 
-const EQUIP_SLOTS: EquipSlot[] = ['helmet', 'shieldL', 'weaponR', 'weapon2H', 'armor', 'ring']
+const EQUIP_SLOTS: EquipSlot[] = ['helmet', 'shieldL', 'weaponR', 'weapon2H', 'armor', 'boots', 'ring']
 const MAIN_STAT_TYPES: EquipmentMainStatType[] = ['HP', 'QiMax', 'ATK', 'DEF', 'AGI', 'REC']
 const SUB_STAT_TYPES: EquipmentSubStatType[] = [
   'HP',

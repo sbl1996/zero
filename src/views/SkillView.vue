@@ -31,7 +31,8 @@ function buildFocusLines(focus: QiFocusProfile): string[] {
 function formatXpValue(value: number): string {
   if (!Number.isFinite(value)) return '0'
   const rounded = Math.round(value * 10) / 10
-  return Number.isInteger(rounded) ? String(Math.round(rounded)) : rounded.toFixed(1)
+  // return Number.isInteger(rounded) ? String(Math.round(rounded)) : String(Math.floor(value))
+  return Number.isInteger(rounded) ? String(Math.round(rounded)) : value.toFixed(1)
 }
 
 const cultivationMethods = computed(() => {
@@ -43,6 +44,7 @@ const cultivationMethods = computed(() => {
     {
       id: def.id,
       name: def.name,
+      icon: def.icon ?? null,
       description: def.description,
       isCurrent: true,
       focusLines,
@@ -182,25 +184,40 @@ function equipToFirstEmpty(skillId: string) {
           class="panel method-card"
           style="margin: 0; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,255,255,0.08);"
         >
-          <header class="method-card-header">
-            <div class="method-card-heading">
-              <h4 class="method-card-title">{{ method.name }}</h4>
-              <span v-if="method.isCurrent" class="method-tag">当前运转</span>
+          <div class="method-card-layout" :class="{ 'has-icon': !!method.icon }">
+            <div v-if="method.icon" class="method-card-figure">
+              <img
+                :src="method.icon"
+                :alt="`${method.name} 图标`"
+                class="method-card-figure-img"
+              >
             </div>
-            <div v-if="method.focusLines.length > 0" class="method-focus">
-              <span v-for="line in method.focusLines" :key="line" class="method-focus-item text-small">{{ line }}</span>
+            <div class="method-card-content">
+              <header class="method-card-header">
+                <div class="method-card-heading">
+                  <div class="method-card-heading-text">
+                    <div class="method-card-title-row">
+                      <h4 class="method-card-title">{{ method.name }}</h4>
+                      <span v-if="method.isCurrent" class="method-tag">当前运转</span>
+                    </div>
+                  </div>
+                </div>
+                <div v-if="method.focusLines.length > 0" class="method-focus">
+                  <span v-for="line in method.focusLines" :key="line" class="method-focus-item text-small">{{ line }}</span>
+                </div>
+              </header>
+              <p class="text-small text-muted method-description">{{ method.description }}</p>
+              <ul class="method-effects">
+                <li
+                  v-for="effect in method.effects"
+                  :key="effect"
+                  class="text-small"
+                >
+                  {{ effect }}
+                </li>
+              </ul>
             </div>
-          </header>
-          <p class="text-small text-muted method-description">{{ method.description }}</p>
-          <ul class="method-effects">
-            <li
-              v-for="effect in method.effects"
-              :key="effect"
-              class="text-small"
-            >
-              {{ effect }}
-            </li>
-          </ul>
+          </div>
         </article>
       </div>
     </div>
@@ -337,6 +354,40 @@ function equipToFirstEmpty(skillId: string) {
   padding: 16px;
 }
 
+.method-card-layout {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+.method-card-layout:not(.has-icon) {
+  grid-template-columns: 1fr;
+}
+
+.method-card-figure {
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  aspect-ratio: 1 / 1;
+  width: 100%;
+  max-width: 140px;
+}
+
+.method-card-figure-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.method-card-content {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .method-card-header {
   display: flex;
   flex-wrap: wrap;
@@ -347,6 +398,18 @@ function equipToFirstEmpty(skillId: string) {
 }
 
 .method-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.method-card-heading-text {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.method-card-title-row {
   display: flex;
   align-items: center;
   gap: 8px;
@@ -461,6 +524,10 @@ function equipToFirstEmpty(skillId: string) {
 
 @media (max-width: 640px) {
   .skill-list {
+    grid-template-columns: 1fr;
+  }
+
+  .method-card-layout {
     grid-template-columns: 1fr;
   }
 

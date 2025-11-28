@@ -1,7 +1,6 @@
 <template>
   <section class="panel">
     <h2 class="section-title">商店</h2>
-    <p class="text-muted text-small">购买消耗品、宝石和装备来强化你的角色。</p>
 
     <div class="flex flex-between flex-center" style="margin-top: 16px;">
       <p class="text-muted text-small" style="margin: 0;">当前持有</p>
@@ -30,15 +29,17 @@
       >
         <div class="flex gap-md">
           <div class="item-icon">
-            <template v-if="getItemIcon(item).type === 'image'">
-              <img
-                class="item-icon__img"
-                :src="getItemIcon(item).src"
-                :alt="getItemIcon(item).alt || item.name"
-              >
-            </template>
-            <template v-else>
-              {{ getItemIcon(item).text }}
+            <template v-for="icon in [getItemIcon(item)]" :key="icon.type">
+              <template v-if="icon.type === 'image'">
+                <img
+                  class="item-icon__img"
+                  :src="icon.src"
+                  :alt="icon.alt || item.name"
+                >
+              </template>
+              <template v-else>
+                {{ icon.text }}
+              </template>
             </template>
           </div>
           <div class="flex-1">
@@ -121,7 +122,7 @@ const playerStore = usePlayerStore()
 const inventoryStore = useInventoryStore()
 const progressStore = useProgressStore()
 
-const tabs = ['消耗品', '宝石', '装备', '武器', '防具', '饰品', '盾牌']
+const tabs = ['武器', '防具', '饰品', '盾牌', '消耗品', '宝石']
 const activeTab = ref('消耗品')
 const purchaseMessage = ref('')
 const purchaseSuccess = ref(false)
@@ -188,8 +189,6 @@ const currentItems = computed(() => {
       return ITEMS.filter((item) => consumableIds.has(item.id))
     case '宝石':
       return gemItems.value
-    case '装备':
-      return equipmentTemplates
     case '武器':
       return equipmentTemplates.filter((template) => getEquipmentSubType(template.slot) === 'weapon')
     case '防具':

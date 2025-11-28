@@ -1,24 +1,11 @@
 <template>
   <div v-if="mapsList.length && currentMap">
-    <div v-if="isCityMap" class="map-view">
-      <aside class="map-sidebar">
-        <h2 class="sidebar-title">地图</h2>
-        <button
-          v-for="map in mapsList"
-          :key="map.id"
-          type="button"
-          class="map-selector"
-          :class="{ active: map.id === activeMapId, locked: isMapLocked(map) }"
-          :disabled="isMapLocked(map)"
-          @click="selectMap(map.id)"
-        >
-          {{ map.name }}
-        </button>
-      </aside>
-      <section class="map-main">
+    <div v-if="isCityMap" class="city-layout">
+      <PlayerStatusPanel />
+      <section class="city-main">
         <header class="map-header">
           <h3 class="map-name">{{ currentMap.name }}</h3>
-          <p class="map-tip">选择区域进入对应功能。</p>
+          <p class="map-tip">选择区域进入对应功能，或在驿站前往其他区域。</p>
         </header>
         <div class="map-canvas">
           <img class="map-image" :src="currentMap.image" :alt="`${currentMap.name} 地图`" />
@@ -45,7 +32,39 @@
           <p v-else class="location-description">
             {{ focusedLocation.description ?? '点击以进入该地点。' }}
           </p>
+          <div v-if="focusedLocation.id === travelHubId && !focusedLocationLocked" class="location-actions">
+            <button type="button" class="primary-button" @click="openTravelPanel">
+              打开驿站目的地
+            </button>
+          </div>
         </footer>
+        <section v-if="travelPanelOpen" class="travel-panel">
+          <header class="travel-panel__header">
+            <div>
+              <p class="travel-panel__eyebrow">驿站传送</p>
+              <h4 class="travel-panel__title">选择目的地</h4>
+            </div>
+            <button type="button" class="ghost-button" @click="closeTravelPanel">关闭</button>
+          </header>
+          <p class="travel-panel__hint">
+            已解锁区域可直接前往。抵达后可继续从当地的传送点探索。
+          </p>
+          <div v-if="travelTargets.length" class="travel-grid">
+            <button
+              v-for="map in travelTargets"
+              :key="map.id"
+              type="button"
+              class="travel-card"
+              @click="travelToMap(map.id)"
+            >
+              <span class="travel-card__name">{{ map.name }}</span>
+              <span class="travel-card__meta">
+                {{ map.category === 'city' ? '城市' : '野外' }}
+              </span>
+            </button>
+          </div>
+          <p v-else class="travel-panel__empty">暂无其他已解锁的目的地。</p>
+        </section>
       </section>
     </div>
     <div v-else>
@@ -241,6 +260,8 @@ const monsterDictionary = MONSTERS.reduce<Record<string, Monster>>((acc, monster
   acc[monster.id] = monster
   return acc
 }, {})
+
+const travelHubId = 'courier-station'
 
 type NodeListEntry =
   | {
@@ -446,6 +467,7 @@ const currentMapLocked = computed(() => {
 const focusedLocationId = ref<string | null>(null)
 const focusedMonsterId = ref<string | null>(null)
 const nodeHint = ref<string | null>(null)
+const travelPanelOpen = ref(false)
 
 const focusedLocation = computed<MapLocation | null>(() => {
   if (!focusedLocationId.value) return null
@@ -470,6 +492,11 @@ const focusedLocationLocked = computed(() => {
 const currentNodeState = computed(() => {
   if (!currentNode.value) return null
   return nodeSpawns.nodeStates[currentNode.value.id] ?? null
+})
+
+const travelTargets = computed(() => {
+  if (!currentMap.value) return []
+  return mapsList.value.filter((map) => map.id !== currentMap.value?.id)
 })
 
 const monsterEntries = computed(() => {
@@ -613,7 +640,12 @@ function selectMap(mapId: string) {
 }
 
 function goToLocation(location: MapLocation) {
+  travelPanelOpen.value = false
   if (isLocationLocked(location)) return
+  if (location.id === travelHubId) {
+    travelPanelOpen.value = true
+    return
+  }
   if (location.destinationMapId) {
     progress.setCurrentMap(location.destinationMapId)
     router.push({ name: 'map', params: { mapId: location.destinationMapId } })
@@ -641,6 +673,19 @@ function focusMonster(id: string) {
 
 function clearFocusedMonster() {
   focusedMonsterId.value = null
+}
+
+function openTravelPanel() {
+  travelPanelOpen.value = true
+}
+
+function closeTravelPanel() {
+  travelPanelOpen.value = false
+}
+
+function travelToMap(mapId: string) {
+  travelPanelOpen.value = false
+  selectMap(mapId)
 }
 
 function engageMonster(instanceId: string, monsterId: string) {
@@ -708,6 +753,7 @@ watch(
     focusedLocationId.value = null
     focusedMonsterId.value = null
     nodeHint.value = null
+    travelPanelOpen.value = false
   },
   { immediate: true },
 )
@@ -721,65 +767,20 @@ watch(
 </script>
 
 <style scoped>
-.map-view {
+.city-layout {
   display: grid;
-  grid-template-columns: 200px 1fr;
+  grid-template-columns: minmax(220px, 280px) 1fr;
   gap: 1.5rem;
-  padding: 0.5rem 20px;
+  padding: 0;
   height: 100%;
   box-sizing: border-box;
+  align-items: stretch;
 }
 
-.map-sidebar {
+.city-main {
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
-}
-
-.sidebar-title {
-  margin: 0;
-  font-size: 1.1rem;
-  font-weight: 600;
-  color: #f0f0f0;
-}
-
-.map-selector {
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  background: rgba(14, 22, 30, 0.7);
-  color: #f0f0f0;
-  padding: 0.6rem 0.8rem;
-  text-align: left;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease, transform 0.15s ease;
-}
-
-.map-selector:hover,
-.map-selector:focus {
-  border-color: rgba(255, 255, 255, 0.5);
-  background: rgba(34, 56, 72, 0.8);
-  outline: none;
-}
-
-.map-selector:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
-}
-
-.map-selector.locked {
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(18, 18, 18, 0.6);
-}
-
-.map-selector.active {
-  border-color: #5ab1ff;
-  background: rgba(28, 48, 64, 0.85);
-}
-
-.map-main {
-  display: flex;
-  flex-direction: column;
-  gap: 1.0rem;
+  gap: 1rem;
 }
 
 .map-header {
@@ -875,6 +876,32 @@ watch(
   line-height: 1.4;
 }
 
+.location-actions {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.primary-button {
+  border: 1px solid rgba(90, 177, 255, 0.7);
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.9), rgba(14, 165, 233, 0.85));
+  color: #f8fafc;
+  padding: 0.45rem 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.12s ease, filter 0.12s ease;
+}
+
+.primary-button:hover,
+.primary-button:focus {
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.45);
+  filter: brightness(1.05);
+  outline: none;
+}
+
 .map-empty {
   padding: 2rem;
   text-align: center;
@@ -917,6 +944,105 @@ watch(
 .return-button:focus {
   border-color: rgba(255, 255, 255, 0.45);
   background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.travel-panel {
+  padding: 1rem;
+  border-radius: 10px;
+  background: rgba(12, 20, 28, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.travel-panel__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+.travel-panel__eyebrow {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.04em;
+}
+
+.travel-panel__title {
+  margin: 0.2rem 0 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.travel-panel__hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 0.9rem;
+}
+
+.travel-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.65rem;
+}
+
+.travel-card {
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: linear-gradient(160deg, rgba(26, 44, 60, 0.85), rgba(16, 24, 32, 0.9));
+  padding: 0.75rem 0.85rem;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  transition: transform 0.12s ease, border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+  color: #f3f4f6;
+}
+
+.travel-card:hover,
+.travel-card:focus {
+  transform: translateY(-1px);
+  border-color: rgba(90, 177, 255, 0.8);
+  box-shadow: 0 10px 28px rgba(15, 23, 42, 0.4);
+  background: linear-gradient(160deg, rgba(28, 66, 92, 0.95), rgba(17, 29, 40, 0.95));
+  outline: none;
+}
+
+.travel-card__name {
+  font-weight: 700;
+  font-size: 1rem;
+}
+
+.travel-card__meta {
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.travel-panel__empty {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 0.9rem;
+}
+
+.ghost-button {
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: #f8fafc;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, transform 0.12s ease;
+}
+
+.ghost-button:hover,
+.ghost-button:focus {
+  border-color: rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.12);
+  transform: translateY(-1px);
   outline: none;
 }
 
@@ -1238,18 +1364,8 @@ watch(
 }
 
 @media (max-width: 960px) {
-  .map-view {
+  .city-layout {
     grid-template-columns: 1fr;
-  }
-
-  .map-sidebar {
-    flex-direction: row;
-    flex-wrap: wrap;
-  }
-
-  .map-selector {
-    flex: 1 1 120px;
-    text-align: center;
   }
 
   .wild-content {
