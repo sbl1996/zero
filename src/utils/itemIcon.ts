@@ -1,28 +1,10 @@
-import { resolveAssetUrl } from '@/utils/assetUrls'
+import { ITEMS } from '@/data/items'
+import type { ItemIconDefinition } from '@/types/domain'
 
-export type ItemIcon =
-  | { type: 'image'; src: string; alt?: string }
-  | { type: 'text'; text: string }
-
-const IMAGE_ICON_MAP: Record<string, { src: string; alt: string }> = {
-  potionHP: { src: resolveAssetUrl('potion-hp-1.webp'), alt: '生命药水Ⅰ' },
-  potionQi: { src: resolveAssetUrl('potion-sp-1.webp'), alt: '斗气药水Ⅰ' },
-  potionQiPlus: { src: resolveAssetUrl('potion-xp-1.webp'), alt: '斗气药水Ⅱ' },
-}
-
-const TEXT_ICON_MAP: Record<string, string> = {
-  potionHP: '🧪',
-  potionQi: '✨',
-  potionQiPlus: '💥',
-  blessGem: '💎',
-  soulGem: '💗',
-  miracleGem: '💧',
-  voidGem: '⚪',
-  skillGem: '🟪',
-  ultGem: '🛡️',
-}
+export type ItemIcon = ItemIconDefinition
 
 const DEFAULT_TEXT_ICON: ItemIcon = { type: 'text', text: '⬜' }
+const ICON_MAP = new Map(ITEMS.map((item) => [item.id, item.icon]))
 
 export function textIcon(text: string): ItemIcon {
   return { type: 'text', text }
@@ -33,14 +15,19 @@ export function resolveItemIcon(itemId: string | null | undefined): ItemIcon {
     return DEFAULT_TEXT_ICON
   }
 
-  const imageIcon = IMAGE_ICON_MAP[itemId]
-  if (imageIcon) {
-    return { type: 'image', ...imageIcon }
+  const icon = ICON_MAP.get(itemId)
+  const definition = ITEMS.find((item) => item.id === itemId)
+
+  if (icon?.type === 'image') {
+    return {
+      type: 'image',
+      src: icon.src,
+      alt: icon.alt ?? definition?.name ?? itemId,
+    }
   }
 
-  const fallback = TEXT_ICON_MAP[itemId]
-  if (fallback) {
-    return textIcon(fallback)
+  if (icon?.type === 'text') {
+    return { type: 'text', text: icon.text }
   }
 
   return DEFAULT_TEXT_ICON

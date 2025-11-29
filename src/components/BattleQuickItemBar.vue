@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { ITEMS, quickConsumableIds } from '@/data/items'
+import { ITEMS, getItemEffectSegments, isItemConsumedOnUse, isTeleportItem, quickConsumableIds } from '@/data/items'
 import { useBattleStore, ITEM_COOLDOWN } from '@/stores/battle'
 import { useInventoryStore } from '@/stores/inventory'
 import { usePlayerStore } from '@/stores/player'
 import { resolveItemIcon } from '@/utils/itemIcon'
+import { maps } from '@/data/maps'
 
 const battle = useBattleStore()
 const inventory = useInventoryStore()
@@ -35,6 +36,8 @@ const getNowMs = () => {
   return Date.now()
 }
 
+const mapNameLookup = new Map(maps.map((map) => [map.id, map.name]))
+
 const slots = computed(() => {
   const { hp, hpMax, qi, qiMax } = res.value
   const needsHp = hp < hpMax
@@ -50,20 +53,13 @@ const slots = computed(() => {
     const itemId = typeof id === 'string' && quickConsumableIds.has(id) ? id : null
     const item = itemId ? ITEMS.find(def => def.id === itemId) : undefined
     const quantity = itemId ? inventory.quantity(itemId) : 0
+    const consumedOnUse = item ? isItemConsumedOnUse(item) : true
+    const isTeleport = item ? isTeleportItem(item) : false
 
     const isChanneling = Boolean(pending && itemId && pendingItemId === itemId)
     const lockedByItem = Boolean(pending && !isChanneling)
 
-    const effects: string[] = []
-
-    if (item) {
-      if ('heal' in item && item.heal) {
-        effects.push(`HP+${item.heal}`)
-      }
-      if ('restoreQi' in item && item.restoreQi) {
-        effects.push(`斗气+${item.restoreQi}`)
-      }
-    }
+    const effects = getItemEffectSegments(item, { mapNameLookup })
 
     let healsHp = false
     let restoresQi = false
@@ -79,7 +75,7 @@ const slots = computed(() => {
     const effectApplies = !!(
       (healsHp && needsHp) ||
       (restoresQi && needsQi)
-    )
+    ) || isTeleport
 
     const cooldown = item ? (battle.itemCooldowns[item.id] ?? 0) : 0
     const cooldownPercent = ITEM_COOLDOWN > 0 ? Math.min(Math.max(cooldown / ITEM_COOLDOWN, 0), 1) : 0
@@ -100,6 +96,7 @@ const slots = computed(() => {
     let disabled = false
     let buttonDisabled = false
     let reason = ''
+    const hasStock = quantity > 0
     if (!battle.inBattle || battle.concluded !== 'idle') {
       disabled = true
       buttonDisabled = true
@@ -116,7 +113,7 @@ const slots = computed(() => {
       disabled = true
       buttonDisabled = true
       reason = '动作硬直中'
-    } else if (quantity <= 0) {
+    } else if (!hasStock) {
       disabled = true
       buttonDisabled = true
       reason = '库存不足'
@@ -141,11 +138,15 @@ const slots = computed(() => {
     const tooltip = tooltipSegments.join(' • ')
     const style = Object.keys(styleVars).length > 0 ? styleVars : undefined
 
+    const showQuantity = consumedOnUse
+
     return {
       index,
       id: itemId,
       item,
       quantity,
+      showQuantity,
+      quantityLabel: consumedOnUse ? (hasStock ? `×${quantity}` : '×0') : '',
       hotkey: props.hotkeys[index] ?? null,
       hotkeyLabel: props.hotkeyLabels[index] ?? null,
       icon: resolveItemIcon(itemId),
@@ -265,9 +266,10 @@ watch(
           </span>
         </span>
         <span
+          v-if="slot.showQuantity"
           class="quick-item-quantity"
         >
-          ×{{ slot.quantity }}
+          {{ slot.quantityLabel ?? `×${slot.quantity}` }}
         </span>
       </template>
       <span v-if="slot.cooldown > 0" class="skill-cooldown">{{ slot.cooldownDisplay }}</span>

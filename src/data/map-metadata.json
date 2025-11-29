@@ -15,6 +15,22 @@
       "nodes": null,
       "locations": [
         {
+          "id": "central-plaza",
+          "name": "中心广场",
+          "position": {
+            "x": 56.0,
+            "y": 42.0
+          },
+          "description": "翡冷翠的中央街区，人流熙攘又不失秩序。",
+          "routeName": null,
+          "routeParams": null,
+          "destinationMapId": null,
+          "npcs": [
+            "yuna"
+          ],
+          "isDefault": true
+        },
+        {
           "id": "shop",
           "name": "商店",
           "position": {
@@ -75,34 +91,6 @@
             "mapId": "fringe"
           },
           "destinationMapId": "fringe"
-        },
-        {
-          "id": "to-astral-crown",
-          "name": "星界王座",
-          "position": {
-            "x": 48.0,
-            "y": 8.0
-          },
-          "description": null,
-          "routeName": "map",
-          "routeParams": {
-            "mapId": "astral-crown"
-          },
-          "destinationMapId": "astral-crown"
-        },
-        {
-          "id": "to-green-elysium",
-          "name": "绿野仙境",
-          "position": {
-            "x": 85.0,
-            "y": 15.0
-          },
-          "description": null,
-          "routeName": "map",
-          "routeParams": {
-            "mapId": "green-elysium"
-          },
-          "destinationMapId": "green-elysium"
         }
       ]
     },

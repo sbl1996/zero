@@ -30,6 +30,59 @@ function resolveQuestEntryView(status: QuestRuntimeStatus): string {
   return 'questLocked'
 }
 
+function yunaScript(context: DialogueScriptContext): DialoguePage {
+  const view = context.state.viewId
+
+  if (view === 'chat') {
+    return {
+      id: 'chat',
+      lines: [
+        {
+          id: 'chat-1',
+          speaker: '尤娜',
+          text: '来中心广场吗？这里最适合歇脚，附近的面包摊也不错。',
+        },
+        {
+          id: 'chat-2',
+          speaker: '尤娜',
+          text: '想去别的区域的话，向南走到驿站就行，振翔会指路。',
+        },
+      ],
+      options: [
+        {
+          id: 'chat-back',
+          label: '回到主菜单',
+          action: () => ({ type: 'view', viewId: 'root' }),
+        },
+      ],
+    }
+  }
+
+  return {
+    id: 'root',
+    title: '尤娜',
+    lines: [
+      {
+        id: 'root-1',
+        speaker: '尤娜',
+        text: '有什么想聊的吗？',
+      },
+    ],
+    options: [
+      {
+        id: 'opt-chat',
+        label: '闲聊',
+        action: () => ({ type: 'view', viewId: 'chat' }),
+      },
+      {
+        id: 'opt-leave',
+        label: '离开',
+        action: () => ({ type: 'close' }),
+      },
+    ],
+  }
+}
+
 function guardZhenxiangScript(context: DialogueScriptContext): DialoguePage {
   const questStatus = context.questStatus(QUEST_SLIME_MENACE)
   const questDefinition = context.questDefinition(QUEST_SLIME_MENACE)
@@ -226,6 +279,13 @@ function guardZhenxiangScript(context: DialogueScriptContext): DialoguePage {
 }
 
 export const NPC_DEFINITIONS: NpcDefinition[] = [
+  {
+    id: 'yuna',
+    name: '尤娜',
+    title: '中心广场',
+    description: '热情的向导，对翡冷翠各处的路都很熟悉。',
+    script: yunaScript,
+  },
   {
     id: 'guard-zhenxiang',
     name: '卫兵 振翔',

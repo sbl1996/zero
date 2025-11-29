@@ -4,7 +4,11 @@ import { ITEMS } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
 import { getSkillDefinition } from '@/data/skills'
 import { REALM_TIER_LABELS } from '@/utils/realm'
+import { resolveItemIcon } from '@/utils/itemIcon'
+import { iconForEquipSlot } from '@/utils/equipmentIcons'
+import { resolveAssetUrl } from '@/utils/assetUrls'
 import type { QuestDefinition, QuestObjective, QuestProgressEntry, QuestRuntimeStatus } from '@/types/domain'
+import type { ItemIcon } from '@/utils/itemIcon'
 
 const props = defineProps<{
   quest: QuestDefinition
@@ -19,6 +23,7 @@ const emit = defineEmits<{
   (e: 'accept'): void
   (e: 'submit'): void
   (e: 'abandon'): void
+  (e: 'track'): void
 }>()
 
 const statusTextMap: Record<QuestRuntimeStatus, string> = {
@@ -29,6 +34,8 @@ const statusTextMap: Record<QuestRuntimeStatus, string> = {
   completed: '已完成',
 }
 
+type QuestVisualTone = 'hunt' | 'collect' | 'explore'
+
 interface ObjectiveEntry {
   objectiveId: string
   description: string
@@ -36,7 +43,36 @@ interface ObjectiveEntry {
   target: number
   completed: boolean
   progress: number
+  icon: string
+  tone: QuestVisualTone
 }
+
+interface QuestVisual {
+  icon: string
+  label: string
+  tone: QuestVisualTone
+}
+
+function resolveQuestVisual(quest: QuestDefinition): QuestVisual {
+  const primary = quest.objectives[0]
+  if (!primary) return { icon: '◈', label: '探索', tone: 'explore' }
+  switch (primary.type) {
+    case 'kill':
+      return { icon: '✦', label: '讨伐', tone: 'hunt' }
+    case 'killCollect':
+    case 'collect':
+      return { icon: '⬡', label: '收集', tone: 'collect' }
+    default:
+      return { icon: '◈', label: '探索', tone: 'explore' }
+  }
+}
+
+function objectiveTone(objective: QuestObjective): QuestVisualTone {
+  if (objective.type === 'kill') return 'hunt'
+  if (objective.type === 'collect' || objective.type === 'killCollect') return 'collect'
+  return 'explore'
+}
+
 
 const objectiveEntries = computed<ObjectiveEntry[]>(() => {
   const quest = props.quest
@@ -48,6 +84,7 @@ const objectiveEntries = computed<ObjectiveEntry[]>(() => {
     const description = objective.description ?? formatObjectiveDescription(objective)
     const completed = !!progressEntry?.completed
     const progressValue = target > 0 ? Math.min(1, Math.max(0, current / target)) : 0
+    const tone = objectiveTone(objective)
     return {
       objectiveId: objective.id,
       description,
@@ -55,12 +92,15 @@ const objectiveEntries = computed<ObjectiveEntry[]>(() => {
       target,
       completed,
       progress: progressValue,
+      tone,
+      icon: tone === 'hunt' ? '⚔' : tone === 'collect' ? '☍' : '◎',
     }
   })
 })
 
 const itemNameMap = new Map(ITEMS.map(item => [item.id, item.name]))
 const equipmentNameMap = new Map(BASE_EQUIPMENT_TEMPLATES.map(template => [template.id, template.name]))
+const equipmentTemplateMap = new Map(BASE_EQUIPMENT_TEMPLATES.map(template => [template.id, template]))
 
 function formatObjectiveDescription(objective: QuestObjective): string {
   const fallback = objective.description ?? '完成任务目标'
@@ -105,6 +145,9 @@ const difficultyStars = computed(() => {
   return stars && stars.length ? stars : ['—']
 })
 
+const questVisual = computed(() => resolveQuestVisual(props.quest))
+const showTrackButton = computed(() => props.status === 'active' || props.status === 'readyToTurnIn')
+
 type RewardKind = 'gold' | 'item' | 'equipment' | 'skill' | 'note'
 interface RewardEntry {
   id: string
@@ -113,6 +156,7 @@ interface RewardEntry {
   amount?: number
   kind: RewardKind
   rarity: 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary'
+  icon?: ItemIcon
 }
 
 const rewardEntries = computed<RewardEntry[]>(() => {
@@ -128,21 +172,30 @@ const rewardEntries = computed<RewardEntry[]>(() => {
     })
   }
   rewards.items?.forEach((item) => {
+    const icon = resolveItemIcon(item.itemId)
     result.push({
       id: `item-${item.itemId}`,
       name: formatItemName(item.itemId),
       amount: item.quantity,
       kind: 'item',
       rarity: 'uncommon',
+      icon,
     })
   })
   rewards.equipmentTemplates?.forEach((equipment) => {
+    const template = equipmentTemplateMap.get(equipment.templateId)
+    const icon: ItemIcon | undefined = template
+      ? template.artwork
+        ? { type: 'image', src: resolveAssetUrl(template.artwork), alt: template.name }
+        : iconForEquipSlot(template.slot)
+      : undefined
     result.push({
       id: `equipment-${equipment.templateId}`,
       name: formatEquipmentName(equipment.templateId),
       detail: equipment.initialLevel ? `初始 Lv.${equipment.initialLevel}` : undefined,
       kind: 'equipment',
       rarity: 'rare',
+      icon,
     })
   })
   rewards.skillUnlocks?.forEach((skillId) => {
@@ -172,6 +225,10 @@ const rewardEntries = computed<RewardEntry[]>(() => {
         <div class="quest-hero__status-row">
           <span class="status-dot" :data-state="status" />
           <span class="status-label">{{ statusTextMap[status] }}</span>
+          <span class="quest-type-chip" :data-tone="questVisual.tone">
+            <span class="quest-type-icon">{{ questVisual.icon }}</span>
+            {{ questVisual.label }}
+          </span>
           <span v-if="quest.location" class="eyebrow">地点 · {{ quest.location }}</span>
         </div>
         <h3 class="quest-title">{{ quest.name }}</h3>
@@ -214,18 +271,18 @@ const rewardEntries = computed<RewardEntry[]>(() => {
       <ul class="objective-list">
         <li
           v-for="entry in objectiveEntries"
-          :key="entry.objectiveId"
-          class="objective-card"
-          :class="{ completed: entry.completed }"
-        >
-          <div class="objective-row">
-            <div class="objective-title">
-              <span class="objective-icon">◎</span>
-              {{ entry.description }}
+            :key="entry.objectiveId"
+            class="objective-card"
+            :class="{ completed: entry.completed }"
+          >
+            <div class="objective-row">
+              <div class="objective-title">
+                <span class="objective-icon">{{ entry.icon }}</span>
+                {{ entry.description }}
+              </div>
+              <div class="objective-count">{{ entry.current }} / {{ entry.target }}</div>
             </div>
-            <div class="objective-count">{{ entry.current }} / {{ entry.target }}</div>
-          </div>
-          <div class="objective-progress-bar">
+            <div class="objective-progress-bar">
             <span class="objective-progress-fill" :style="{ width: `${entry.progress * 100}%` }" />
           </div>
         </li>
@@ -235,7 +292,6 @@ const rewardEntries = computed<RewardEntry[]>(() => {
     <section class="quest-section rewards">
       <div class="section-head">
         <h4>任务奖励</h4>
-        <span class="hint">稀有度已标记</span>
       </div>
       <div class="reward-grid">
         <div
@@ -246,8 +302,58 @@ const rewardEntries = computed<RewardEntry[]>(() => {
           :data-kind="reward.kind"
           :title="reward.detail ?? reward.name"
         >
-          <div class="reward-icon">
-            {{ reward.kind === 'gold' ? '🪙' : reward.kind === 'item' ? '🧪' : reward.kind === 'equipment' ? '🗡' : reward.kind === 'skill' ? '📜' : '✉' }}
+          <div class="reward-icon" :data-kind="reward.kind">
+            <img
+              v-if="reward.icon?.type === 'image'"
+              :src="reward.icon.src"
+              :alt="reward.icon.alt || reward.name"
+              loading="lazy"
+            />
+            <span v-else-if="reward.icon?.type === 'text'" class="reward-icon__text">{{ reward.icon.text }}</span>
+            <svg v-else-if="reward.kind === 'gold'" viewBox="0 0 24 24" aria-hidden="true">
+              <defs>
+                <linearGradient id="coin" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <stop offset="0%" stop-color="#ffe7a0" />
+                  <stop offset="100%" stop-color="#f4b54a" />
+                </linearGradient>
+              </defs>
+              <circle cx="12" cy="12" r="8" fill="url(#coin)" />
+              <circle cx="12" cy="12" r="5" fill="rgba(0,0,0,0.2)" />
+            </svg>
+            <svg v-else-if="reward.kind === 'item'" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M8 3.5h8l1 5.5-5 12h-0.8L7 9z"
+                opacity="0.9"
+              />
+              <path fill="currentColor" d="M9 8.5h6l-0.6 3H9.6z" opacity="0.65" />
+            </svg>
+            <svg v-else-if="reward.kind === 'equipment'" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M5 19l6.2-6.2 1.8 1.8L6.8 20.8z"
+                opacity="0.8"
+              />
+              <path
+                fill="currentColor"
+                d="M14.5 11.5l2.8-2.8c0.6-0.6 0.6-1.6 0-2.2l-1.8-1.8c-0.6-0.6-1.6-0.6-2.2 0l-2.8 2.8z"
+              />
+            </svg>
+            <svg v-else-if="reward.kind === 'skill'" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                fill="currentColor"
+                d="M6 5h12v14H6z"
+                opacity="0.2"
+              />
+              <path
+                fill="currentColor"
+                d="M8 7h8v2H8zm0 4h8v2H8zm0 4h5v2H8z"
+              />
+            </svg>
+            <svg v-else viewBox="0 0 24 24" aria-hidden="true">
+              <rect x="5" y="4" width="14" height="16" rx="2" fill="currentColor" opacity="0.18" />
+              <path fill="currentColor" d="M8 8h8v2H8zm0 4h8v2H8z" />
+            </svg>
           </div>
           <div class="reward-info">
             <p class="reward-name">{{ reward.name }}</p>
@@ -285,6 +391,14 @@ const rewardEntries = computed<RewardEntry[]>(() => {
         >
           放弃
         </button>
+        <button
+          v-if="showTrackButton"
+          type="button"
+          class="action-button outline"
+          @click="emit('track')"
+        >
+          前往目标 / 追踪任务
+        </button>
       </div>
       <div class="action-hints">
         <span v-if="quest.repeatable" class="action-hint">此任务可重复接取</span>
@@ -296,25 +410,53 @@ const rewardEntries = computed<RewardEntry[]>(() => {
 
 <style scoped>
 .quest-detail-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 16px;
   padding: 22px;
   border-radius: 18px;
-  background: linear-gradient(165deg, rgba(20, 24, 36, 0.85), rgba(16, 22, 34, 0.9));
-  border: 1px solid var(--quest-outline);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.46), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-  backdrop-filter: blur(18px);
+  background: linear-gradient(155deg, rgba(18, 20, 30, 0.85), rgba(8, 14, 26, 0.86));
+  box-shadow:
+    0 28px 48px rgba(0, 0, 0, 0.48),
+    0 0 48px rgba(76, 201, 240, 0.1);
+  backdrop-filter: blur(16px);
   color: var(--quest-text);
+  overflow: hidden;
+}
+
+.quest-detail-card > * {
+  position: relative;
+  z-index: 1;
+}
+
+.quest-detail-card::before {
+  content: '';
+  position: absolute;
+  inset: -30% -40%;
+  background: radial-gradient(circle at 20% 30%, rgba(76, 201, 240, 0.12), transparent 45%);
+  filter: blur(12px);
+  z-index: 0;
 }
 
 .quest-hero {
+  position: relative;
   display: grid;
   grid-template-columns: 1fr auto;
   gap: 12px 18px;
   align-items: flex-start;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--quest-outline);
+  padding-bottom: 12px;
+  isolation: isolate;
+}
+
+.quest-hero::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(76, 201, 240, 0.18), rgba(255, 255, 255, 0.02));
 }
 
 .quest-hero__titles {
@@ -336,8 +478,9 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  box-shadow: 0 0 0 6px rgba(76, 201, 240, 0.1), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  box-shadow: 0 0 0 8px rgba(76, 201, 240, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.12);
   background: var(--quest-primary);
+  animation: statusPulse 1.8s ease-in-out infinite;
 }
 
 .status-dot[data-state='available'] {
@@ -365,6 +508,37 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   color: var(--quest-text);
 }
 
+.quest-type-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.08), 0 10px 26px rgba(0, 0, 0, 0.32);
+}
+
+.quest-type-chip[data-tone='hunt'] {
+  background: linear-gradient(135deg, rgba(76, 201, 240, 0.2), rgba(36, 189, 164, 0.22));
+}
+
+.quest-type-chip[data-tone='collect'] {
+  background: linear-gradient(135deg, rgba(236, 179, 101, 0.2), rgba(236, 179, 101, 0.28));
+}
+
+.quest-type-icon {
+  width: 18px;
+  height: 18px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.24);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12);
+}
+
 .eyebrow {
   padding: 2px 8px;
   border-radius: 999px;
@@ -374,10 +548,13 @@ const rewardEntries = computed<RewardEntry[]>(() => {
 
 .quest-title {
   margin: 0;
-  font-size: 24px;
+  font-size: clamp(24px, 3vw, 30px);
   font-weight: 800;
-  letter-spacing: 0.02em;
-  text-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+  letter-spacing: 0.06em;
+  font-family: 'Cinzel', 'Times New Roman', serif;
+  text-shadow:
+    0 0 24px rgba(236, 179, 101, 0.35),
+    0 12px 28px rgba(0, 0, 0, 0.5);
 }
 
 .quest-subtitle {
@@ -409,6 +586,7 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   grid-template-columns: repeat(3, minmax(0, auto));
   gap: 8px;
   align-self: flex-start;
+  filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.35));
 }
 
 .meta-chip {
@@ -417,8 +595,8 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   gap: 6px;
   padding: 8px 12px;
   border-radius: 12px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--quest-outline);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
   color: var(--quest-text);
   min-width: 120px;
 }
@@ -452,14 +630,29 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   flex-direction: column;
   gap: 12px;
   padding: 14px 16px;
-  border-radius: 14px;
-  background: var(--quest-surface-weak);
-  border: 1px solid var(--quest-border-faint);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  border-radius: 16px;
+  background: linear-gradient(155deg, rgba(17, 22, 35, 0.7), rgba(12, 16, 26, 0.78));
+  box-shadow:
+    0 20px 30px rgba(0, 0, 0, 0.3),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  position: relative;
+  overflow: hidden;
 }
 
 .quest-section.description {
-  background: linear-gradient(160deg, rgba(17, 22, 35, 0.8), rgba(15, 18, 30, 0.9));
+  background: linear-gradient(160deg, rgba(17, 22, 35, 0.8), rgba(14, 18, 30, 0.86));
+}
+
+.quest-section.description::before {
+  position: absolute;
+  inset: 12px;
+  z-index: 0;
+  color: rgba(255, 255, 255, 0.04);
+  font-size: 28px;
+  letter-spacing: 0.3em;
+  font-weight: 700;
+  transform: rotate(-8deg);
+  pointer-events: none;
 }
 
 .section-head {
@@ -485,7 +678,11 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   font-size: 14px;
   line-height: 1.6;
   color: var(--quest-text);
+  white-space: pre-line;
   text-shadow: 0 10px 36px rgba(0, 0, 0, 0.4);
+  position: relative;
+  z-index: 1;
+  animation: typeGlow 12s ease-in-out infinite alternate;
 }
 
 .objective-list {
@@ -499,9 +696,11 @@ const rewardEntries = computed<RewardEntry[]>(() => {
 .objective-card {
   padding: 12px 12px 10px;
   border-radius: 12px;
-  border: 1px solid var(--quest-outline);
-  background: linear-gradient(145deg, rgba(24, 32, 48, 0.85), rgba(28, 40, 60, 0.78));
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(145deg, rgba(24, 32, 48, 0.75), rgba(18, 28, 48, 0.76));
+  box-shadow:
+    0 16px 32px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
 }
 
 .objective-card.completed {
@@ -525,16 +724,43 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   font-size: 14px;
 }
 
-.objective-icon {
-  width: 20px;
-  height: 20px;
-  border-radius: 8px;
+.objective-avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 10px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(76, 201, 240, 0.14);
+  background: linear-gradient(145deg, rgba(76, 201, 240, 0.22), rgba(28, 38, 58, 0.9));
+  color: #e9fbff;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 10px 20px rgba(0, 0, 0, 0.4);
+}
+
+.objective-avatar[data-tone='collect'] {
+  background: linear-gradient(145deg, rgba(236, 179, 101, 0.32), rgba(40, 28, 10, 0.9));
+  color: #fff3dc;
+}
+
+.objective-avatar[data-tone='explore'] {
+  background: linear-gradient(145deg, rgba(180, 142, 251, 0.24), rgba(32, 20, 44, 0.85));
+  color: #f6e8ff;
+}
+
+.objective-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.06);
   color: var(--quest-primary);
   font-size: 12px;
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
 
 .objective-count {
@@ -568,10 +794,12 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   display: flex;
   gap: 10px;
   padding: 12px;
-  border-radius: 12px;
-  border: 1px solid var(--quest-outline);
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(145deg, rgba(20, 26, 42, 0.9), rgba(12, 16, 26, 0.9));
+  box-shadow:
+    0 16px 32px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   align-items: center;
   min-height: 72px;
 }
@@ -609,6 +837,36 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   justify-content: center;
   font-size: 20px;
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  color: #d5eaff;
+  overflow: hidden;
+}
+
+.reward-icon[data-kind='item'] {
+  color: #8ddcff;
+}
+
+.reward-icon[data-kind='equipment'] {
+  color: #fbc02d;
+}
+
+.reward-icon[data-kind='skill'] {
+  color: #c8b5ff;
+}
+
+.reward-icon img {
+  width: 34px;
+  height: 34px;
+  object-fit: contain;
+  filter: drop-shadow(0 6px 12px rgba(0, 0, 0, 0.4));
+}
+
+.reward-icon__text {
+  font-size: 18px;
+}
+
+.reward-icon svg {
+  width: 26px;
+  height: 26px;
 }
 
 .reward-info {
@@ -680,6 +938,13 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   color: var(--quest-text);
 }
 
+.action-button.outline {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.06), rgba(255, 255, 255, 0.02));
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--quest-text);
+  box-shadow: 0 10px 18px rgba(0, 0, 0, 0.24);
+}
+
 .action-button:hover {
   transform: translateY(-1px);
   filter: brightness(1.05);
@@ -691,6 +956,30 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   flex-wrap: wrap;
   color: var(--quest-text-dim);
   font-size: 12px;
+}
+
+@keyframes statusPulse {
+  0% {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 8px rgba(76, 201, 240, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+  50% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 10px rgba(76, 201, 240, 0.12), 0 0 12px rgba(76, 201, 240, 0.65);
+  }
+  100% {
+    transform: scale(0.98);
+    box-shadow: 0 0 0 8px rgba(76, 201, 240, 0.08), 0 0 0 1px rgba(255, 255, 255, 0.12);
+  }
+}
+
+@keyframes typeGlow {
+  0% {
+    text-shadow: 0 0 18px rgba(76, 201, 240, 0.28), 0 8px 28px rgba(0, 0, 0, 0.4);
+  }
+  100% {
+    text-shadow: 0 0 24px rgba(236, 179, 101, 0.36), 0 10px 32px rgba(0, 0, 0, 0.5);
+  }
 }
 
 @media (max-width: 840px) {

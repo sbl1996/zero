@@ -395,6 +395,10 @@ export interface MeditationBoost {
   durationMs: number
 }
 
+export type ItemIconDefinition =
+  | { type: 'image'; src: string; alt?: string }
+  | { type: 'text'; text: string }
+
 export interface ConsumableDefinition {
   id: string
   name: string
@@ -404,10 +408,13 @@ export interface ConsumableDefinition {
   gainDeltaBp?: number
   price: number
   breakthroughMethod?: BreakthroughMethod
+  consumedOnUse?: boolean
+  teleportToMapId?: string
   // Optional fields for meditation core shard items
   coreShardTier?: number
   meditationBoost?: MeditationBoost
   useDurationMs?: number
+  icon?: ItemIconDefinition
 }
 
 export interface MaterialDefinition {
@@ -415,6 +422,7 @@ export interface MaterialDefinition {
   name: string
   price: number
   usage: string
+  icon?: ItemIconDefinition
 }
 
 export type ItemDefinition = ConsumableDefinition | MaterialDefinition
@@ -496,6 +504,11 @@ export interface FlashEffect {
   kind: FlashEffectKind
 }
 
+export interface SkillAnimation {
+  id: number
+  skillId: string
+}
+
 export interface PendingDodgeState {
   attemptedAt: number
   invincibleUntil: number
@@ -563,6 +576,7 @@ export interface BattleState {
   rngSeed: number
   floatTexts: FloatText[]
   flashEffects: FlashEffect[]
+  skillAnimations: SkillAnimation[]
   concluded: BattleResolution
   lastOutcome: BattleOutcome | null
   rematchTimer: number | null

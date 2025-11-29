@@ -1153,6 +1153,46 @@ button {
   animation: flash-ult-shock 0.7s ease-out forwards;
 }
 
+.skill-anime {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 256px;
+  height: 256px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  object-fit: contain;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  mix-blend-mode: screen;
+  z-index: 12;
+  opacity: 0;
+}
+
+.skill-anime--dragon-breath {
+  display: block;
+  width: clamp(220px, 38vw, 320px);
+  height: clamp(220px, 38vw, 320px);
+  opacity: 1;
+  animation: dragon-breath-fade 0.9s ease-out forwards;
+}
+
+@keyframes dragon-breath-fade {
+  0% {
+    opacity: 0.95;
+    transform: translate(-50%, -50%) scale(1);
+  }
+  55% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) scale(1.12);
+  }
+}
+
 .float-text {
   position: absolute;
   color: #8be9fd;

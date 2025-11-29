@@ -12,6 +12,8 @@ export interface MapLocation {
   routeParams?: Record<string, string | number> | null
   routeQuery?: Record<string, string | number> | null
   destinationMapId?: string | null
+  npcs?: string[] | null
+  isDefault?: boolean
 }
 
 export type MapNodeType = 'battle' | 'functional' | 'mixed' | 'portal'

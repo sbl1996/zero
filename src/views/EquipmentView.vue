@@ -10,7 +10,8 @@ import { useEquipmentSelection } from '@/composables/useEquipmentSelection'
 import { useEquipmentActions } from '@/composables/useEquipmentActions'
 import { createEquipmentGridEntry, type EquipmentEntryBuilderContext } from '@/utils/equipmentEntry'
 import { iconForEquipSlot } from '@/utils/equipmentIcons'
-import { ITEMS, quickConsumableIds } from '@/data/items'
+import { ITEMS, getItemEffectText, quickConsumableIds } from '@/data/items'
+import { maps } from '@/data/maps'
 import type { EquipSlot, EquipSlotKey } from '@/types/domain'
 import type { EquipmentGridEntry } from '@/types/equipment-ui'
 import type { PaperDollSlotState } from '@/types/paperDoll'
@@ -97,6 +98,7 @@ const selectedEntry = computed(() => {
 })
 
 const quickSlotOptions = ITEMS.filter((item) => quickConsumableIds.has(item.id))
+const mapNameLookup = new Map(maps.map((map) => [map.id, map.name]))
 
 function handleSlotSelect(key: EquipSlotKey) {
   selectedSlotKey.value = key
@@ -124,11 +126,7 @@ function handleQuickSlotChange(index: number, value: string) {
 function quickSlotEffectText(itemId: string | null) {
   if (!itemId) return ''
   const item = quickSlotOptions.find((option) => option.id === itemId)
-  if (!item) return ''
-  const effects: string[] = []
-  if ('heal' in item && item.heal) effects.push(`HP+${item.heal}`)
-  if ('restoreQi' in item && item.restoreQi) effects.push(`斗气+${item.restoreQi}`)
-  return effects.join(' ')
+  return getItemEffectText(item, { mapNameLookup })
 }
 
 function quickSlotName(itemId: string | null) {

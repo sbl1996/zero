@@ -803,14 +803,16 @@ export const usePlayerStore = defineStore('player', {
         progress,
       }
     },
-    async useItem(itemId: string) {
+    async useItem(itemId: string): Promise<{ applied: boolean; teleportToMapId?: string }> {
       const def = ITEMS.find(item => item.id === itemId)
-      if (!def) return false
+      if (!def) return { applied: false }
 
       const isHeal = 'heal' in def && typeof def.heal === 'number'
       const isQi = 'restoreQi' in def && typeof def.restoreQi === 'number'
       const hasBreak = 'breakthroughMethod' in def && def.breakthroughMethod
       const meditationBoost = 'meditationBoost' in def ? def.meditationBoost : undefined
+      const teleportTarget = 'teleportToMapId' in def ? def.teleportToMapId : undefined
+      const hasTeleport = Boolean(teleportTarget)
       const hasMeditationBoost =
         meditationBoost &&
         typeof meditationBoost.bonusPerSecond === 'number' &&
@@ -818,8 +820,8 @@ export const usePlayerStore = defineStore('player', {
         typeof meditationBoost.durationMs === 'number' &&
         meditationBoost.durationMs > 0
 
-      if (!isHeal && !isQi && !hasMeditationBoost && !hasBreak) {
-        return false
+      if (!isHeal && !isQi && !hasMeditationBoost && !hasBreak && !hasTeleport) {
+        return { applied: false }
       }
 
       let effectApplied = false
@@ -868,7 +870,14 @@ export const usePlayerStore = defineStore('player', {
         effectApplied = true
       }
 
-      return effectApplied
+      if (hasTeleport) {
+        effectApplied = true
+      }
+
+      return {
+        applied: effectApplied,
+        teleportToMapId: effectApplied && teleportTarget ? teleportTarget : undefined,
+      }
     },
   },
 

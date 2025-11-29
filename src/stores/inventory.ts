@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ITEMS, quickConsumableIds } from '@/data/items'
+import { ITEMS, getItemDefinition, isItemConsumedOnUse, quickConsumableIds } from '@/data/items'
 import { applyEquipmentTemplateMetadata } from '@/data/equipment'
 import type { ItemDefinition, Equipment, EquipmentInventoryMetaEntry, InventorySave } from '@/types/domain'
 
@@ -7,6 +7,7 @@ type StackRecord = Record<string, number>
 
 function defaultStacks(): StackRecord {
   return {
+    teleportStone: 1,
     potionHP: 5,
     potionQi: 3,
     potionQiPlus: 1,
@@ -14,7 +15,7 @@ function defaultStacks(): StackRecord {
 }
 
 function defaultQuickSlots(): (string | null)[] {
-  return ['potionHP', 'potionQi', 'potionQiPlus', null]
+  return ['potionHP', 'potionQi', 'potionQiPlus', 'teleportStone']
 }
 
 function cloneEquipmentMeta(meta: Record<string, EquipmentMetaState>) {
@@ -99,6 +100,12 @@ export const useInventoryStore = defineStore('inventory', {
       this.add(id, amount)
     },
     spend(id: string, amount: number) {
+      const definition = getItemDefinition(id)
+      if (definition && !isItemConsumedOnUse(definition)) {
+        const current = this.quantity(id)
+        if (current <= 0) return false
+        return true
+      }
       const current = this.quantity(id)
       if (current < amount) return false
       this.stacks[id] = current - amount

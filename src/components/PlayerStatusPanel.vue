@@ -4,8 +4,11 @@ import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBattleStore } from '@/stores/battle'
-import { ITEMS, quickConsumableIds } from '@/data/items'
+import { ITEMS, getItemEffectText, isItemConsumedOnUse, isTeleportItem, quickConsumableIds } from '@/data/items'
 import { resolveItemIcon } from '@/utils/itemIcon'
+import { travelToMap } from '@/utils/travel'
+import { maps } from '@/data/maps'
+import StatusQuickItemBar from '@/components/StatusQuickItemBar.vue'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
 
 const props = withDefaults(defineProps<{
@@ -142,54 +145,70 @@ const attributeRows = computed(() => {
 })
 
 // 计算可用的消耗品道具
-const quickBarLocked = computed(() => isMeditating.value)
+const statusQuickBarLocked = computed(() => isMeditating.value)
 
-const availableConsumables = computed(() => {
+const mapNameLookup = new Map(maps.map((map) => [map.id, map.name]))
+
+const statusQuickConsumables = computed(() => {
   const { hp, hpMax, qi, qiMax } = res.value
   const needsHp = hp < hpMax
   const needsQi = qi < qiMax
 
   return ITEMS.filter(item => quickConsumableIds.has(item.id)).map(item => {
     const quantity = inventory.quantity(item.id)
+    const consumedOnUse = isItemConsumedOnUse(item)
+    const isTeleport = isTeleportItem(item)
     const healsHp = 'heal' in item && typeof item.heal === 'number' && item.heal > 0 && needsHp
     const restoresQi = 'restoreQi' in item && typeof item.restoreQi === 'number' && item.restoreQi > 0 && needsQi
-    const effectApplies = healsHp || restoresQi
-    const canUse = quantity > 0 && effectApplies && !battle.inBattle && !quickBarLocked.value
+    const effectApplies = isTeleport || healsHp || restoresQi
+    const hasStock = quantity > 0
+    const canUse = hasStock && effectApplies && !battle.inBattle && !statusQuickBarLocked.value
+    const quantityLabel = consumedOnUse ? `×${quantity}` : (hasStock ? '∞' : '×0')
+    const teleportTargetName = isTeleport && item.teleportToMapId
+      ? (mapNameLookup.get(item.teleportToMapId) ?? item.teleportToMapId)
+      : null
 
     return {
       ...item,
       quantity,
+      quantityLabel,
+      showQuantity: consumedOnUse || !hasStock,
       canUse,
       disabled: !canUse,
-      locked: quickBarLocked.value,
+      locked: statusQuickBarLocked.value,
       icon: resolveItemIcon(item.id),
+      consumedOnUse,
+      teleportTargetName,
     }
   })
 })
 
 // 使用道具函数（仅在非战斗状态使用）
-function useItem(itemId: string) {
-  if (quickBarLocked.value) return
-  const item = availableConsumables.value.find(i => i.id === itemId)
+async function useItem(itemId: string) {
+  if (statusQuickBarLocked.value) return
+  const item = statusQuickConsumables.value.find(i => i.id === itemId)
   if (!item || item.disabled || !quickConsumableIds.has(itemId)) return
 
   // 非战斗状态下的道具使用逻辑
   const used = inventory.spend(itemId, 1)
   if (!used) return
 
-  const applied = playerStore.useItem(itemId)
-  if (!applied) {
-    inventory.addItem(itemId, 1)
+  const result = await playerStore.useItem(itemId)
+  if (!result.applied) {
+    if (item.consumedOnUse) {
+      inventory.addItem(itemId, 1)
+    }
+    return
+  }
+
+  if (result.teleportToMapId) {
+    travelToMap(result.teleportToMapId)
   }
 }
 
 // 获取道具效果描述
 function getItemEffect(item: any) {
-  const effects = []
-  const consumable = item as any
-  if (consumable.heal) effects.push(`HP+${consumable.heal}`)
-  if (consumable.restoreQi) effects.push(`斗气+${consumable.restoreQi}`)
-  return effects.join(' ')
+  return getItemEffectText(item, { mapNameLookup })
 }
 </script>
 
@@ -220,7 +239,6 @@ function getItemEffect(item: any) {
     </div>
 
     <div class="attribute-section">
-      <h3 class="section-title attribute-title">属性详情</h3>
       <div class="qi-controls">
         <button
           class="qi-progress"
@@ -262,35 +280,12 @@ function getItemEffect(item: any) {
     </div>
 
     <div class="panel" style="margin-top: 20px; background: rgba(255,255,255,0.04);">
-      <h3 class="section-title" style="font-size: 16px; margin-top: 0;">快速道具栏</h3>
-      <div
-        v-if="quickBarLocked"
-        class="quick-items-lock"
-      >
-        冥想中无法使用快捷道具
-      </div>
-      <div class="quick-items-grid">
-        <button
-          v-for="item in availableConsumables"
-          :key="item.id"
-          class="quick-item-button"
-          :class="{ disabled: item.disabled }"
-          type="button"
-          :disabled="item.disabled"
-          @click="useItem(item.id)"
-          :title="`${item.name} - ${(item as any).description || ''} ${getItemEffect(item)}${item.locked ? ' · 冥想中无法使用' : ''}`"
-        >
-          <span class="quick-item-icon">
-            <img
-              v-if="item.icon.type === 'image'"
-              :src="item.icon.src"
-              :alt="item.icon.alt || item.name"
-            >
-            <span v-else>{{ item.icon.text }}</span>
-          </span>
-          <div class="quick-item-quantity">×{{ item.quantity }}</div>
-        </button>
-      </div>
+      <h3 class="section-title" style="font-size: 16px; margin-top: 0;">快捷道具栏</h3>
+      <StatusQuickItemBar
+        :items="statusQuickConsumables"
+        :locked="statusQuickBarLocked"
+        @use="useItem"
+      />
     </div>
 
     <slot />
@@ -379,96 +374,6 @@ function getItemEffect(item: any) {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
 }
 
-/* 快速道具栏样式 */
-.quick-items-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
-  gap: 6px;
-  margin-top: 8px;
-}
-
-.quick-item-button {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  border-radius: 8px;
-  padding: 4px;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  color: white;
-  font-size: 13px;
-  aspect-ratio: 1;
-  min-height: 46px;
-}
-
-.quick-item-button:hover:not(.disabled) {
-  background: rgba(255, 255, 255, 0.12);
-  border-color: rgba(255, 255, 255, 0.25);
-  transform: translateY(-1px);
-}
-
-.quick-item-button:active:not(.disabled) {
-  transform: translateY(0);
-  background: rgba(255, 255, 255, 0.15);
-}
-
-.quick-item-button.disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-  background: rgba(255, 255, 255, 0.05);
-  border-color: rgba(255, 255, 255, 0.08);
-}
-
-.quick-item-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: calc(100% - 10px);
-  height: calc(100% - 10px);
-  font-size: 26px;
-  line-height: 1;
-}
-
-.quick-item-icon img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-}
-
-.quick-items-lock {
-  margin-top: 4px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 13px;
-}
-
-.quick-item-quantity {
-  position: absolute;
-  right: 4px;
-  bottom: 4px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-  color: #fff;
-  background: rgba(255, 255, 255, 0.1);
-  padding: 2px 5px;
-  border-radius: 9px;
-  min-width: 22px;
-  text-align: center;
-}
-
-.quick-items-hint {
-  text-align: center;
-  font-style: italic;
-}
-
 .attribute-section {
   margin-top: 20px;
   padding-top: 12px;
@@ -482,20 +387,9 @@ function getItemEffect(item: any) {
 
 /* 响应式调整 */
 @media (max-width: 768px) {
-  .quick-item-button {
-    padding: 4px;
-    min-height: 44px;
-  }
-
   .qi-progress {
     height: 36px;
     font-size: 13px;
-  }
-
-  .quick-item-icon {
-    width: calc(100% - 10px);
-    height: calc(100% - 10px);
-    font-size: 22px;
   }
 }
 </style>

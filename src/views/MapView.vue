@@ -7,71 +7,109 @@
           <h3 class="map-name">{{ currentMap.name }}</h3>
           <p class="map-tip">选择区域进入对应功能，或在驿站前往其他区域。</p>
         </header>
-        <div class="map-canvas">
-          <img class="map-image" :src="currentMap.image" :alt="`${currentMap.name} 地图`" />
-          <button
-            v-for="location in visibleLocations"
-            :key="location.id"
-            type="button"
-            class="map-location"
-            :class="{ locked: isLocationLocked(location) }"
-            :style="markerStyle(location)"
-            :disabled="isLocationLocked(location)"
-            @click="goToLocation(location)"
-            @mouseenter="setFocusedLocation(location.id)"
-            @mouseleave="clearFocusedLocation"
-            @focus="setFocusedLocation(location.id)"
-            @blur="clearFocusedLocation"
-          >
-            <span class="location-label">{{ location.name }}</span>
-          </button>
-        </div>
-        <footer class="location-detail" v-if="focusedLocation">
-          <h4 class="location-title">{{ focusedLocation.name }}</h4>
-          <p v-if="focusedLocationLocked" class="location-description">尚未解锁。</p>
-          <p v-else class="location-description">
-            {{ focusedLocation.description ?? '点击以进入该地点。' }}
-          </p>
-          <div v-if="focusedLocation.id === travelHubId && !focusedLocationLocked" class="location-actions">
-            <button type="button" class="primary-button" @click="openTravelPanel">
-              打开驿站目的地
-            </button>
-          </div>
-        </footer>
-        <section v-if="travelPanelOpen" class="travel-panel">
-          <header class="travel-panel__header">
-            <div>
-              <p class="travel-panel__eyebrow">驿站传送</p>
-              <h4 class="travel-panel__title">选择目的地</h4>
-            </div>
-            <button type="button" class="ghost-button" @click="closeTravelPanel">关闭</button>
-          </header>
-          <p class="travel-panel__hint">
-            已解锁区域可直接前往。抵达后可继续从当地的传送点探索。
-          </p>
-          <div v-if="travelTargets.length" class="travel-grid">
+        <div class="city-content">
+          <div class="map-canvas">
+            <img class="map-image" :src="currentMap.image" :alt="`${currentMap.name} 地图`" />
             <button
-              v-for="map in travelTargets"
-              :key="map.id"
+              v-for="location in visibleLocations"
+              :key="location.id"
               type="button"
-              class="travel-card"
-              @click="travelToMap(map.id)"
+              class="map-location"
+              :class="{
+                locked: isLocationLocked(location),
+                'wild-destination': isWildDestination(location)
+              }"
+              :style="markerStyle(location)"
+              :disabled="isLocationLocked(location)"
+              @click="handleLocationClick(location)"
+              @mouseenter="setFocusedLocation(location.id)"
+              @mouseleave="clearFocusedLocation"
+              @focus="setFocusedLocation(location.id)"
+              @blur="clearFocusedLocation"
             >
-              <span class="travel-card__name">{{ map.name }}</span>
-              <span class="travel-card__meta">
-                {{ map.category === 'city' ? '城市' : '野外' }}
-              </span>
+              <span class="location-label">{{ location.name }}</span>
             </button>
+            <NpcDialoguePanel />
           </div>
-          <p v-else class="travel-panel__empty">暂无其他已解锁的目的地。</p>
-        </section>
+          <aside class="city-sidebar">
+            <div class="city-sidebar__header">
+              <h4 class="location-title">{{ selectedCityLocation?.name ?? '选择区域' }}</h4>
+            </div>
+            <div class="node-list">
+              <p v-if="!citySidebarEntries.length" class="node-list__empty">
+                {{ citySidebarEmptyText }}
+              </p>
+              <ul v-else class="node-entry-list">
+                <li v-for="entry in citySidebarEntries" :key="entry.key">
+                  <button
+                    type="button"
+                    class="node-entry"
+                    :class="[
+                      `node-entry--${entry.kind}`,
+                      {
+                        locked: entry.kind === 'portal' && entry.locked,
+                        boss: entry.kind === 'monster' && entry.monster?.isBoss,
+                        'portal-city': entry.kind === 'portal' && entry.category === 'city',
+                        'portal-wild': entry.kind === 'portal' && entry.category === 'wild'
+                      }
+                    ]"
+                    :disabled="entry.kind === 'portal' && entry.locked"
+                    @mouseenter="handleEntryHover(entry)"
+                    @mouseleave="handleEntryLeave(entry)"
+                    @focus="handleEntryHover(entry)"
+                    @blur="handleEntryLeave(entry)"
+                    @click="handleEntryClick(entry)"
+                  >
+                    <span class="node-entry__title">
+                      <template v-if="entry.kind === 'monster'">
+                        {{ entry.monster?.name ?? entry.monsterId }}
+                      </template>
+                      <template v-else-if="entry.kind === 'npc'">
+                        {{ entry.name }}
+                      </template>
+                      <template v-else-if="entry.kind === 'travel'">
+                        {{ entry.label }}
+                      </template>
+                      <template v-else>
+                        {{ entry.label }}
+                      </template>
+                    </span>
+                    <span class="node-entry__meta">
+                      <template v-if="entry.kind === 'monster'">
+                        {{ entry.monster ? describeMonsterRealm(entry.monster) : '未知等级' }}
+                      </template>
+                      <template v-else-if="entry.kind === 'npc'">
+                        NPC
+                      </template>
+                      <template v-else-if="entry.kind === 'travel'">
+                        {{ entry.category === 'city' ? '城市' : '野外' }}
+                      </template>
+                      <template v-else>
+                        {{ entry.locked ? '未解锁' : '传送' }}
+                      </template>
+                    </span>
+                  </button>
+                </li>
+              </ul>
+            </div>
+          </aside>
+        </div>
+        <footer class="location-detail" v-if="locationDetailTarget">
+          <h4 class="location-title">{{ locationDetailTarget.name }}</h4>
+          <p v-if="locationDetailLocked" class="location-description">尚未解锁。</p>
+          <p v-else class="location-description">
+            {{
+              locationDetailTarget.description
+                ?? (locationDetailTarget.id === travelHubId ? '在右侧选择目的地即可传送。' : '点击以进入该地点。')
+            }}
+          </p>
+        </footer>
       </section>
     </div>
     <div v-else>
       <div v-if="currentMapLocked" class="map-locked">
         <h3 class="map-locked__title">区域尚未解锁</h3>
         <p class="map-locked__hint">完成前置挑战以开放该野外区域。</p>
-        <button type="button" class="return-button" @click="returnToCity">返回翡冷翠</button>
       </div>
       <div v-else class="wild-layout">
         <PlayerStatusPanel />
@@ -80,9 +118,6 @@
             <div class="wild-header__info">
               <h3 class="map-name">{{ currentMap.name }}</h3>
             </div>
-            <button type="button" class="return-button" @click="returnToCity">
-              返回翡冷翠
-            </button>
           </header>
           <div class="wild-content">
             <div class="wild-map-canvas">
@@ -103,10 +138,11 @@
                 :key="node.id"
                 type="button"
                 class="node-marker"
-                :class="[
-                  `node-type-${node.type}`,
-                  { active: node.id === activeNodeId }
-                ]"
+              :class="[
+                `node-type-${node.type}`,
+                portalDestinationClass(node),
+                { active: node.id === activeNodeId }
+              ]"
                 :style="nodeStyle(node)"
                 :disabled="!canSelectNode(node)"
                 @click="selectNode(node.id)"
@@ -149,27 +185,33 @@
                       @click="handleEntryClick(entry)"
                     >
                       <span class="node-entry__title">
-                        <template v-if="entry.kind === 'monster'">
-                          {{ entry.monster?.name ?? entry.monsterId }}
-                        </template>
-                        <template v-else-if="entry.kind === 'npc'">
-                          {{ entry.name }}
-                        </template>
-                        <template v-else>
-                          {{ entry.label }}
-                        </template>
-                      </span>
+                      <template v-if="entry.kind === 'monster'">
+                        {{ entry.monster?.name ?? entry.monsterId }}
+                      </template>
+                      <template v-else-if="entry.kind === 'npc'">
+                        {{ entry.name }}
+                      </template>
+                      <template v-else-if="entry.kind === 'travel'">
+                        {{ entry.label }}
+                      </template>
+                      <template v-else>
+                        {{ entry.label }}
+                      </template>
+                    </span>
                       <span class="node-entry__meta">
-                        <template v-if="entry.kind === 'monster'">
-                          {{ entry.monster ? describeMonsterRealm(entry.monster) : '未知等级' }}
-                        </template>
-                        <template v-else-if="entry.kind === 'npc'">
-                          NPC
-                        </template>
-                        <template v-else>
-                          {{ entry.locked ? '未解锁' : '传送' }}
-                        </template>
-                      </span>
+                      <template v-if="entry.kind === 'monster'">
+                        {{ entry.monster ? describeMonsterRealm(entry.monster) : '未知等级' }}
+                      </template>
+                      <template v-else-if="entry.kind === 'npc'">
+                        NPC
+                      </template>
+                      <template v-else-if="entry.kind === 'travel'">
+                        传送 · {{ entry.category === 'city' ? '城市' : '野外' }}
+                      </template>
+                      <template v-else>
+                        {{ entry.locked ? '未解锁' : '传送' }}
+                      </template>
+                    </span>
                     </button>
                   </li>
                 </ul>
@@ -244,7 +286,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'
 import { useNodeSpawnStore } from '@/stores/nodeSpawns'
 import { useNpcDialogStore } from '@/stores/npcDialog'
-import type { GameMap, MapLocation, MapNode } from '@/types/map'
+import type { GameMap, MapCategory, MapLocation, MapNode } from '@/types/map'
 import type { Monster, MonsterSpecialization } from '@/types/domain'
 
 const route = useRoute()
@@ -283,6 +325,14 @@ type NodeListEntry =
       key: string
       label: string
       locked: boolean
+      category: MapCategory | null
+    }
+  | {
+      kind: 'travel'
+      key: string
+      mapId: string
+      label: string
+      category: MapCategory
     }
 
 function getSpecializationLabel(specialization: MonsterSpecialization): string {
@@ -465,13 +515,26 @@ const currentMapLocked = computed(() => {
 })
 
 const focusedLocationId = ref<string | null>(null)
+const selectedCityLocationId = ref<string | null>(null)
 const focusedMonsterId = ref<string | null>(null)
 const nodeHint = ref<string | null>(null)
-const travelPanelOpen = ref(false)
 
 const focusedLocation = computed<MapLocation | null>(() => {
   if (!focusedLocationId.value) return null
   return visibleLocations.value.find((location) => location.id === focusedLocationId.value) ?? null
+})
+
+const defaultCityLocationId = computed(() => {
+  if (!isCityMap.value || !currentMap.value) return null
+  const explicit = currentMap.value.locations.find((location) => location.isDefault)?.id
+  return explicit ?? currentMap.value.locations[0]?.id ?? null
+})
+
+const selectedCityLocation = computed<MapLocation | null>(() => {
+  if (!isCityMap.value) return null
+  const targetId = selectedCityLocationId.value ?? defaultCityLocationId.value
+  if (!targetId) return null
+  return visibleLocations.value.find((location) => location.id === targetId) ?? null
 })
 
 function isLocationLocked(location: MapLocation) {
@@ -484,9 +547,19 @@ function isLocationLocked(location: MapLocation) {
   return false
 }
 
-const focusedLocationLocked = computed(() => {
-  if (!focusedLocation.value) return false
-  return isLocationLocked(focusedLocation.value)
+function isWildDestination(location: MapLocation) {
+  if (!location.destinationMapId) return false
+  const target = getMapById(location.destinationMapId)
+  return target?.category === 'wild'
+}
+
+const locationDetailTarget = computed<MapLocation | null>(() => {
+  return focusedLocation.value ?? selectedCityLocation.value ?? null
+})
+
+const locationDetailLocked = computed(() => {
+  if (!locationDetailTarget.value) return false
+  return isLocationLocked(locationDetailTarget.value)
 })
 
 const currentNodeState = computed(() => {
@@ -497,6 +570,42 @@ const currentNodeState = computed(() => {
 const travelTargets = computed(() => {
   if (!currentMap.value) return []
   return mapsList.value.filter((map) => map.id !== currentMap.value?.id)
+})
+
+const cityNpcEntries = computed<NodeListEntry[]>(() => {
+  const location = selectedCityLocation.value
+  if (!location?.npcs?.length) return []
+  return location.npcs.map((npcId, index) => {
+    const definition = NPC_MAP[npcId]
+    return {
+      kind: 'npc' as const,
+      key: `city-npc-${npcId}-${index}`,
+      id: npcId,
+      name: definition?.name ?? npcId,
+      title: definition?.title,
+    }
+  })
+})
+
+const cityTravelEntries = computed<NodeListEntry[]>(() => {
+  if (selectedCityLocation.value?.id !== travelHubId) return []
+  return travelTargets.value.map((map) => ({
+    kind: 'travel' as const,
+    key: `travel-${map.id}`,
+    mapId: map.id,
+    label: map.name,
+    category: map.category,
+  }))
+})
+
+const citySidebarEntries = computed<NodeListEntry[]>(() => {
+  if (!selectedCityLocation.value || !isCityMap.value) return []
+  return [...cityNpcEntries.value, ...cityTravelEntries.value]
+})
+
+const citySidebarEmptyText = computed(() => {
+  if (selectedCityLocation.value?.id === travelHubId) return '暂无其他已解锁的目的地。'
+  return '这里暂时没有可以交互的对象。'
 })
 
 const monsterEntries = computed(() => {
@@ -530,6 +639,7 @@ const portalEntry = computed<NodeListEntry | null>(() => {
     key: `portal-${currentNode.value.id}`,
     label: targetMap?.name ?? currentNode.value.destination.mapId,
     locked: destinationLocked.value,
+    category: targetMap?.category ?? null,
   }
 })
 
@@ -568,6 +678,13 @@ function nodeStyle(node: MapNode) {
     left: `${node.position.x}%`,
     top: `${node.position.y}%`,
   }
+}
+
+function portalDestinationClass(node: MapNode) {
+  if (node.type !== 'portal' || !node.destination) return null
+  const target = getMapById(node.destination.mapId)
+  if (!target) return null
+  return target.category === 'city' ? 'portal-destination-city' : 'portal-destination-wild'
 }
 
 function canSelectNode(node: MapNode) {
@@ -639,13 +756,26 @@ function selectMap(mapId: string) {
   router.replace({ name: 'map', params: { mapId } })
 }
 
-function goToLocation(location: MapLocation) {
-  travelPanelOpen.value = false
-  if (isLocationLocked(location)) return
-  if (location.id === travelHubId) {
-    travelPanelOpen.value = true
+function locationUsesSidebar(location: MapLocation | null | undefined) {
+  if (!location || !isCityMap.value) return false
+  if (location.id === travelHubId) return true
+  return Boolean(location.npcs?.length)
+}
+
+function selectCityLocation(id: string) {
+  selectedCityLocationId.value = id
+}
+
+function handleLocationClick(location: MapLocation) {
+  if (locationUsesSidebar(location)) {
+    selectCityLocation(location.id)
     return
   }
+  goToLocation(location)
+}
+
+function goToLocation(location: MapLocation) {
+  if (isLocationLocked(location)) return
   if (location.destinationMapId) {
     progress.setCurrentMap(location.destinationMapId)
     router.push({ name: 'map', params: { mapId: location.destinationMapId } })
@@ -675,16 +805,7 @@ function clearFocusedMonster() {
   focusedMonsterId.value = null
 }
 
-function openTravelPanel() {
-  travelPanelOpen.value = true
-}
-
-function closeTravelPanel() {
-  travelPanelOpen.value = false
-}
-
 function travelToMap(mapId: string) {
-  travelPanelOpen.value = false
   selectMap(mapId)
 }
 
@@ -702,13 +823,6 @@ function engageMonster(instanceId: string, monsterId: string) {
     originNodeInstanceId: instanceId,
   })
   router.push('/battle')
-}
-
-function returnToCity() {
-  if (fallbackMap.value) {
-    progress.setCurrentMap(fallbackMap.value.id)
-    router.push({ name: 'map', params: { mapId: fallbackMap.value.id } })
-  }
 }
 
 function handleEntryHover(entry: NodeListEntry) {
@@ -738,6 +852,10 @@ function handleEntryClick(entry: NodeListEntry) {
     npcDialog.open(entry.id)
     return
   }
+  if (entry.kind === 'travel') {
+    travelToMap(entry.mapId)
+    return
+  }
   if (entry.kind === 'portal') {
     if (entry.locked) {
       nodeHint.value = '前方区域尚未解锁。'
@@ -749,11 +867,15 @@ function handleEntryClick(entry: NodeListEntry) {
 
 watch(
   currentMap,
-  () => {
+  (map) => {
     focusedLocationId.value = null
     focusedMonsterId.value = null
     nodeHint.value = null
-    travelPanelOpen.value = false
+    if (map?.category === 'city') {
+      selectedCityLocationId.value = defaultCityLocationId.value
+    } else {
+      selectedCityLocationId.value = null
+    }
   },
   { immediate: true },
 )
@@ -781,6 +903,13 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 1rem;
+}
+
+.city-content {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(160px, 200px);
+  gap: 1rem;
+  align-items: start;
 }
 
 .map-header {
@@ -836,11 +965,21 @@ watch(
   transition: transform 0.15s ease, background 0.2s ease, opacity 0.2s ease;
 }
 
+.map-location.wild-destination {
+  background: rgba(255, 150, 80, 0.88);
+  color: #1a0f06;
+}
+
 .map-location:hover,
 .map-location:focus {
   transform: translate(-50%, -50%) scale(1.05);
   background: rgba(120, 207, 255, 0.95);
   outline: none;
+}
+
+.map-location.wild-destination:hover,
+.map-location.wild-destination:focus {
+  background: rgba(255, 175, 120, 0.98);
 }
 
 .map-location:disabled {
@@ -881,6 +1020,35 @@ watch(
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
+}
+
+.city-sidebar {
+  align-self: stretch;
+  border-radius: 12px;
+  padding: 1rem;
+  background: rgba(8, 12, 18, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.city-sidebar__header {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.city-sidebar__hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.65);
+}
+
+.city-sidebar__description {
+  margin: 0;
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.75);
 }
 
 .primary-button {
@@ -928,23 +1096,6 @@ watch(
   margin: 0;
   font-size: 0.95rem;
   color: rgba(255, 255, 255, 0.65);
-}
-
-.return-button {
-  border: 1px solid rgba(255, 255, 255, 0.25);
-  border-radius: 999px;
-  background: rgba(255, 255, 255, 0.1);
-  color: #f0f0f0;
-  padding: 0.45rem 1.1rem;
-  cursor: pointer;
-  transition: background 0.2s ease, border-color 0.2s ease;
-}
-
-.return-button:hover,
-.return-button:focus {
-  border-color: rgba(255, 255, 255, 0.45);
-  background: rgba(255, 255, 255, 0.16);
-  outline: none;
 }
 
 .travel-panel {
@@ -1163,8 +1314,18 @@ watch(
   cursor: not-allowed;
 }
 
-.node-marker.node-type-portal {
-  border-style: dashed;
+.node-marker.portal-destination-city {
+  background: rgba(76, 193, 255, 0.18);
+  border-color: rgba(120, 210, 255, 0.95);
+  box-shadow: 0 0 0 4px rgba(76, 193, 255, 0.12);
+  border-style: solid;
+}
+
+.node-marker.portal-destination-wild {
+  background: rgba(255, 150, 90, 0.16);
+  border-color: rgba(255, 190, 140, 0.95);
+  box-shadow: 0 0 0 4px rgba(255, 150, 90, 0.12);
+  border-style: solid;
 }
 
 .node-sidebar {
@@ -1271,7 +1432,17 @@ watch(
 }
 
 .node-entry--portal {
-  border-style: dashed;
+  border-style: solid;
+}
+
+.node-entry--portal.portal-city {
+  border-color: rgba(120, 210, 255, 0.9);
+  background: rgba(76, 193, 255, 0.18);
+}
+
+.node-entry--portal.portal-wild {
+  border-color: rgba(255, 190, 140, 0.9);
+  background: rgba(255, 150, 90, 0.2);
 }
 
 .monster-badge {
@@ -1368,6 +1539,10 @@ watch(
     grid-template-columns: 1fr;
   }
 
+  .city-content {
+    grid-template-columns: 1fr;
+  }
+
   .wild-content {
     flex-direction: column;
   }
@@ -1384,10 +1559,6 @@ watch(
   .wild-header {
     flex-direction: column;
     align-items: stretch;
-  }
-
-  .return-button {
-    align-self: flex-start;
   }
 }
 </style>

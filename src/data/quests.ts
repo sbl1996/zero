@@ -15,6 +15,30 @@ export const QUEST_ITEM_DEFINITIONS: QuestItemDefinition[] = [
 
 export const QUEST_DEFINITIONS: QuestDefinition[] = [
   {
+    id: 'god-gift-starter-1',
+    name: '神的馈赠 I',
+    giver: '？？？',
+    location: '翡冷翠',
+    description:
+      '“欢迎来到这个世界，冒险者。在你踏上旅途之前，我有一些小礼物要送给你，助你一臂之力。”\n\n完成初始任务后可领取奖励。',
+    recommendedRealmTier: 1,
+    difficultyLabel: '★',
+    objectives: [
+    ],
+    rewards: {
+      equipmentTemplates: [
+        { templateId: 'novice-sword' },
+      ],
+      items: [
+        { itemId: 'potionHP', quantity: 1 },
+        { itemId: 'potionQi', quantity: 1 },
+      ],
+    },
+    allowAbandon: false,
+    repeatable: false,
+    tags: ['starter'],
+  },
+  {
     id: 'quest-slime-menace',
     name: '青苔原的黏液祸患',
     giver: '卫兵 振翔',

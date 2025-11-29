@@ -269,8 +269,8 @@ async function useCoreShard(tier: number) {
     setCoreFeedback('晶核库存不足。', false)
     return
   }
-  const applied = await player.useItem(option.id)
-  if (!applied) {
+  const result = await player.useItem(option.id)
+  if (!result.applied) {
     inventory.addItem(option.id, 1)
     setCoreFeedback('未能引导晶核之力。', false)
     return

@@ -6,7 +6,7 @@ import { makeRng, randRange, randBool } from '@/composables/useRng'
 import { bossUnlockMap } from '@/data/monsters'
 import { BASE_EQUIPMENT_TEMPLATES, instantiateEquipment } from '@/data/equipment'
 import { CORE_SHARD_BASE_ID, getCoreShardConfig } from '@/data/cultivationCores'
-import { ITEMS } from '@/data/items'
+import { ITEMS, isItemConsumedOnUse } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
 import { getSkillDefinition } from '@/data/skills'
@@ -29,6 +29,7 @@ import { useNodeSpawnStore } from './nodeSpawns'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
 import { resolveDodgeSuccessChance } from '@/composables/useDodge'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
+import { travelToMap } from '@/utils/travel'
 import type {
   BattleState,
   Monster,
@@ -396,6 +397,7 @@ function initialState(): BattleState {
     rngSeed: Date.now() >>> 0,
     floatTexts: [],
     flashEffects: [],
+    skillAnimations: [],
     concluded: 'idle',
     lastOutcome: null,
     rematchTimer: null,
@@ -447,6 +449,7 @@ function initialState(): BattleState {
 
 let floatId = 1
 let flashId = 1
+let skillAnimationId = 1
 
 function randomInRange(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -508,6 +511,7 @@ export const useBattleStore = defineStore('battle', {
       this.dodgeAttempts = 0
       this.dodgeSuccesses = 0
       this.pendingItemUse = null
+      this.skillAnimations = []
       this.monsterFollowup = null
       this.monsterFollowupPreview = null
       this.skillCharges = Array(slotCount).fill(null)
@@ -1116,6 +1120,14 @@ export const useBattleStore = defineStore('battle', {
         this.flashEffects = this.flashEffects.filter((effect) => effect.id !== id)
       }, 760)
     },
+    triggerSkillAnimation(skillId: string) {
+      const id = skillAnimationId++
+      this.skillAnimations.push({ id, skillId })
+      const lifespan = 1200
+      setTimeout(() => {
+        this.skillAnimations = this.skillAnimations.filter((entry) => entry.id !== id)
+      }, lifespan)
+    },
     scheduleRematch(monster: Monster) {
       this.clearRematchTimer()
       const now = getNow()
@@ -1629,8 +1641,10 @@ export const useBattleStore = defineStore('battle', {
 
       const inventory = useInventoryStore()
       const player = usePlayerStore()
+      const definition = ITEMS.find((item) => item.id === pending.itemId)
+      const consumedOnUse = isItemConsumedOnUse(definition)
 
-      if (!inventory.spend(pending.itemId, 1)) {
+      if (consumedOnUse && !inventory.spend(pending.itemId, 1)) {
         if (!pending.silent) this.pushFloat('无库存', 'miss')
         return
       }
@@ -1639,9 +1653,11 @@ export const useBattleStore = defineStore('battle', {
       const beforeQi = player.res.qi
       const beforeOverflow = player.cultivation.realm.overflow
 
-      const applied = await player.useItem(pending.itemId)
-      if (!applied) {
-        inventory.addItem(pending.itemId, 1)
+      const result = await player.useItem(pending.itemId)
+      if (!result.applied) {
+        if (consumedOnUse) {
+          inventory.addItem(pending.itemId, 1)
+        }
         if (!pending.silent) this.pushFloat('未生效', 'miss')
         return
       }
@@ -1666,6 +1682,11 @@ export const useBattleStore = defineStore('battle', {
       this.playerQi = player.res.qi
       this.playerQiMax = player.res.qiMax
       this.qiOperation = cloneQiOperationState(player.res.operation)
+
+      if (result.teleportToMapId) {
+        this.exitBattle()
+        travelToMap(result.teleportToMapId)
+      }
     },
     executeSkillEffect(skill: SkillDefinition, skillId: string, qiCost: number, silent: boolean): boolean {
       if (!this.monster || this.concluded !== 'idle') return false
@@ -1694,6 +1715,10 @@ export const useBattleStore = defineStore('battle', {
         cultivation: player.cultivation,
         progress: player.skills.progress[skillId] ?? undefined,
       })
+
+      if (skillId === 'dragon_breath_slash') {
+        this.triggerSkillAnimation(skillId)
+      }
 
       const nowMs = getNow()
       const activeVulnerability = this.monsterVulnerability

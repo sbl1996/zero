@@ -14,6 +14,23 @@ const activeQuests = computed(() => questStore.activeQuests)
 const availableQuests = computed(() => questStore.availableQuests)
 const questItems = computed(() => questStore.questItemsView)
 
+type QuestTone = 'hunt' | 'collect' | 'explore'
+
+function resolveQuestTone(quest: QuestDefinition): QuestTone {
+  const primary = quest.objectives[0]
+  if (!primary) return 'explore'
+  if (primary.type === 'kill') return 'hunt'
+  if (primary.type === 'collect' || primary.type === 'killCollect') return 'collect'
+  return 'explore'
+}
+
+function resolveQuestGlyph(quest: QuestDefinition) {
+  const tone = resolveQuestTone(quest)
+  if (tone === 'hunt') return '✦'
+  if (tone === 'collect') return '⬡'
+  return '◇'
+}
+
 const orderedQuests = computed(() => {
   const seen = new Set<string>()
   const result: QuestDefinition[] = []
@@ -226,9 +243,11 @@ onBeforeUnmount(() => {
               @click="selectQuest(quest.id)"
             >
               <span class="quest-list-indicator" />
+              <div class="quest-list-icon" :data-tone="resolveQuestTone(quest)">
+                <span class="quest-list-glyph">{{ resolveQuestGlyph(quest) }}</span>
+              </div>
               <div class="quest-list-content">
                 <span class="quest-list-name">{{ quest.name }}</span>
-                <span class="quest-list-meta">发布人：{{ quest.giver }}</span>
               </div>
               <span class="quest-list-tag">可交付</span>
             </button>
@@ -245,9 +264,11 @@ onBeforeUnmount(() => {
               @click="selectQuest(quest.id)"
             >
               <span class="quest-list-indicator" />
+              <div class="quest-list-icon" :data-tone="resolveQuestTone(quest)">
+                <span class="quest-list-glyph">{{ resolveQuestGlyph(quest) }}</span>
+              </div>
               <div class="quest-list-content">
                 <span class="quest-list-name">{{ quest.name }}</span>
-                <span class="quest-list-meta">发布人：{{ quest.giver }}</span>
               </div>
               <span class="quest-list-tag">进行中</span>
             </button>
@@ -264,9 +285,11 @@ onBeforeUnmount(() => {
               @click="selectQuest(quest.id)"
             >
               <span class="quest-list-indicator" />
+              <div class="quest-list-icon" :data-tone="resolveQuestTone(quest)">
+                <span class="quest-list-glyph">{{ resolveQuestGlyph(quest) }}</span>
+              </div>
               <div class="quest-list-content">
                 <span class="quest-list-name">{{ quest.name }}</span>
-                <span class="quest-list-meta">发布人：{{ quest.giver }}</span>
               </div>
               <span class="quest-list-tag">可接受</span>
             </button>
@@ -286,6 +309,7 @@ onBeforeUnmount(() => {
           :show-submit="selectedStatus === 'readyToTurnIn'"
           @accept="acceptQuest(selectedQuest.id)"
           @submit="submitQuest(selectedQuest.id)"
+          @track="setFeedback('已锁定任务，前往/导航功能稍后接入。', 'success')"
         />
 
         <div v-else class="quest-board__empty">
@@ -320,10 +344,12 @@ onBeforeUnmount(() => {
   gap: 16px;
   padding: 22px;
   border-radius: 18px;
-  background: linear-gradient(165deg, rgba(18, 20, 32, 0.86), rgba(10, 14, 26, 0.88));
-  border: 1px solid var(--quest-border-faint);
-  box-shadow: 0 20px 38px rgba(0, 0, 0, 0.36), inset 0 0 0 1px rgba(255, 255, 255, 0.02);
-  backdrop-filter: blur(12px);
+  background: linear-gradient(155deg, rgba(16, 18, 28, 0.82), rgba(10, 12, 22, 0.82));
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  box-shadow:
+    0 22px 40px rgba(0, 0, 0, 0.38),
+    0 0 42px rgba(76, 201, 240, 0.08);
+  backdrop-filter: blur(14px);
 }
 
 .quest-board__reward-card {
@@ -414,8 +440,7 @@ onBeforeUnmount(() => {
   justify-content: space-between;
   align-items: flex-start;
   gap: 12px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--quest-outline);
+  padding-bottom: 4px;
 }
 
 .quest-board__feedback {
@@ -470,14 +495,16 @@ onBeforeUnmount(() => {
 .quest-list-item {
   position: relative;
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: auto auto 1fr auto;
   align-items: center;
   gap: 10px;
   padding: 12px 14px;
   border-radius: 14px;
-  border: 1px solid var(--quest-outline);
-  background: rgba(255, 255, 255, 0.04);
-  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  background: linear-gradient(145deg, rgba(18, 24, 40, 0.8), rgba(12, 16, 26, 0.76));
+  box-shadow:
+    0 16px 28px rgba(0, 0, 0, 0.35),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.02);
   cursor: pointer;
   transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease, background 0.18s ease;
 }
@@ -493,6 +520,33 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 4px;
+}
+
+.quest-list-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(76, 201, 240, 0.16), rgba(28, 38, 58, 0.9));
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.08),
+    0 10px 22px rgba(0, 0, 0, 0.3);
+}
+
+.quest-list-icon[data-tone='collect'] {
+  background: linear-gradient(135deg, rgba(236, 179, 101, 0.22), rgba(42, 28, 12, 0.9));
+}
+
+.quest-list-icon[data-tone='explore'] {
+  background: linear-gradient(135deg, rgba(180, 142, 251, 0.2), rgba(30, 20, 44, 0.9));
+}
+
+.quest-list-glyph {
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: #fdf6e3;
 }
 
 .quest-list-name {

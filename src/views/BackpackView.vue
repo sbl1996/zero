@@ -11,6 +11,7 @@ import { useEquipmentSelection } from '@/composables/useEquipmentSelection'
 import { ITEMS, consumableIds } from '@/data/items'
 import { CORE_SHARD_BASE_ID } from '@/data/cultivationCores'
 import { resolveItemIcon, textIcon } from '@/utils/itemIcon'
+import { travelToMap } from '@/utils/travel'
 import { createEquipmentGridEntry, type EquipmentEntryBuilderContext } from '@/utils/equipmentEntry'
 import type { ItemIcon } from '@/utils/itemIcon'
 import type { EquipSlotKey, Equipment } from '@/types/domain'
@@ -308,20 +309,28 @@ function handleDiscard(equipment: Equipment) {
 function handleStackUse(itemId: string, itemName: string) {
   withActionLock(async () => {
     if (!consumableIds.has(itemId)) return
+    const definition = ITEMS.find((item) => item.id === itemId)
+    const consumedOnUse = definition ? definition.consumedOnUse !== false : true
     const used = inventory.spend(itemId, 1)
     if (!used) {
       showFeedback('库存不足', false)
       return
     }
 
-    const effectApplied = await player.useItem(itemId)
-    if (!effectApplied) {
-      inventory.add(itemId, 1)
+    const result = await player.useItem(itemId)
+    if (!result.applied) {
+      if (consumedOnUse) {
+        inventory.add(itemId, 1)
+      }
       showFeedback('状态已满，无需使用', false)
       return
     }
 
     showFeedback(`已使用 ${itemName}`, true)
+
+    if (result.teleportToMapId) {
+      travelToMap(result.teleportToMapId)
+    }
   })
 }
 
@@ -332,6 +341,7 @@ function canUsePotion(itemId: string): boolean {
   if ('heal' in def && def.heal && def.heal > 0 && player.res.hp < player.res.hpMax) return true
   if ('restoreQi' in def && def.restoreQi && def.restoreQi > 0 && player.res.qi < player.res.qiMax) return true
   if ('breakthroughMethod' in def && def.breakthroughMethod) return true
+  if ('teleportToMapId' in def && def.teleportToMapId) return true
   return false
 }
 
