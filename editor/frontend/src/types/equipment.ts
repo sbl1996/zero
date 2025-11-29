@@ -4,7 +4,8 @@ export type EquipmentSlot =
   | 'weaponR'
   | 'weapon2H'
   | 'armor'
-  | 'ring';
+  | 'ring'
+  | 'boots';
 
 export type Quality = 
   | 'normal'
@@ -80,6 +81,7 @@ export const EQUIPMENT_SLOTS: { value: EquipmentSlot; label: string }[] = [
   { value: 'weapon2H', label: '双手武器' },
   { value: 'armor', label: '护甲' },
   { value: 'ring', label: '戒指' },
+  { value: 'boots', label: '靴子' },
 ];
 
 export const QUALITIES: { value: Quality; label: string; color: string }[] = [

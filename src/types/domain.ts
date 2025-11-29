@@ -422,6 +422,8 @@ export interface MaterialDefinition {
   name: string
   price: number
   usage: string
+  // Allow materials to opt out of being consumed when used (e.g. teleport stone)
+  consumedOnUse?: boolean
   icon?: ItemIconDefinition
 }
 
@@ -577,6 +579,7 @@ export interface BattleState {
   floatTexts: FloatText[]
   flashEffects: FlashEffect[]
   skillAnimations: SkillAnimation[]
+  skillAnimationLastAt: Record<string, number>
   concluded: BattleResolution
   lastOutcome: BattleOutcome | null
   rematchTimer: number | null

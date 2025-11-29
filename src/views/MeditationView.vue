@@ -386,7 +386,7 @@ onBeforeUnmount(() => {
     <section class="meditation-content">
       <header class="meditation-header">
         <h2>冥想修炼</h2>
-        <p>闭目调息，循序稳固，BP 将随时间增长，并显著提升生命与斗气的恢复效率。</p>
+        <p>闭目调息，循序稳固，斗气本源将随时间增长，并显著提升生命与斗气的恢复效率。</p>
       </header>
       <div class="meditation-stage">
         <div class="meditation-visual" :class="{ active: isMeditating }">

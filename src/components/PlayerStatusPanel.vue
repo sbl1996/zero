@@ -4,7 +4,7 @@ import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { useBattleStore } from '@/stores/battle'
-import { ITEMS, getItemEffectText, isItemConsumedOnUse, isTeleportItem, quickConsumableIds } from '@/data/items'
+import { ITEMS, isItemConsumedOnUse, isTeleportItem, quickConsumableIds } from '@/data/items'
 import { resolveItemIcon } from '@/utils/itemIcon'
 import { travelToMap } from '@/utils/travel'
 import { maps } from '@/data/maps'
@@ -206,10 +206,6 @@ async function useItem(itemId: string) {
   }
 }
 
-// 获取道具效果描述
-function getItemEffect(item: any) {
-  return getItemEffectText(item, { mapNameLookup })
-}
 </script>
 
 <template>

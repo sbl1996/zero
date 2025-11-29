@@ -783,6 +783,12 @@ button {
   inset: 0;
   overflow: hidden;
   z-index: 0;
+  border: 2px solid rgba(126, 225, 255, 0.5);
+  border-radius: 12px;
+  box-shadow:
+    inset 0 0 0 1px rgba(8, 25, 48, 0.45),
+    0 6px 16px rgba(10, 20, 40, 0.35);
+  background: linear-gradient(135deg, rgba(18, 44, 78, 0.55), rgba(12, 26, 52, 0.35));
 }
 
 .battle-actions button.has-image .skill-image {
@@ -791,6 +797,7 @@ button {
   object-fit: cover;
   display: block;
   pointer-events: none;
+  border-radius: inherit;
 }
 
 .battle-actions button:hover:not(:disabled) {
@@ -994,6 +1001,8 @@ button {
   max-width: var(--battle-portrait-max-width);
   max-height: var(--battle-portrait-max-height);
   height: auto;
+  position: relative;
+  z-index: 2;
   object-fit: contain;
   filter: drop-shadow(0 18px 32px rgba(0, 0, 0, 0.45));
   opacity: 0.95;
@@ -1156,40 +1165,61 @@ button {
 .skill-anime {
   position: absolute;
   top: 50%;
-  left: 50%;
+  left: 60%;
   width: 256px;
   height: 256px;
   transform: translate(-50%, -50%);
   pointer-events: none;
   object-fit: contain;
-  background-repeat: no-repeat;
-  background-position: center;
-  background-size: contain;
   mix-blend-mode: screen;
-  z-index: 12;
-  opacity: 0;
+  z-index: 120;
+  opacity: 1;
+  border: none;
+  outline: none;
 }
 
 .skill-anime--dragon-breath {
-  display: block;
+  /* display: block; */
+  --dragon-breath-duration: 0.9s;
+  --dragon-breath-scale-x: 1;
+  --dragon-breath-scale-y: 1;
   width: clamp(220px, 38vw, 320px);
   height: clamp(220px, 38vw, 320px);
   opacity: 1;
-  animation: dragon-breath-fade 0.9s ease-out forwards;
+  filter: brightness(1.08) saturate(1.08);
+  animation: dragon-breath-fade var(--dragon-breath-duration) ease-out forwards;
+  animation-fill-mode: forwards;
+  will-change: transform, opacity;
 }
 
 @keyframes dragon-breath-fade {
   0% {
-    opacity: 0.95;
-    transform: translate(-50%, -50%) scale(1);
-  }
-  55% {
     opacity: 1;
-    transform: translate(-50%, -50%) scale(1.05);
+    transform: translate(-50%, -50%) scale(
+      calc(var(--dragon-breath-scale-x, 1) * 0.98),
+      calc(var(--dragon-breath-scale-y, 1) * 0.98)
+    );
+  }
+  50% {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(
+      calc(var(--dragon-breath-scale-x, 1) * 1.06),
+      calc(var(--dragon-breath-scale-y, 1) * 1.06)
+    );
+  }
+  80% {
+    opacity: 0.75;
+    transform: translate(-50%, -50%) scale(
+      calc(var(--dragon-breath-scale-x, 1) * 1.1),
+      calc(var(--dragon-breath-scale-y, 1) * 1.1)
+    );
   }
   100% {
     opacity: 0;
-    transform: translate(-50%, -50%) scale(1.12);
+    transform: translate(-50%, -50%) scale(
+      calc(var(--dragon-breath-scale-x, 1) * 1.14),
+      calc(var(--dragon-breath-scale-y, 1) * 1.14)
+    );
   }
 }
 

@@ -80,7 +80,7 @@ function handleMethodChange(methodId: CultivationMethodId) {
       <header>
         <p class="lead">纪元 0 · 新的旅程即将开始</p>
         <h2>创建角色</h2>
-        <p class="text-muted">先写下你的名讳，再从星魂大陆流传的斗气功法中选择一脉。</p>
+        <p class="text-muted">先写下你的名讳，再从下面的斗气功法中选择一脉。</p>
       </header>
 
       <form class="creation-form" @submit.prevent="handleSubmit">

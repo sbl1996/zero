@@ -70,8 +70,8 @@
           "id": "courier-station",
           "name": "驿站",
           "position": {
-            "x": 24.0,
-            "y": 78.0
+            "x": 10.0,
+            "y": 90.0
           },
           "description": "乘坐马车前往已解锁的区域。",
           "routeName": null,

@@ -838,7 +838,7 @@ export const usePlayerStore = defineStore('player', {
 
       if (hasMeditationBoost) {
         if (this.res.recovery.mode !== 'meditate') {
-          return false
+          return { applied: false }
         }
         const now = Date.now()
         const tier = 'coreShardTier' in def && typeof def.coreShardTier === 'number' ? def.coreShardTier : 0

@@ -78,6 +78,7 @@ const DEFAULT_MONSTER_SKILL_PLAN_DEPTH = 3
 const AUTO_REMATCH_BASE_DELAY = 800
 const AUTO_REMATCH_MIN_INTERVAL = 5000
 const DODGE_SKILL_ID = 'qi_dodge'
+const SKILL_ANIMATION_MIN_INTERVAL_MS = 950
 const DODGE_REFUND_PERCENT = 0.04
 const DEFAULT_ITEM_USE_DURATION_MS = 1000
 const CORE_DROP_RNG_MAGIC = 0xc2b2ae35
@@ -398,6 +399,7 @@ function initialState(): BattleState {
     floatTexts: [],
     flashEffects: [],
     skillAnimations: [],
+    skillAnimationLastAt: {},
     concluded: 'idle',
     lastOutcome: null,
     rematchTimer: null,
@@ -1121,8 +1123,16 @@ export const useBattleStore = defineStore('battle', {
       }, 760)
     },
     triggerSkillAnimation(skillId: string) {
+      const now = getNow()
+      const lastAt = this.skillAnimationLastAt[skillId] ?? 0
+      if (now - lastAt < SKILL_ANIMATION_MIN_INTERVAL_MS) {
+        return
+      }
+      // Keep at most one animation per skill to avoid double-play glitches
+      this.skillAnimations = this.skillAnimations.filter((entry) => entry.skillId !== skillId)
       const id = skillAnimationId++
       this.skillAnimations.push({ id, skillId })
+      this.skillAnimationLastAt[skillId] = now
       const lifespan = 1200
       setTimeout(() => {
         this.skillAnimations = this.skillAnimations.filter((entry) => entry.id !== id)
@@ -1817,7 +1827,7 @@ export const useBattleStore = defineStore('battle', {
       })
       if (usage) {
         if (usage.xpWholeGained > 0) {
-          this.pushFloat(`【${skill.name}】熟练度+${usage.xpWholeGained}`, 'loot')
+          this.pushFloat(`【${skill.name}】XP+${usage.xpWholeGained}`, 'loot')
         }
         if (usage.blockedByRealm && !this.skillRealmNotified[skillId]) {
           this.skillRealmNotified[skillId] = true

@@ -27,6 +27,7 @@ def video_to_webp(
     fps_palette: int = 8,
     fps_output: int = 12,
     width: int = 768,
+    speed_factor: float = 1.0,
 ) -> None:
     """
     将 mp4 等视频转为 webp（带调色板、循环播放）。
@@ -36,6 +37,14 @@ def video_to_webp(
       ffmpeg -y -i src/assets/raw/boss-wind-raptor.mp4 -vf fps=8,scale=768:-1:flags=lanczos,palettegen=stats_mode=full src/assets/raw/palette.png
       ffmpeg -y -i src/assets/raw/boss-wind-raptor.mp4 -i src/assets/raw/palette.png -lavfi "fps=12,scale=768:-1:flags=lanczos [x]; [x][1:v] paletteuse=dither=bayer:bayer_scale=5" -loop 0 src/assets/boss-wind-raptor.webp
       rm src/assets/raw/palette.png
+
+    Args:
+        src_video: 源视频路径
+        output_dir: 输出目录
+        fps_palette: 生成调色板时的帧率
+        fps_output: 输出webp的帧率
+        width: 输出宽度
+        speed_factor: 播放速度倍率 (2.0 表示播放速度是原来的2倍，4秒视频变成2秒)
     """
 
     src_video = src_video.resolve()
@@ -52,13 +61,20 @@ def video_to_webp(
 
     palette_path = tmp_dir / "palette.png"
 
+    # 计算加速后的帧率（速度倍率越高，需要的帧率也越高以保持流畅）
+    adjusted_fps_palette = int(fps_palette * speed_factor)
+    adjusted_fps_output = int(fps_output * speed_factor)
+
+    # 构建速度滤镜 (setpts=0.5*PTS 表示2倍速播放)
+    speed_filter = f"setpts={1/speed_factor}*PTS"
+
     # 1) 生成调色板
     run([
         "ffmpeg",
         "-y",
         "-i", str(src_video),
         "-vf",
-        f"fps={fps_palette},scale={width}:-1:flags=lanczos,palettegen=stats_mode=full",
+        f"{speed_filter},fps={adjusted_fps_palette},scale={width}:-1:flags=lanczos,palettegen=stats_mode=full",
         str(palette_path),
     ])
 
@@ -69,7 +85,7 @@ def video_to_webp(
         "-i", str(src_video),
         "-i", str(palette_path),
         "-lavfi",
-        f"fps={fps_output},scale={width}:-1:flags=lanczos [x]; "
+        f"{speed_filter},fps={adjusted_fps_output},scale={width}:-1:flags=lanczos [x]; "
         f"[x][1:v] paletteuse=dither=bayer:bayer_scale=5",
         "-loop", "0",
         str(dst_webp),
@@ -99,10 +115,23 @@ if len(sys.argv) == 1:
         png_to_webp(img_path, output_dir)
     for video_path in img_dir.glob("*.mp4"):
         video_to_webp(video_path, output_dir)
-elif len(sys.argv) == 2:
-    png_path = Path(sys.argv[1])
-    output_dir = png_path.parent.parent
-    if png_path.exists():
-        png_to_webp(png_path, output_dir)
+elif len(sys.argv) >= 2:
+    path = Path(sys.argv[1])
+    if len(sys.argv) == 3:
+        speed_factor = float(sys.argv[2])
     else:
-        print(f"File not found: {png_path}")
+        speed_factor = 1.0
+    if path.suffix.lower() == ".mp4":
+        video_path = path
+        output_dir = video_path.parent.parent
+        if video_path.exists():
+            video_to_webp(video_path, output_dir, speed_factor=speed_factor)
+        else:
+            print(f"File not found: {video_path}")
+    else:
+        png_path = path
+        output_dir = png_path.parent.parent
+        if png_path.exists():
+            png_to_webp(png_path, output_dir)
+        else:
+            print(f"File not found: {png_path}")
