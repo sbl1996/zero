@@ -5,7 +5,6 @@ import type { PendingDodgeState } from '@/types/domain'
 
 const HALF_SPAN_SECONDS = 3
 const TOTAL_SPAN_SECONDS = HALF_SPAN_SECONDS * 2
-const DODGE_JUDGE_SECONDS = DODGE_WINDOW_MS / 1000
 const ATTACK_RESET_THRESHOLD = 0.25
 const HALF_SPAN_MS = HALF_SPAN_SECONDS * 1000
 
@@ -31,10 +30,22 @@ const lastAttackWasCharge = ref(false)
 const nextAttackIsCharge = ref(false)
 const previousTimer = ref<number | null>(null)
 
+const dodgeJudgeSeconds = computed(() => {
+  const pending = props.pendingDodge
+  if (pending) {
+    const durationMs = pending.invincibleUntil - pending.attemptedAt
+    if (Number.isFinite(durationMs) && durationMs > 0) {
+      return durationMs / 1000
+    }
+  }
+  return DODGE_WINDOW_MS / 1000
+})
+
 const shouldAnimate = computed(() => {
   if (props.active) return true
   if (props.actionLockUntil !== null && props.actionLockUntil > nowMs.value) return true
-  if (props.pendingDodge?.attemptedAt && props.pendingDodge.attemptedAt + DODGE_JUDGE_SECONDS * 1000 > nowMs.value) return true
+  const judgeMs = dodgeJudgeSeconds.value * 1000
+  if (props.pendingDodge?.attemptedAt && props.pendingDodge.attemptedAt + judgeMs > nowMs.value) return true
   if (lastAttackAt.value !== null && nowMs.value - lastAttackAt.value <= HALF_SPAN_MS) return true
   return false
 })
@@ -274,7 +285,7 @@ const attackMarkers = computed<TimelineAttackMarker[]>(() => {
 
 const dodgeHintSegmentStyle = computed(() => {
   if (!props.active) return null
-  return segmentToStyle(0, DODGE_JUDGE_SECONDS)
+  return segmentToStyle(0, dodgeJudgeSeconds.value)
 })
 
 const dodgeHintClasses = computed(() => {
@@ -284,11 +295,12 @@ const dodgeHintClasses = computed(() => {
   if (!props.active) return classes
   const time = props.timeToAttack
   if (time === null) return classes
-  if (time > 0 && time <= DODGE_JUDGE_SECONDS) {
+  const judge = dodgeJudgeSeconds.value
+  if (time > 0 && time <= judge) {
     classes['is-imminent'] = true
-  } else if (time > DODGE_JUDGE_SECONDS && time <= DODGE_JUDGE_SECONDS * 2) {
+  } else if (time > judge && time <= judge * 2) {
     classes['is-approaching'] = true
-  } else if (time <= 0 && time >= -DODGE_JUDGE_SECONDS) {
+  } else if (time <= 0 && time >= -judge) {
     classes['is-past'] = true
   } else {
     classes['is-distant'] = true

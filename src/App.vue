@@ -36,6 +36,7 @@
   </button>
   <CheatPanel v-if="hasCharacter" />
   <SettingsPanel v-if="hasCharacter" />
+  <CultivationTicker v-if="hasCharacter" />
 </template>
 
 <script setup lang="ts">
@@ -44,6 +45,7 @@ import { RouterLink, RouterView, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import CheatPanel from '@/components/CheatPanel.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
+import CultivationTicker from '@/components/CultivationTicker.vue'
 import { useUiStore } from '@/stores/ui'
 import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'

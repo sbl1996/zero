@@ -12,9 +12,11 @@ import { useQuestStore } from '@/stores/quests'
 import { resolveSkillChargeTime, resolveSkillCooldown } from '@/composables/useSkills'
 import { quickConsumableIds } from '@/data/items'
 import { resolveDodgeSuccessChance } from '@/composables/useDodge'
+import { getSkillEffectDefinition } from '@/data/skillEffects'
 import { getAutoMonsterPortraits } from '@/utils/monsterPortraits'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import { formatRealmTierLabel } from '@/utils/realm'
+import { getEquipmentQualityMeta } from '@/utils/equipmentStats'
 import type {
   FloatText,
   LootResult,
@@ -22,12 +24,12 @@ import type {
   MonsterFollowupState,
   MonsterComboPreviewInfo,
   MonsterSpecialization,
+  SkillEffect,
 } from '@/types/domain'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import BattleQuickItemBar from '@/components/BattleQuickItemBar.vue'
 import MonsterAttackTimeline from '@/components/MonsterAttackTimeline.vue'
-import { formatMonsterRewards } from '@/utils/monsterUtils'
-import dragonBreathAnime from '@/assets/skill-dragon-breath-slash-anime.webp'
+import { formatMonsterRewards, getMonsterRankLabel } from '@/utils/monsterUtils'
 
 const router = useRouter()
 const battle = useBattleStore()
@@ -62,6 +64,60 @@ const monsterAttackProgress = computed(() => {
   const remaining = Math.max(0, battle.monsterNextSkillTimer)
   return Math.max(0, Math.min(1, remaining / total))
 })
+const auraSkillId = ref<string | null>(null)
+const auraTotal = ref(0)
+const auraTimer = ref(0)
+const monsterAuraProgress = computed(() => {
+  if (!isMonsterAttackActive.value) return 1
+  const remaining = Math.max(0, auraTimer.value)
+  const total = auraTotal.value || battle.monsterNextSkillTotal || remaining
+  if (!Number.isFinite(total) || total <= 0) return 1
+  return Math.max(0, Math.min(1, remaining / total))
+})
+watch(
+  () => battle.monsterNextSkill?.id ?? null,
+  (skillId) => {
+    if (!isMonsterAttackActive.value) {
+      auraSkillId.value = null
+      auraTotal.value = 0
+      auraTimer.value = 0
+      return
+    }
+    auraSkillId.value = skillId
+    const timer = Number.isFinite(battle.monsterNextSkillTimer) ? Math.max(0, battle.monsterNextSkillTimer) : 0
+    const total = Number.isFinite(battle.monsterNextSkillTotal) ? Math.max(0, battle.monsterNextSkillTotal) : 0
+    auraTimer.value = timer
+    auraTotal.value = timer > 0 ? timer : total
+  },
+  { immediate: true, flush: 'sync' },
+)
+watch(
+  () => battle.monsterNextSkillTimer,
+  (timer) => {
+    if (!isMonsterAttackActive.value) {
+      auraTotal.value = 0
+      auraTimer.value = 0
+      return
+    }
+    const next = Number.isFinite(timer) ? Math.max(0, timer) : 0
+    const prev = auraTimer.value
+    const increased = next > prev + 0.0001
+    auraTimer.value = next
+    if (increased) {
+      auraTotal.value = next
+    } else if (!Number.isFinite(auraTotal.value) || auraTotal.value <= 0) {
+      const fallback = Number.isFinite(battle.monsterNextSkillTotal) ? Math.max(0, battle.monsterNextSkillTotal) : 0
+      auraTotal.value = fallback > 0 ? fallback : next
+    }
+  },
+  { flush: 'sync', immediate: true }
+)
+
+const monsterPortraitScale = computed(() => {
+  const flux = monster.value?.flux ?? 1
+  const areaScale = Math.max(flux, 0.01)
+  return Math.sqrt(areaScale)
+})
 
 const preparedQuestNames = computed(() => {
   const questIds = battle.lastOutcome?.questsPrepared ?? []
@@ -83,19 +139,54 @@ function getNow(): number {
   return Date.now()
 }
 
-const playerBuffInfo = computed<BuffDisplayInfo | null>(() => {
-  const state = battle.playerSuperArmor
+const playerBuffInfo = computed<BuffDisplayInfo[]>(() => {
   void buffTickTrigger.value
-  if (!state) return null
-  const remainingMs = state.expiresAt - getNow()
-  if (remainingMs <= 0) return null
-  const ratio = state.durationMs > 0
-    ? Math.max(0, Math.min(1, remainingMs / state.durationMs))
-    : 0
-  return {
-    text: '霸体',
-    ratio,
+  const now = getNow()
+  const buffs: BuffDisplayInfo[] = []
+
+  const superArmor = battle.playerSuperArmor
+  if (superArmor) {
+    const remainingMs = superArmor.expiresAt - now
+    if (remainingMs > 0) {
+      const ratio = superArmor.durationMs > 0
+        ? Math.max(0, Math.min(1, remainingMs / superArmor.durationMs))
+        : 0
+      buffs.push({
+        text: superArmor.label?.trim() || '霸体',
+        ratio,
+      })
+    }
   }
+
+  const bloodRage = battle.playerBloodRage
+  if (bloodRage && bloodRage.stacks > 0) {
+    const stacks = Math.min(bloodRage.stacks, 20)
+    const ratio = Math.max(0, Math.min(1, stacks / 20))
+    const atkDef = stacks
+    const recovery = stacks * 2
+    buffs.push({
+      text: `血怒 x${stacks} (攻防+${atkDef}% 回气+${recovery}%)`,
+      ratio,
+    })
+  }
+
+  const tigerFury = battle.playerTigerFury
+  if (tigerFury) {
+    const remainingMs = tigerFury.expiresAt - now
+    if (remainingMs > 0) {
+      const ratio = tigerFury.durationMs > 0
+        ? Math.max(0, Math.min(1, remainingMs / tigerFury.durationMs))
+        : 0
+      const stacks = Math.min(tigerFury.stacks, 10)
+      const bonusPercent = stacks * 5
+      buffs.push({
+        text: `虎煞 x${stacks} (+${bonusPercent}%)`,
+        ratio,
+      })
+    }
+  }
+
+  return buffs
 })
 
 const enemyBuffInfo = computed<BuffDisplayInfo[]>(() => {
@@ -132,6 +223,19 @@ const enemyBuffInfo = computed<BuffDisplayInfo[]>(() => {
   }
   
   return buffs
+})
+
+const skillEffectEntries = computed<Array<SkillEffect & { src: string; className: string }>>(() => {
+  return battle.skillEffects.flatMap((effect) => {
+    const def = getSkillEffectDefinition(effect.skillId)
+    if (!def) return []
+    const className = def.className ?? `skill-effect--${def.skillId}`
+    return [{
+      ...effect,
+      src: resolveAssetUrl(def.assetKey),
+      className,
+    }]
+  })
 })
 
 // 计算破绽率
@@ -517,14 +621,10 @@ const skillSlots = computed(() => {
       isChargeReady,
       isRewinding,
       chargeActive: chargeProgress > 0,
+      isActionLocked,
     }
   })
 })
-const dragonBreathSprite = dragonBreathAnime || resolveAssetUrl('skill-dragon-breath-slash-anime.webp')
-const dragonBreathAnimations = computed(() =>
-  battle.skillAnimations.filter(entry => entry.skillId === 'dragon_breath_slash'),
-)
-
 const defaultPlayerPortrait = resolveAssetUrl('main_normal.webp')
 const attackPlayerPortrait = resolveAssetUrl('main_attack.webp')
 const playerPortraitSrc = ref(defaultPlayerPortrait)
@@ -671,6 +771,26 @@ function formatLootEntry(entry: LootResult) {
     return level > 0 ? `${entry.name} +${level}` : entry.name
   }
   return `${entry.name} +${entry.amount}`
+}
+
+function hexToRgba(hex: string, alpha: number) {
+  const match = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex.trim())
+  if (!match) return `rgba(255, 255, 255, ${alpha})`
+  const r = match[1] ?? 'ff'
+  const g = match[2] ?? 'ff'
+  const b = match[3] ?? 'ff'
+  return `rgba(${parseInt(r, 16)}, ${parseInt(g, 16)}, ${parseInt(b, 16)}, ${alpha})`
+}
+
+function lootEntryStyle(entry: LootResult): StyleMap {
+  if (entry.kind === 'equipment') {
+    const { color } = getEquipmentQualityMeta(entry.equipment.quality)
+    return {
+      '--loot-color': color,
+      '--loot-glow': hexToRgba(color, 0.8),
+    }
+  }
+  return { color: '#fff' }
 }
 
 function getGoldBonus(lootList: LootResult[]): boolean {
@@ -1081,14 +1201,14 @@ onBeforeUnmount(() => {
 }
 
 .loot-equipment {
-  color: #ff6b35 !important;
+  color: var(--loot-color, #ff6b35) !important;
   font-weight: 700 !important;
-  text-shadow: 0 0 8px rgba(255, 107, 53, 0.8) !important;
+  text-shadow: 0 0 8px var(--loot-glow, rgba(255, 107, 53, 0.8)) !important;
   animation: equipment-glow 1.5s ease-in-out infinite alternate !important;
 }
 
 .loot-normal {
-  color: #ffd166;
+  color: #fff;
 }
 
 .loot-gold-bonus {
@@ -1127,15 +1247,19 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   transform-origin: center bottom;
-  --enemy-portrait-width: var(--battle-portrait-width);
+  --enemy-portrait-base-width: var(--battle-portrait-width);
+  --enemy-portrait-base-max-width: var(--battle-portrait-max-width);
+  --enemy-portrait-scale: 1;
+  --enemy-portrait-width: calc(var(--enemy-portrait-base-width) * var(--enemy-portrait-scale));
   width: var(--enemy-portrait-width);
-  max-width: var(--battle-portrait-max-width);
+  max-width: calc(var(--enemy-portrait-base-max-width) * var(--enemy-portrait-scale));
   padding: 0;
   align-self: center;
 }
 
 .enemy-portrait-container--boss {
-  --enemy-portrait-width: var(--battle-portrait-boss-width);
+  --enemy-portrait-base-width: var(--battle-portrait-boss-width);
+  --enemy-portrait-base-max-width: var(--battle-portrait-boss-width);
 }
 
 .enemy-portrait-container--warning {
@@ -1149,7 +1273,7 @@ onBeforeUnmount(() => {
 .enemy-portrait-container .battle-portrait.enemy {
   width: 100%;
   max-width: 100%;
-  max-height: 100%;
+  max-height: calc(var(--battle-portrait-max-height) * var(--enemy-portrait-scale));
 }
 
 .battle-duration-banner {
@@ -1190,7 +1314,8 @@ onBeforeUnmount(() => {
   border-radius: 50%;
   background: radial-gradient(circle at center, rgba(74, 222, 128, 0.35) 0%, transparent 70%);
   box-shadow: 0 0 20px rgba(74, 222, 128, 0.25);
-  z-index: -1;
+  z-index: 12;
+  pointer-events: none;
   transition: all 0.3s ease;
 }
 
@@ -1307,6 +1432,63 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
+.battle-result-card {
+  position: absolute;
+  top: 25%;
+  left: 50%;
+  transform: translateX(-50%);
+  min-width: 280px;
+  max-width: min(90vw, 480px);
+  padding: 14px 18px;
+  border-radius: 14px;
+  text-align: center;
+  background: linear-gradient(135deg, rgba(12, 18, 30, 0.95), rgba(24, 38, 64, 0.92));
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4), 0 0 0 1px rgba(255, 255, 255, 0.04);
+  color: #e8edf6;
+  backdrop-filter: blur(10px);
+  z-index: 30;
+  pointer-events: none;
+}
+
+.battle-result-card--victory {
+  border-color: rgba(255, 209, 102, 0.45);
+  box-shadow:
+    0 12px 32px rgba(255, 209, 102, 0.2),
+    0 10px 30px rgba(0, 0, 0, 0.35),
+    0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.battle-result-card--defeat {
+  background: linear-gradient(135deg, rgba(42, 14, 26, 0.96), rgba(22, 8, 12, 0.94));
+  border-color: rgba(255, 107, 122, 0.35);
+  color: #ffe6ea;
+  box-shadow:
+    0 12px 32px rgba(255, 107, 122, 0.18),
+    0 10px 30px rgba(0, 0, 0, 0.4);
+}
+
+.battle-result-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: 0.6px;
+  text-shadow: 0 0 10px rgba(255, 255, 255, 0.28), 0 2px 10px rgba(0, 0, 0, 0.65);
+}
+
+.battle-result-section {
+  margin-top: 8px;
+}
+
+.battle-result-value {
+  margin-top: 6px;
+  display: inline-block;
+  font-weight: 700;
+}
+
+.battle-result-drop {
+  margin-top: 2px;
+}
+
 .buff-overlay {
   position: absolute;
   top: 8px;
@@ -1327,6 +1509,7 @@ onBeforeUnmount(() => {
 .buff-overlay--player {
   left: 12px;
   text-align: left;
+  top: calc(8px + var(--buff-index, 0) * 38px);
 }
 
 .buff-overlay--enemy {
@@ -1371,6 +1554,52 @@ onBeforeUnmount(() => {
   border: 1px solid;
 }
 
+.battle-monster-badges {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  margin-left: 0.4rem;
+}
+
+.battle-monster-badges .monster-badge {
+  margin-left: 0;
+}
+
+.battle-monster-badges .monster-rank-badge {
+  font-size: 0.65rem;
+  padding: 0 0.35rem;
+}
+
+.monster-rank-badge {
+  border-radius: 999px;
+  padding: 0.15rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #fef9c3;
+  border: 1px solid transparent;
+}
+.monster-rank-badge.rank-normal {
+  background: rgba(148, 163, 184, 0.4);
+  border-color: rgba(148, 163, 184, 0.7);
+}
+.monster-rank-badge.rank-strong {
+  background: rgba(22, 163, 74, 0.25);
+  border-color: rgba(22, 163, 74, 0.6);
+}
+.monster-rank-badge.rank-elite {
+  background: rgba(249, 115, 22, 0.3);
+  border-color: rgba(249, 115, 22, 0.6);
+}
+.monster-rank-badge.rank-calamity {
+  background: rgba(220, 38, 38, 0.25);
+  border-color: rgba(220, 38, 38, 0.7);
+}
+.monster-rank-badge.rank-boss {
+  background: rgba(79, 70, 229, 0.25);
+  border-color: rgba(79, 70, 229, 0.7);
+}
+
 .battle-quest-notice {
   margin-top: 10px;
   padding: 8px 12px;
@@ -1384,6 +1613,8 @@ onBeforeUnmount(() => {
   font-weight: 700;
   letter-spacing: 0.2em;
   font-size: 12px;
+  color: #ffd35f;
+  text-shadow: 0 0 6px rgba(255, 211, 95, 0.45);
 }
 
 .battle-quest-notice-list {
@@ -1397,9 +1628,11 @@ onBeforeUnmount(() => {
 .battle-quest-notice-item {
   border-radius: 999px;
   padding: 2px 10px;
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(255, 211, 95, 0.14);
+  border: 1px solid rgba(255, 211, 95, 0.45);
   font-size: 12px;
   letter-spacing: 0.05em;
+  color: #ffeaca;
 }
 </style>
 
@@ -1416,7 +1649,7 @@ onBeforeUnmount(() => {
     <button class="btn" @click="backToSelect">返回怪物列表</button>
   </section>
   <div v-else class="battle-layout">
-    <PlayerStatusPanel />
+    <PlayerStatusPanel :auto-tick="false" />
 
     <section class="panel" style="display: flex; flex-direction: column; gap: 20px;">
       <header class="flex flex-between" style="align-items: flex-start;">
@@ -1424,15 +1657,26 @@ onBeforeUnmount(() => {
           <h2 class="section-title" style="margin: 0 0 4px;">
             {{ monster.name }}
             <span v-if="monster.isBoss" class="monster-badge">BOSS</span>
-            <span v-else
-              class="monster-badge specialization-badge"
-              :style="{
-                background: getSpecializationColor(monster.specialization).bg,
-                color: getSpecializationColor(monster.specialization).text,
-                borderColor: getSpecializationColor(monster.specialization).border
-              }">
-              {{ getSpecializationLabel(monster.specialization) }}
-            </span>
+            <div class="battle-monster-badges">
+              <span
+                v-if="!monster.isBoss"
+                class="monster-badge specialization-badge"
+                :style="{
+                  background: getSpecializationColor(monster.specialization).bg,
+                  color: getSpecializationColor(monster.specialization).text,
+                  borderColor: getSpecializationColor(monster.specialization).border
+                }"
+              >
+                {{ getSpecializationLabel(monster.specialization) }}
+              </span>
+              <span
+                v-if="['elite', 'calamity'].includes(monster.rank)"
+                class="monster-rank-badge"
+                :class="`rank-${monster.rank}`"
+              >
+                {{ getMonsterRankLabel(monster.rank) }}
+              </span>
+            </div>
           </h2>
           <div class="text-muted text-small">境界 {{ describeMonsterRealm(monster) }} ｜ 攻击 {{ monster.stats.ATK }} ｜ 防御 {{ monster.stats.DEF }} ｜ 敏捷 {{ monster.stats.AGI }}</div>
           <div class="text-small text-muted" style="margin-top: 6px;">奖励：{{ formatMonsterRewards(monster) }}</div>
@@ -1458,17 +1702,18 @@ onBeforeUnmount(() => {
       </header>
       <div class="float-area">
         <div
-          v-if="playerBuffInfo"
-          class="buff-overlay buff-overlay--player"
-          :style="{ '--buff-progress': playerBuffInfo.ratio }"
-        >
-          {{ playerBuffInfo.text }}
-        </div>
-        <div
-          v-for="(buff, index) in enemyBuffInfo"
+          v-for="(buff, index) in playerBuffInfo"
           :key="index"
-          class="buff-overlay buff-overlay--enemy"
+          class="buff-overlay buff-overlay--player"
           :style="{ '--buff-progress': buff.ratio, '--buff-index': index }"
+        >
+          {{ buff.text }}
+        </div>
+    <div
+      v-for="(buff, index) in enemyBuffInfo"
+      :key="index"
+      class="buff-overlay buff-overlay--enemy"
+      :style="{ '--buff-progress': buff.ratio, '--buff-index': index }"
         >
           {{ buff.text }}
         </div>
@@ -1486,16 +1731,19 @@ onBeforeUnmount(() => {
             'enemy-portrait-container--warning': battle.inBattle && battle.concluded === 'idle' && monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
             'enemy-portrait-container--danger': battle.inBattle && battle.concluded === 'idle' && monsterAttackProgress <= 0.3
           }"
+          :style="{
+            '--enemy-portrait-scale': monsterPortraitScale
+          }"
         >
-            <!-- 攻击预警光环效果 -->
-            <div
-              v-if="battle.inBattle && battle.concluded === 'idle'"
-              class="attack-warning-aura"
-              :class="{
-                'aura-warning': monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
-                'aura-danger': monsterAttackProgress <= 0.3
-              }"
-            />
+          <!-- 攻击预警光环效果 -->
+          <div
+            v-if="battle.inBattle && battle.concluded === 'idle'"
+            class="attack-warning-aura"
+            :class="{
+              'aura-warning': monsterAuraProgress <= 0.6 && monsterAuraProgress > 0.3,
+              'aura-danger': monsterAuraProgress <= 0.3
+            }"
+          />
             <img
               class="battle-portrait enemy"
               :class="{
@@ -1511,13 +1759,14 @@ onBeforeUnmount(() => {
             />
           </div>
         </div>
-        <img
-          v-for="anim in dragonBreathAnimations"
-          :key="anim.id"
-          class="skill-anime skill-anime--dragon-breath"
-          :src="dragonBreathSprite"
-          alt="龙息斩技能特效"
-        />
+        <div
+          v-for="effect in skillEffectEntries"
+          :key="effect.id"
+          class="skill-effect"
+          :class="[effect.className]"
+        >
+          <img :src="effect.src" :alt="`技能特效-${effect.skillId}`">
+        </div>
         <div
           v-for="flash in battle.flashEffects"
           :key="flash.id"
@@ -1539,25 +1788,24 @@ onBeforeUnmount(() => {
         </div>
         <div
           v-if="battle.concluded === 'victory'"
-          class="float-text"
-          style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; text-align: center; pointer-events: none;"
+          class="battle-result-card battle-result-card--victory"
         >
-          <div>胜利</div>
-          <div class="text-small" style="margin-top: 6px;">奖励：</div>
+          <div class="battle-result-title">胜利</div>
+          <div class="battle-result-section text-small">奖励</div>
           <div
-            class="text-small"
+            class="text-small battle-result-value"
             :class="getGoldBonus(lootList) ? 'loot-gold-bonus' : ''"
-            style="margin-top: 6px;"
           >
-            + GOLD {{ getTotalGold(lootList) ?? monster?.rewards.gold ?? 0 }}
+            GOLD {{ getTotalGold(lootList) ?? monster?.rewards.gold ?? 0 }}
           </div>
-          <div v-if="getFilteredLootList(lootList).length" class="text-small" style="margin-top: 8px;">
+          <div v-if="getFilteredLootList(lootList).length" class="text-small battle-result-section">
             <div style="font-weight: 600;">掉落</div>
             <div
               v-for="(entry, index) in getFilteredLootList(lootList)"
               :key="`loot-${lootEntryKey(entry, index)}`"
               :class="entry.kind === 'equipment' ? 'loot-equipment' : 'loot-normal'"
-              style="margin-top: 2px;"
+              :style="[lootEntryStyle(entry)]"
+              class="battle-result-drop"
             >
               {{ formatLootEntry(entry) }}
             </div>
@@ -1575,8 +1823,11 @@ onBeforeUnmount(() => {
             </div>
           </div>
         </div>
-        <div v-else-if="battle.concluded === 'defeat'" class="float-text" style="left: 50%; top: 50%; animation: none; transform: translate(-50%, -50%); font-size: 26px; color: #ff6b7a;">
-          战败
+        <div
+          v-else-if="battle.concluded === 'defeat'"
+          class="battle-result-card battle-result-card--defeat"
+        >
+          <div class="battle-result-title">战败</div>
         </div>
         <div
           v-if="showBattleDuration"
@@ -1612,7 +1863,8 @@ onBeforeUnmount(() => {
                   'requires-charge': slot.requiresCharge,
                   'is-charging': slot.isCharging,
                   'is-charge-ready': slot.isChargeReady,
-                  'is-charge-rewinding': slot.isRewinding
+                  'is-charge-rewinding': slot.isRewinding,
+                  'action-locked': slot.isActionLocked
                 }"
                 :title="slot.reason || undefined"
                 :style="slot.cooldownStyle"

@@ -115,6 +115,7 @@ export interface RecoveryState {
   qiPerSecond: number
   hpPerSecond: number
   updatedAt: number | null
+  meditationStartedAt: number | null
 }
 
 export interface CoreBoost {
@@ -297,7 +298,7 @@ export interface Player {
   skills: SkillSlots
 }
 
-export type MonsterRank = 'normal' | 'elite' | 'boss'
+export type MonsterRank = 'normal' | 'strong' | 'elite' | 'calamity' | 'boss'
 
 export type MonsterSpecialization =
   | 'balanced'   // 均衡
@@ -377,6 +378,11 @@ export interface Monster {
   toughness: number
   attackInterval: MonsterAttackInterval
   isBoss: boolean
+  baseBp: number
+  baseHp: number
+  flux: number
+  rankHpMultiplier: number
+  rewardMultiplier: number
   penetration?: PenetrationProfile
   portraits?: string[]
   skillProfile?: MonsterSkillProfile
@@ -457,7 +463,20 @@ export interface SkillResult {
     durationMs: number
   }
   superArmorMs?: number
+  superArmorLabel?: string
   monsterStunMs?: number
+  applyPlayerAgiBuff?: {
+    percent: number
+    durationMs: number
+  }
+  delayedDamage?: {
+    delayMs: number
+    damage: number
+    coreDamage?: number
+    weaknessTriggered?: boolean
+    flash?: FlashEffectKind
+  }
+  setTigerFuryStacks?: number
 }
 
 export interface SkillContext {
@@ -467,9 +486,18 @@ export interface SkillContext {
   resources: Resources
   cultivation: PlayerCultivationState
   progress?: SkillProgress
+  battle?: {
+    tigerFuryStacks?: number
+  }
 }
 
 export type FlashEffectKind = 'attack' | 'skill' | 'ult'
+
+export interface DodgeSkillConfig {
+  windowMs?: number
+  refundPercentOfQiMax?: number
+  successText?: string
+}
 
 export interface SkillDefinition {
   id: string
@@ -483,6 +511,7 @@ export interface SkillDefinition {
   tags?: string[]
   icon?: string
   maxLevel?: number
+  dodgeConfig?: DodgeSkillConfig
   getCooldown?: (level: number) => number
   getChargeTime?: (level: number) => number
   getAftercastTime?: (level: number) => number
@@ -506,17 +535,20 @@ export interface FlashEffect {
   kind: FlashEffectKind
 }
 
-export interface SkillAnimation {
+export interface SkillEffect {
   id: number
   skillId: string
+  expiresAt: number
 }
 
 export interface PendingDodgeState {
+  skillId?: string
   attemptedAt: number
   invincibleUntil: number
   refundAmount: number
   consumedQi: number
   refundGranted: boolean
+  successText?: string
 }
 
 export interface PendingItemUseState {
@@ -578,8 +610,7 @@ export interface BattleState {
   rngSeed: number
   floatTexts: FloatText[]
   flashEffects: FlashEffect[]
-  skillAnimations: SkillAnimation[]
-  skillAnimationLastAt: Record<string, number>
+  skillEffects: SkillEffect[]
   concluded: BattleResolution
   lastOutcome: BattleOutcome | null
   rematchTimer: number | null
@@ -624,7 +655,10 @@ export interface BattleState {
   }
   skillRealmNotified: Record<string, boolean>
   skillCooldownBonuses: Record<string, { expiresAt: number; reductionPercent: number }>
-  playerSuperArmor: { expiresAt: number; durationMs: number } | null
+  playerSuperArmor: { expiresAt: number; durationMs: number; label?: string } | null
+  playerBloodRage: { stacks: number; progressQi: number } | null
+  playerTigerFury: { stacks: number; expiresAt: number; durationMs: number } | null
+  playerAgiBuff: { percent: number; expiresAt: number; durationMs: number } | null
   monsterVulnerability: { percent: number; expiresAt: number; durationMs: number } | null
   monsterChargingDebuff: { expiresAt: number; durationMs: number } | null
   originNodeId?: string | null

@@ -14,6 +14,7 @@ const { showCheatPanel } = storeToRefs(ui)
 
 const goldAmount = ref(1000)
 const upgradingRealm = ref(false)
+const shopEquipmentUnlocked = computed(() => ui.showShopEquipment)
 
 const sanitizedGold = computed(() => {
   const value = Math.floor(goldAmount.value)
@@ -70,6 +71,10 @@ function grantEnhanceGems() {
   const amount = 999
   ;['blessGem', 'soulGem', 'miracleGem'].forEach((id) => inventory.addItem(id, amount))
 }
+
+function toggleShopEquipmentSale() {
+  ui.toggleShopEquipment()
+}
 </script>
 
 <template>
@@ -94,6 +99,9 @@ function grantEnhanceGems() {
                 <button class="btn" type="button" @click="restoreFull">回复全满</button>
                 <button class="btn" type="button" @click="unlockAllMonsters">解锁全部地图</button>
                 <button class="btn" type="button" @click="fillBasePower">斗气本源拉满</button>
+                <button class="btn" type="button" @click="toggleShopEquipmentSale">
+                  {{ shopEquipmentUnlocked ? '隐藏高品质装备售卖' : '解锁高品质装备售卖' }}
+                </button>
                 <button
                   class="btn"
                   type="button"

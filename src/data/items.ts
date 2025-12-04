@@ -67,6 +67,7 @@ const coreShardItems: ItemDefinition[] = CORE_SHARD_CONFIGS.map((config) => ({
     bonusPerSecond: config.bonusPerSecond,
     durationMs: config.durationMs,
   },
+  icon: imageIcon('item-monster-core.webp'),
 }))
 
 export const ITEMS: ItemDefinition[] = [...baseItems, ...coreShardItems]
@@ -113,5 +114,6 @@ export const consumableIds = new Set([
   'potionHP',
   'potionQi',
   'potionQiPlus',
+  'coreShardTier1',
 ])
 export const quickConsumableIds = new Set(['teleportStone', 'potionHP', 'potionQi', 'potionQiPlus'])

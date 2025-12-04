@@ -108,9 +108,10 @@ import { computed, reactive, ref, watch } from 'vue'
 import { usePlayerStore } from '@/stores/player'
 import { useInventoryStore } from '@/stores/inventory'
 import { useProgressStore } from '@/stores/progress'
+import { useUiStore } from '@/stores/ui'
 import { ITEMS, consumableIds } from '@/data/items'
 import { BASE_EQUIPMENT_TEMPLATES, instantiateEquipment } from '@/data/equipment'
-import { MONSTERS } from '@/data/monsters'
+import { MONSTER_BLUEPRINTS } from '@/data/monsters'
 import { formatRealmTierLabel, realmTierIndex } from '@/utils/realm'
 import { formatEquipmentStat, formatEquipmentSubstats, getEquipmentQualityMeta } from '@/utils/equipmentStats'
 import { resolveEquipmentIcon } from '@/utils/equipmentIcons'
@@ -121,9 +122,13 @@ import type { ItemIcon } from '@/utils/itemIcon'
 const playerStore = usePlayerStore()
 const inventoryStore = useInventoryStore()
 const progressStore = useProgressStore()
+const uiStore = useUiStore()
 
-const tabs = ['武器', '防具', '饰品', '盾牌', '消耗品', '宝石']
-const activeTab = ref('消耗品')
+const equipmentTabs = ['武器', '防具', '饰品', '盾牌']
+const baseTabs = ['消耗品', '宝石']
+const showShopEquipment = computed(() => uiStore.showShopEquipment)
+const tabs = computed(() => [...equipmentTabs, ...baseTabs])
+const activeTab = ref(tabs.value[0] ?? '消耗品')
 const purchaseMessage = ref('')
 const purchaseSuccess = ref(false)
 const purchaseQuantities = reactive<Record<string, number | string>>({})
@@ -150,11 +155,13 @@ function getEquipmentSubType(slot: EquipSlot): 'weapon' | 'armor' | 'accessory' 
 const allowedEquipmentTemplates = computed(() =>
   BASE_EQUIPMENT_TEMPLATES.filter((template) => {
     const requiredTier = realmTierIndex(template.requiredRealmTier)
-    return requiredTier <= 2
+    if (requiredTier > 2) return false
+    if (template.quality === 'normal') return true
+    return showShopEquipment.value
   }),
 )
 
-const bossMonsters = MONSTERS.filter((monster) => monster.isBoss)
+const bossMonsters = MONSTER_BLUEPRINTS.filter((monster) => monster.rank === 'boss')
 
 function hasClearedBossAtOrAboveTier(tier: number) {
   return bossMonsters.some((monster) => {
@@ -201,6 +208,12 @@ const currentItems = computed(() => {
       return []
   }
 })
+
+watch(tabs, (list) => {
+  if (!list.includes(activeTab.value)) {
+    activeTab.value = list[0] ?? ''
+  }
+}, { immediate: true })
 
 watch(currentItems, (items) => {
   items.forEach((item) => {
@@ -312,9 +325,7 @@ const buyItem = (item: ItemDefinition | EquipmentTemplate, rawQuantity?: number)
     return
   }
 
-  if ('heal' in item || 'restoreQi' in item || 'usage' in item) {
-    inventoryStore.addItem(item.id, quantity)
-  } else if ('slot' in item) {
+  if ('slot' in item) {
     const timestamp = Date.now()
     for (let index = 0; index < quantity; index += 1) {
       const equipment = instantiateEquipment(item, {
@@ -323,6 +334,9 @@ const buyItem = (item: ItemDefinition | EquipmentTemplate, rawQuantity?: number)
       })
       inventoryStore.addEquipment(equipment, { markNew: true })
     }
+  } else {
+    // 所有非装备类物品（药水、传送石、晶核等）都作为堆叠物品加入背包
+    inventoryStore.addItem(item.id, quantity)
   }
 
   purchaseQuantities[item.id] = quantity

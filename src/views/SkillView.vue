@@ -223,25 +223,6 @@ function equipToFirstEmpty(skillId: string) {
     </div>
 
     <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
-      <h3 class="section-title" style="font-size: 16px;">技能栏</h3>
-      <div
-        v-for="slot in loadoutSlots"
-        :key="slot.index"
-        class="skill-slot-row"
-      >
-        <span class="text-small skill-slot-label">{{ slot.label }}</span>
-        <select
-          :value="slot.skillId ?? ''"
-          class="skill-slot-select"
-          @change="handleSlotChange(slot.index, ($event.target as HTMLSelectElement).value)"
-        >
-          <option v-for="option in skillOptions" :key="option.id || 'empty'" :value="option.id">{{ option.name }}</option>
-        </select>
-      </div>
-      <div class="text-small text-muted">提示：技能槽位重复装备的相同技能会共享冷却时间。</div>
-    </div>
-
-    <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
       <h3 class="section-title" style="font-size: 16px;">已掌握技能</h3>
       <div v-if="knownSkillDetails.length === 0" class="text-small text-muted">暂未掌握任何技能。</div>
       <div v-else class="skill-list">
@@ -288,7 +269,27 @@ function equipToFirstEmpty(skillId: string) {
         </article>
       </div>
     </div>
-  </section>
+
+    <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
+      <h3 class="section-title" style="font-size: 16px;">技能栏</h3>
+      <div
+        v-for="slot in loadoutSlots"
+        :key="slot.index"
+        class="skill-slot-row"
+      >
+        <span class="text-small skill-slot-label">{{ slot.label }}</span>
+        <select
+          :value="slot.skillId ?? ''"
+          class="skill-slot-select"
+          @change="handleSlotChange(slot.index, ($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="option in skillOptions" :key="option.id || 'empty'" :value="option.id">{{ option.name }}</option>
+        </select>
+      </div>
+      <div class="text-small text-muted">提示：技能槽位重复装备的相同技能会共享冷却时间。</div>
+    </div>
+
+</section>
 </template>
 
 <style scoped>

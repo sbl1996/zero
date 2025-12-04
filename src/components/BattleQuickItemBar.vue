@@ -163,6 +163,7 @@ const slots = computed(() => {
       isChanneling,
       lockedByItem,
       channelPercent,
+      actionLocked: isActionLocked,
     }
   })
 })
@@ -237,7 +238,8 @@ watch(
         empty: slot.isEmpty,
         'on-cooldown': slot.isOnCooldown,
         channeling: slot.isChanneling,
-        'locked-by-item': slot.lockedByItem
+        'locked-by-item': slot.lockedByItem,
+        'action-locked': slot.actionLocked
       }"
       type="button"
       :title="slot.tooltip || undefined"

@@ -10,6 +10,31 @@
     "description": "蓄力后施放重击"
   },
   {
+    "id": "dragon_shadow_dash",
+    "name": "龙影闪",
+    "description": "以龙影之姿急速侧移，0.4s内闪避一切攻击，成功闪避则返还4%斗气上限，结束后附带0.3s后摇。"
+  },
+  {
+    "id": "tiger_shadow_step",
+    "name": "虎影步",
+    "description": "化作疾影的步法，0.4s内闪避一切攻击，成功闪避则返还4%斗气上限，结束后附带0.2s硬直。"
+  },
+  {
+    "id": "rending_void_claw",
+    "name": "裂空爪",
+    "description": "以利爪划破空气的迅捷撕裂攻击。"
+  },
+  {
+    "id": "phantom_instant_kill",
+    "name": "绝影·瞬杀",
+    "description": "以不可选中的身形瞬刺要害的爆发技。"
+  },
+  {
+    "id": "white_tiger_massacre",
+    "name": "白虎·森罗杀",
+    "description": "引动白虎杀意的终极一击。"
+  },
+  {
     "id": "star_realm_dragon_blood_break",
     "name": "星界龙血破",
     "description": "终极爆发斩击"

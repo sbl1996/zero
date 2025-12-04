@@ -19,6 +19,7 @@ import type { RealmBodyFoundation } from '@/composables/useLeveling'
 import type { CultivationEnvironment } from '@/composables/useLeveling'
 import { applyEquipmentTemplateMetadata, getStartingEquipment } from '@/data/equipment'
 import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
+import { getInitialSkillIds, getRealmUnlocks } from '@/data/skillUnlocks'
 import { applySkillUsage, createDefaultSkillProgress } from '@/composables/useSkills'
 import type { SkillUsageResult } from '@/composables/useSkills'
 import { ITEMS } from '@/data/items'
@@ -109,11 +110,6 @@ function sumEquipStats(equips: Partial<Record<EquipSlotKey, Equipment>>): EquipS
 
 type CultivationActionKey = keyof typeof CULTIVATION_ACTION_WEIGHTS
 
-const REALM_SKILL_UNLOCKS: Array<{ tier: number; skillId: string }> = [
-  { tier: 2, skillId: 'fallen_dragon_smash' },
-  { tier: 3, skillId: 'star_realm_dragon_blood_break' },
-]
-
 type AttributeSummaryKey = 'HP' | 'QiMax' | 'ATK' | 'DEF' | 'AGI' | 'REC'
 type AttributeSnapshot = Record<AttributeSummaryKey, number>
 
@@ -199,6 +195,7 @@ interface CultivationTickOptions {
   actions?: Partial<Record<CultivationActionKey, number>>
   inBattle?: boolean
   bossBattle?: boolean
+  recoveryMultiplier?: number
 }
 
 const CULTIVATION_ACTIVITY_FACTOR = 1e-5
@@ -391,6 +388,10 @@ export const usePlayerStore = defineStore('player', {
       finalPlayer.equips = equipsWithMetadata
 
       Object.assign(this, finalPlayer)
+      if (this.res.recovery.mode === 'meditate' && !this.res.recovery.meditationStartedAt) {
+        const fallbackStart = this.res.recovery.updatedAt ?? Date.now()
+        this.res.recovery.meditationStartedAt = fallbackStart
+      }
       this.ensureAllSkillProgress()
       this.refreshDerived({ maintainRatios: false })
       this.ensureTierRewards()
@@ -421,6 +422,17 @@ export const usePlayerStore = defineStore('player', {
     initializeCharacter(payload: { name: string; methodId: CultivationMethodId }) {
       const trimmedName = payload.name.trim()
       this.name = trimmedName
+      const starterSkills = getInitialSkillIds(payload.methodId)
+      const starter = starterSkills.length > 0 ? starterSkills : ['dragon_breath_slash']
+      const starterProgress = starter.reduce((acc, skillId) => {
+        acc[skillId] = createDefaultSkillProgress(skillId)
+        return acc
+      }, {} as Record<string, ReturnType<typeof createDefaultSkillProgress>>)
+      this.skills = {
+        known: [...starter],
+        loadout: [starter[0] ?? null, null, null, null],
+        progress: starterProgress,
+      }
       this.setCultivationMethod(payload.methodId, { maintainRatios: false })
       this.res.hp = this.res.hpMax
       this.res.qi = this.res.qiMax
@@ -456,6 +468,8 @@ export const usePlayerStore = defineStore('player', {
       this.res.qiReserve = 0
       this.res.qiOverflow = 0
       this.res.recovery.mode = 'idle'
+      this.res.recovery.meditationStartedAt = null
+      this.res.activeCoreBoost = null
     },
     gainGold(amount: number) {
       this.gold += amount
@@ -480,6 +494,8 @@ export const usePlayerStore = defineStore('player', {
       if (this.res.operation.mode !== 'idle' && this.res.qi < 0.05 * this.res.qiMax) {
         this.res.operation = resetQiOperation(this.res.operation)
         this.res.recovery.mode = 'idle'
+        this.res.recovery.meditationStartedAt = null
+        this.res.activeCoreBoost = null
       }
       return true
     },
@@ -510,20 +526,29 @@ export const usePlayerStore = defineStore('player', {
       this.res.qi = clamp(this.res.qi, 0, this.res.qiMax)
       this.res.recovery.mode = 'idle'
       this.res.activeCoreBoost = null
+      this.res.recovery.meditationStartedAt = null
     },
     setRecoveryMode(mode: RecoveryMode, options: { preserveOperation?: boolean } = {}) {
+      const now = Date.now()
       if (mode === 'meditate' && !options.preserveOperation) {
         this.res.operation = resetQiOperation(this.res.operation)
       }
       this.res.recovery.mode = mode
-      if (mode !== 'meditate') {
+      if (mode === 'meditate') {
+        this.res.recovery.meditationStartedAt = this.res.recovery.meditationStartedAt ?? now
+      } else {
+        this.res.recovery.meditationStartedAt = null
         this.res.activeCoreBoost = null
       }
     },
     setRecoveryModeKeepOperation(mode: RecoveryMode) {
       // 设置恢复模式但不重置斗气运转状态
+      const now = Date.now()
       this.res.recovery.mode = mode
-      if (mode !== 'meditate') {
+      if (mode === 'meditate') {
+        this.res.recovery.meditationStartedAt = this.res.recovery.meditationStartedAt ?? now
+      } else {
+        this.res.recovery.meditationStartedAt = null
         this.res.activeCoreBoost = null
       }
     },
@@ -673,6 +698,7 @@ export const usePlayerStore = defineStore('player', {
         recoveryMode: this.res.recovery.mode,
         inBattle: options.inBattle,
         bossBattle: options.bossBattle,
+        qiRecoveryBonusMultiplier: Math.max(options.recoveryMultiplier ?? 1, 0),
       })
 
       const qiGain = qiPerSecond * deltaSeconds
@@ -747,8 +773,10 @@ export const usePlayerStore = defineStore('player', {
       const tier = this.cultivation.realm.tier
       if (typeof tier !== 'number') return []
       const unlocked: string[] = []
-      REALM_SKILL_UNLOCKS.forEach(({ tier: requiredTier, skillId }) => {
-        if (tier >= requiredTier && !this.skills.known.includes(skillId)) {
+      const methodId = this.cultivation.method.id
+      const unlocks = getRealmUnlocks(tier, methodId)
+      unlocks.forEach(({ skillId }) => {
+        if (!this.skills.known.includes(skillId)) {
           this.skills.known.push(skillId)
           this.ensureSkillProgress(skillId)
           unlocked.push(skillId)

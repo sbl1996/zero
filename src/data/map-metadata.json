@@ -8,10 +8,10 @@
       "description": "帝国北方重镇。",
       "category": "city",
       "bgm": {
-        "ambient": "Feilengcui's Vigil.mp3",
+        "ambient": "Feilengcui's Vigil.ogg",
         "battle": null
       },
-      "defaultNodeId": null,
+      "defaultNodeId": "central-plaza",
       "nodes": null,
       "locations": [
         {
@@ -101,8 +101,8 @@
       "description": "这片荒凉的废地遍布断垣与枯树，风声空荡，据说被神祝福的生物在某处静静守候。",
       "category": "wild",
       "bgm": {
-        "ambient": "Wandering Whispers.mp3",
-        "battle": "Battle in the Glade.mp3"
+        "ambient": "Wandering Whispers.ogg",
+        "battle": "Battle in the Glade.ogg"
       },
       "defaultNodeId": "fringe-01",
       "nodes": [
@@ -639,10 +639,10 @@
       "description": "横贯极北的断裂山脉与永燃火山交织成霜与火的伤痕。上古霜炎古龙的遗骸暴露在冰原之上。",
       "category": "wild",
       "bgm": {
-        "ambient": "Frozen Titans.mp3",
-        "battle": "Frost and Flame.mp3"
+        "ambient": "Frozen Titans.ogg",
+        "battle": "Frost and Flame.ogg"
       },
-      "defaultNodeId": "spine-of-frostfire-01",
+      "defaultNodeId": "spine-of-frostfire-08",
       "nodes": [
         {
           "id": "spine-of-frostfire-01",
@@ -1202,10 +1202,10 @@
       "description": "",
       "category": "wild",
       "bgm": {
-        "ambient": "Stormlit Citadel.mp3",
+        "ambient": "Stormlit Citadel.ogg",
         "battle": null
       },
-      "defaultNodeId": "thunderveil-keep-01",
+      "defaultNodeId": "thunderveil-keep-06",
       "nodes": [
         {
           "id": "thunderveil-keep-01",

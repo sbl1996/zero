@@ -15,8 +15,8 @@ const player = usePlayerStore()
 const inventory = useInventoryStore()
 const { cultivation, res } = storeToRefs(player)
 
-const isMeditating = ref(res.value?.recovery?.mode === 'meditate')
-const meditationStartAt = ref<number | null>(isMeditating.value ? Date.now() : null)
+const isMeditating = computed(() => res.value?.recovery?.mode === 'meditate')
+const meditationStartAt = ref<number | null>(res.value?.recovery?.meditationStartedAt ?? null)
 const elapsedSeconds = ref(0)
 const nowTick = ref(Date.now())
 const breakthroughFeedback = ref<string | null>(null)
@@ -40,6 +40,7 @@ function updateElapsed() {
 function startElapsedTimer() {
   stopElapsedTimer()
   updateElapsed()
+  if (!meditationStartAt.value) return
   elapsedTimer = setInterval(updateElapsed, 1000)
 }
 
@@ -65,8 +66,7 @@ function startMeditation() {
 
   // 保留斗气运转状态
   player.setRecoveryMode('meditate', { preserveOperation: true })
-  isMeditating.value = true
-  meditationStartAt.value = Date.now()
+  meditationStartAt.value = res.value?.recovery?.meditationStartedAt ?? Date.now()
   startElapsedTimer()
 }
 
@@ -83,7 +83,6 @@ function stopMeditation() {
   if (!isMeditating.value) return
   // 结束冥想但保留斗气运转状态
   player.setRecoveryModeKeepOperation('idle')
-  isMeditating.value = false
   meditationStartAt.value = null
   stopElapsedTimer(true)
 }
@@ -91,18 +90,19 @@ function stopMeditation() {
 const tickEnvironment = computed(() => (isMeditating.value ? 'meditation' : 'idle'))
 
 watch(
-  () => res.value?.recovery?.mode,
-  (mode) => {
-    if (mode === 'meditate' && !isMeditating.value) {
-      isMeditating.value = true
-      meditationStartAt.value = Date.now()
+  () => ({
+    mode: res.value?.recovery?.mode,
+    startedAt: res.value?.recovery?.meditationStartedAt ?? null,
+  }),
+  ({ mode, startedAt }) => {
+    meditationStartAt.value = startedAt
+    if (mode === 'meditate' && startedAt) {
       startElapsedTimer()
-    } else if (mode !== 'meditate' && isMeditating.value) {
-      isMeditating.value = false
-      meditationStartAt.value = null
+    } else if (mode !== 'meditate') {
       stopElapsedTimer(true)
     }
   },
+  { immediate: true },
 )
 
 const bpProgress = computed(() => {
@@ -361,18 +361,11 @@ async function handleTreasureBreakthrough() {
 }
 
 
-if (isMeditating.value) {
-  startElapsedTimer()
-}
-
 onBeforeUnmount(() => {
   stopElapsedTimer()
   if (nowTimer) {
     clearInterval(nowTimer)
     nowTimer = null
-  }
-  if (isMeditating.value) {
-    player.setRecoveryModeKeepOperation('idle')
   }
 })
 </script>
@@ -541,7 +534,11 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </section>
-    <PlayerStatusPanel class="meditation-sidebar" :tick-environment="tickEnvironment" />
+    <PlayerStatusPanel
+      class="meditation-sidebar"
+      :tick-environment="tickEnvironment"
+      :auto-tick="false"
+    />
   </div>
 </template>
 

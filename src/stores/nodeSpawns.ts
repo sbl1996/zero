@@ -1,9 +1,12 @@
 import { defineStore } from 'pinia'
 import type { MapNode, MapNodeSpawnConfig } from '@/types/map'
+import type { Monster } from '@/types/domain'
+import { generateMonsterInstanceById } from '@/data/monsters'
 
 interface MonsterInstance {
   instanceId: string
   monsterId: string
+  monster: Monster
   spawnedAt: number
 }
 
@@ -50,11 +53,14 @@ function pickMonsterId(config: MapNodeSpawnConfig): string | null {
   return config.monsters[config.monsters.length - 1]?.id ?? null
 }
 
-function createInstance(monsterId: string, timestamp: number): MonsterInstance {
+function createInstance(monsterId: string, timestamp: number): MonsterInstance | null {
   instanceCounter += 1
+  const monster = generateMonsterInstanceById(monsterId)
+  if (!monster) return null
   return {
     instanceId: `${monsterId}-${instanceCounter}`,
     monsterId,
+    monster,
     spawnedAt: timestamp,
   }
 }
@@ -110,7 +116,9 @@ export const useNodeSpawnStore = defineStore('node-spawns', {
       for (let i = 0; i < count; i += 1) {
         const monsterId = pickMonsterId(config)
         if (!monsterId) continue
-        state.instances.push(createInstance(monsterId, timestamp))
+        const instance = createInstance(monsterId, timestamp)
+        if (!instance) continue
+        state.instances.push(instance)
       }
       state.nextBatchRefresh = timestamp + resolveBatchInterval(config)
     },
@@ -168,7 +176,10 @@ export const useNodeSpawnStore = defineStore('node-spawns', {
         })
         state.pendingRespawns = pending
         ready.forEach(entry => {
-          state.instances.push(createInstance(entry.monsterId, now))
+          const instance = createInstance(entry.monsterId, now)
+          if (instance) {
+            state.instances.push(instance)
+          }
         })
       })
     },

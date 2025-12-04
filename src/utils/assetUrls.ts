@@ -1,4 +1,4 @@
-const assetModules = import.meta.glob<string>('@/assets/**/*.{webp,mp3}', {
+const assetModules = import.meta.glob<string>('@/assets/**/*.{webp,ogg}', {
   eager: true,
   import: 'default',
 })

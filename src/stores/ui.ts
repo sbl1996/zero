@@ -7,6 +7,7 @@ export const useUiStore = defineStore('ui', {
     showCheatPanel: false,
     showSettings: false,
     autoRematchAfterVictory: false,
+    showShopEquipment: false,
   }),
   actions: {
     toggleAttributes(value?: boolean) {
@@ -23,6 +24,9 @@ export const useUiStore = defineStore('ui', {
     },
     toggleAutoRematch(value?: boolean) {
       this.autoRematchAfterVictory = value ?? !this.autoRematchAfterVictory
+    },
+    toggleShopEquipment(value?: boolean) {
+      this.showShopEquipment = value ?? !this.showShopEquipment
     },
   },
 })

@@ -1,5 +1,5 @@
 import { formatRealmTierLabel } from '@/utils/realm'
-import type { Monster } from '@/types/domain'
+import type { Monster, MonsterRank } from '@/types/domain'
 import { numberToChinese } from './format'
 
 /**
@@ -26,4 +26,18 @@ export function formatMonsterRewards(monster: Monster | null | undefined): strin
 export function describeMonsterRealm(monster: Monster | null | undefined): string {
   if (!monster?.realmTier) return '未知'
   return formatRealmTierLabel(monster.realmTier)
+}
+
+/**
+ * 获取怪物排名文字描述
+ */
+export function getMonsterRankLabel(rank: MonsterRank): string {
+  const labels: Record<MonsterRank, string> = {
+    normal: '普通',
+    strong: '强壮',
+    elite: '精英',
+    calamity: '灾厄',
+    boss: 'BOSS',
+  }
+  return labels[rank] ?? '未知'
 }

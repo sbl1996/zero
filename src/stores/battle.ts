@@ -3,13 +3,14 @@ import { dmgAttack, getDefRefForRealm, resolveWeaknessDamage } from '@/composabl
 import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS } from '@/composables/useLeveling'
 import { resolveSkillAftercast, resolveSkillChargeTime, resolveSkillCooldown, resolveQiCost } from '@/composables/useSkills'
 import { makeRng, randRange, randBool } from '@/composables/useRng'
-import { bossUnlockMap } from '@/data/monsters'
+import { bossUnlockMap, generateMonsterInstanceById } from '@/data/monsters'
 import { BASE_EQUIPMENT_TEMPLATES, instantiateEquipment } from '@/data/equipment'
 import { CORE_SHARD_BASE_ID, getCoreShardConfig } from '@/data/cultivationCores'
 import { ITEMS, isItemConsumedOnUse } from '@/data/items'
 import { getDropEntries, rollDropCount, weightedPick } from '@/data/drops'
 import type { EquipmentTier } from '@/data/drops'
 import { getSkillDefinition } from '@/data/skills'
+import { getSkillEffectDefinition } from '@/data/skillEffects'
 import {
   DEFAULT_SKILL_ID,
   resolveMonsterSkillProfile,
@@ -48,6 +49,7 @@ import type {
   FloatText,
   PendingItemUseState,
   SkillChargeState,
+  Stats,
 } from '@/types/domain'
 
 const ITEM_MAP = new Map(ITEMS.map((item) => [item.id, item]))
@@ -77,11 +79,15 @@ const MAX_MONSTER_ACTIONS_PER_TICK = 4
 const DEFAULT_MONSTER_SKILL_PLAN_DEPTH = 3
 const AUTO_REMATCH_BASE_DELAY = 800
 const AUTO_REMATCH_MIN_INTERVAL = 5000
-const DODGE_SKILL_ID = 'qi_dodge'
-const SKILL_ANIMATION_MIN_INTERVAL_MS = 950
-const DODGE_REFUND_PERCENT = 0.04
 const DEFAULT_ITEM_USE_DURATION_MS = 1000
 const CORE_DROP_RNG_MAGIC = 0xc2b2ae35
+const TIGER_FURY_DURATION_MS = 10_000
+const TIGER_FURY_MAX_STACKS = 10
+const TIGER_FURY_STACK_BONUS = 0.05
+const DRAGON_BLOOD_STACK_QI_RATIO = 0.1
+const DRAGON_BLOOD_MAX_STACKS = 20
+const DRAGON_BLOOD_STACK_ATK_DEF_BONUS = 0.01
+const DRAGON_BLOOD_STACK_RECOVERY_BONUS = 0.02
 
 const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
   iron: 1,
@@ -260,6 +266,19 @@ function createMonsterSkillCooldownMap(profile: MonsterSkillProfile): Record<str
   return cooldowns
 }
 
+function isDodgeSkill(definition: SkillDefinition | null | undefined): definition is SkillDefinition {
+  return Boolean(definition?.tags?.includes('dodge'))
+}
+
+function resolveDodgeConfig(definition: SkillDefinition | null | undefined) {
+  const fallbackText = '闪避!'
+  return {
+    windowMs: Math.max(definition?.dodgeConfig?.windowMs ?? DODGE_WINDOW_MS, 0),
+    refundPercentOfQiMax: Math.max(definition?.dodgeConfig?.refundPercentOfQiMax ?? 0, 0),
+    successText: definition?.dodgeConfig?.successText ?? fallbackText,
+  }
+}
+
 function buildMonsterOpeningPlan(
   monster: Monster,
   profile: MonsterSkillProfile,
@@ -395,15 +414,14 @@ function initialState(): BattleState {
     monsterHp: 0,
     monsterQi: 0,
     monsterRngSeed: Date.now() >>> 0,
-    rngSeed: Date.now() >>> 0,
-    floatTexts: [],
-    flashEffects: [],
-    skillAnimations: [],
-    skillAnimationLastAt: {},
-    concluded: 'idle',
-    lastOutcome: null,
-    rematchTimer: null,
-    lastAutoRematchAt: null,
+  rngSeed: Date.now() >>> 0,
+  floatTexts: [],
+  flashEffects: [],
+  skillEffects: [],
+  concluded: 'idle',
+  lastOutcome: null,
+  rematchTimer: null,
+  lastAutoRematchAt: null,
     loot: [],
     loopHandle: null,
     lastTickAt: 0,
@@ -441,6 +459,9 @@ function initialState(): BattleState {
     skillRealmNotified: {},
     skillCooldownBonuses: {},
     playerSuperArmor: null,
+    playerBloodRage: null,
+    playerTigerFury: null,
+    playerAgiBuff: null,
     monsterVulnerability: null,
     monsterChargingDebuff: null,
     originNodeId: null,
@@ -451,7 +472,7 @@ function initialState(): BattleState {
 
 let floatId = 1
 let flashId = 1
-let skillAnimationId = 1
+let skillEffectId = 1
 
 function randomInRange(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -502,6 +523,7 @@ export const useBattleStore = defineStore('battle', {
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
+      this.skillEffects = []
       this.rematchTimer = null
       this.skillCooldowns = Array(slotCount).fill(0)
       this.itemCooldowns = {}
@@ -513,7 +535,6 @@ export const useBattleStore = defineStore('battle', {
       this.dodgeAttempts = 0
       this.dodgeSuccesses = 0
       this.pendingItemUse = null
-      this.skillAnimations = []
       this.monsterFollowup = null
       this.monsterFollowupPreview = null
       this.skillCharges = Array(slotCount).fill(null)
@@ -541,6 +562,9 @@ export const useBattleStore = defineStore('battle', {
       }
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
+      this.playerBloodRage = null
+      this.playerTigerFury = null
+      this.playerAgiBuff = null
       this.monsterVulnerability = null
       this.monsterChargingDebuff = null
       this.playerSuperArmor = null
@@ -560,6 +584,7 @@ export const useBattleStore = defineStore('battle', {
       this.concluded = 'idle'
       this.floatTexts = []
       this.flashEffects = []
+      this.skillEffects = []
       const initialSeed = (options?.seed ?? Date.now()) >>> 0
       this.rngSeed = initialSeed
       this.monsterRngSeed = initialSeed
@@ -605,6 +630,9 @@ export const useBattleStore = defineStore('battle', {
       }
       this.skillRealmNotified = {}
       this.skillCooldownBonuses = {}
+      this.playerBloodRage = null
+      this.playerTigerFury = null
+      this.playerAgiBuff = null
       this.monsterVulnerability = null
       this.monsterChargingDebuff = null
       this.playerSuperArmor = null
@@ -859,6 +887,7 @@ export const useBattleStore = defineStore('battle', {
     recordQiSpent(amount: number) {
       if (!Number.isFinite(amount) || amount <= 0) return
       this.cultivationFrame.qiSpent += amount
+      this.applyDragonBloodQiSpent(amount)
     },
     recordQiRestored(amount: number) {
       if (!Number.isFinite(amount) || amount <= 0) return
@@ -884,6 +913,7 @@ export const useBattleStore = defineStore('battle', {
       if (player.res.hpMax > 0 && player.res.hp / player.res.hpMax <= 0.2) {
         this.recordCultivationAction('lowHpPersistence', deltaSeconds)
       }
+      const qiRecoveryMultiplier = this.resolveDragonBloodRecoveryMultiplier()
       player.tickCultivation(deltaSeconds, {
         environment: env,
         qiSpent: this.cultivationFrame.qiSpent,
@@ -891,6 +921,7 @@ export const useBattleStore = defineStore('battle', {
         actions: this.cultivationFrame.actions,
         inBattle: true,
         bossBattle: this.monster?.isBoss ?? false,
+        recoveryMultiplier: qiRecoveryMultiplier,
       })
 
       this.playerQi = player.res.qi
@@ -914,6 +945,16 @@ export const useBattleStore = defineStore('battle', {
 
       if (this.playerSuperArmor && now > this.playerSuperArmor.expiresAt) {
         this.playerSuperArmor = null
+      }
+      if (this.playerTigerFury) {
+        const player = usePlayerStore()
+        const isTiger = player.cultivation.method.id === 'tiger_stripe'
+        if (!isTiger || now > this.playerTigerFury.expiresAt) {
+          this.playerTigerFury = null
+        }
+      }
+      if (this.playerAgiBuff && now > this.playerAgiBuff.expiresAt) {
+        this.playerAgiBuff = null
       }
       if (this.monsterVulnerability && now > this.monsterVulnerability.expiresAt) {
         this.monsterVulnerability = null
@@ -1115,6 +1156,139 @@ export const useBattleStore = defineStore('battle', {
         if (index !== -1) this.floatTexts.splice(index, 1)
       }, lifespan)
     },
+    applyDragonBloodQiSpent(amount: number) {
+      if (!Number.isFinite(amount) || amount <= 0) return
+      const player = usePlayerStore()
+      if (player.cultivation.method.id !== 'dragon_blood') {
+        this.playerBloodRage = null
+        return
+      }
+      const qiMax = Math.max(player.res.qiMax, 0)
+      const threshold = qiMax * DRAGON_BLOOD_STACK_QI_RATIO
+      if (threshold <= 0) return
+      const current = this.playerBloodRage ?? { stacks: 0, progressQi: 0 }
+      let stacks = current.stacks
+      let progressQi = current.progressQi + amount
+      while (progressQi >= threshold && stacks < DRAGON_BLOOD_MAX_STACKS) {
+        progressQi -= threshold
+        stacks += 1
+      }
+      if (stacks >= DRAGON_BLOOD_MAX_STACKS) {
+        progressQi = Math.min(progressQi, threshold)
+      }
+      this.playerBloodRage = { stacks, progressQi }
+    },
+    clearDragonBloodRage() {
+      if (!this.playerBloodRage) return
+      this.playerBloodRage = null
+    },
+    resolveDragonBloodBonus() {
+      const player = usePlayerStore()
+      if (player.cultivation.method.id !== 'dragon_blood') {
+        this.playerBloodRage = null
+        return null
+      }
+      const state = this.playerBloodRage
+      if (!state || state.stacks <= 0) return null
+      const stacks = Math.min(state.stacks, DRAGON_BLOOD_MAX_STACKS)
+      return {
+        stacks,
+        atkBonus: stacks * DRAGON_BLOOD_STACK_ATK_DEF_BONUS,
+        defBonus: stacks * DRAGON_BLOOD_STACK_ATK_DEF_BONUS,
+        recoveryBonus: stacks * DRAGON_BLOOD_STACK_RECOVERY_BONUS,
+      }
+    },
+    resolveDragonBloodRecoveryMultiplier(): number {
+      const bonus = this.resolveDragonBloodBonus()
+      if (!bonus) return 1
+      return Math.max(0, 1 + bonus.recoveryBonus)
+    },
+    applyPlayerBattleStatBonuses(baseStats: Stats): Stats {
+      const now = getNow()
+      const agiBuff = this.playerAgiBuff && now <= this.playerAgiBuff.expiresAt ? this.playerAgiBuff : null
+      if (this.playerAgiBuff && !agiBuff) {
+        this.playerAgiBuff = null
+      }
+      const bonus = this.resolveDragonBloodBonus()
+      const atkMultiplier = 1 + Math.max(bonus?.atkBonus ?? 0, 0)
+      const defMultiplier = 1 + Math.max(bonus?.defBonus ?? 0, 0)
+      const agiMultiplier = agiBuff ? 1 + Math.max(agiBuff.percent, 0) : 1
+      if (atkMultiplier === 1 && defMultiplier === 1 && agiMultiplier === 1) return baseStats
+      const nextTotals = { ...baseStats.totals }
+      const nextSnapshot: Stats['snapshot'] = { ...baseStats.snapshot }
+
+      const applyMultiplier = (key: keyof Stats['totals'], multiplier: number) => {
+        const breakdown = baseStats.snapshot[key]
+        const body = breakdown?.body ?? 0
+        const qi = breakdown?.qi ?? 0
+        const bonusPart = breakdown?.bonus ?? 0
+        const baseTotal = breakdown?.total ?? body + qi + bonusPart
+        const total = Math.max(0, Math.round(baseTotal * multiplier))
+        nextTotals[key] = total
+        nextSnapshot[key] = {
+          body,
+          qi,
+          bonus: total - body - qi,
+          total,
+        }
+      }
+
+      if (atkMultiplier !== 1) applyMultiplier('ATK', atkMultiplier)
+      if (defMultiplier !== 1) applyMultiplier('DEF', defMultiplier)
+      if (agiMultiplier !== 1) applyMultiplier('AGI', agiMultiplier)
+
+      return {
+        ...baseStats,
+        totals: nextTotals,
+        snapshot: nextSnapshot,
+      }
+    },
+    gainTigerFuryStack(nowMs: number) {
+      const player = usePlayerStore()
+      if (player.cultivation.method.id !== 'tiger_stripe') return
+      const previous = this.playerTigerFury
+      const nextStacks = Math.min(TIGER_FURY_MAX_STACKS, (previous?.stacks ?? 0) + 1)
+      this.playerTigerFury = {
+        stacks: nextStacks,
+        expiresAt: nowMs + TIGER_FURY_DURATION_MS,
+        durationMs: TIGER_FURY_DURATION_MS,
+      }
+      // this.pushFloat(`虎煞 x${nextStacks}`, 'miss', 'playerBuff')
+    },
+    setTigerFuryStacks(stacks: number, nowMs: number) {
+      const player = usePlayerStore()
+      if (player.cultivation.method.id !== 'tiger_stripe') return
+      const count = Math.min(TIGER_FURY_MAX_STACKS, Math.max(0, Math.floor(stacks)))
+      if (count <= 0) {
+        this.clearTigerFury()
+        return
+      }
+      this.playerTigerFury = {
+        stacks: count,
+        expiresAt: nowMs + TIGER_FURY_DURATION_MS,
+        durationMs: TIGER_FURY_DURATION_MS,
+      }
+      this.pushFloat(`虎煞 x${count}`, 'miss', 'playerBuff')
+    },
+    clearTigerFury() {
+      if (!this.playerTigerFury) return
+      this.playerTigerFury = null
+    },
+    resolveTigerFuryBonus(nowMs: number): number {
+      const state = this.playerTigerFury
+      if (!state) return 0
+      const player = usePlayerStore()
+      if (player.cultivation.method.id !== 'tiger_stripe') {
+        this.playerTigerFury = null
+        return 0
+      }
+      if (nowMs > state.expiresAt) {
+        this.playerTigerFury = null
+        return 0
+      }
+      const stacks = Math.min(state.stacks, TIGER_FURY_MAX_STACKS)
+      return Math.max(0, stacks * TIGER_FURY_STACK_BONUS)
+    },
     triggerFlash(kind: FlashEffectKind) {
       const id = flashId++
       this.flashEffects.push({ id, kind })
@@ -1122,21 +1296,13 @@ export const useBattleStore = defineStore('battle', {
         this.flashEffects = this.flashEffects.filter((effect) => effect.id !== id)
       }, 760)
     },
-    triggerSkillAnimation(skillId: string) {
-      const now = getNow()
-      const lastAt = this.skillAnimationLastAt[skillId] ?? 0
-      if (now - lastAt < SKILL_ANIMATION_MIN_INTERVAL_MS) {
-        return
-      }
-      // Keep at most one animation per skill to avoid double-play glitches
-      this.skillAnimations = this.skillAnimations.filter((entry) => entry.skillId !== skillId)
-      const id = skillAnimationId++
-      this.skillAnimations.push({ id, skillId })
-      this.skillAnimationLastAt[skillId] = now
-      const lifespan = 1200
+    triggerSkillEffect(skillId: string, durationMs = 1100) {
+      const id = skillEffectId++
+      const expiresAt = getNow() + durationMs
+      this.skillEffects.push({ id, skillId, expiresAt })
       setTimeout(() => {
-        this.skillAnimations = this.skillAnimations.filter((entry) => entry.id !== id)
-      }, lifespan)
+        this.skillEffects = this.skillEffects.filter((effect) => effect.id !== id)
+      }, durationMs)
     },
     scheduleRematch(monster: Monster) {
       this.clearRematchTimer()
@@ -1150,7 +1316,9 @@ export const useBattleStore = defineStore('battle', {
       }
       this.rematchTimer = setTimeout(() => {
         this.rematchTimer = null
-        this.start(monster)
+        const nextMonster =
+          generateMonsterInstanceById(monster.id, { rankOverride: monster.rank }) ?? monster
+        this.start(nextMonster)
         this.lastAutoRematchAt = getNow()
       }, delay)
     },
@@ -1713,7 +1881,7 @@ export const useBattleStore = defineStore('battle', {
         }
       }
       const streak = this.skillChain.streak
-      const stats = player.finalStats
+      const stats = this.applyPlayerBattleStatBonuses(player.finalStats)
       const rng = makeRng(this.rngSeed)
       this.rngSeed = (this.rngSeed + 0x9e3779b9) >>> 0
 
@@ -1724,29 +1892,50 @@ export const useBattleStore = defineStore('battle', {
         resources: player.res,
         cultivation: player.cultivation,
         progress: player.skills.progress[skillId] ?? undefined,
+        battle: {
+          tigerFuryStacks: this.playerTigerFury?.stacks ?? 0,
+        },
       })
-
-      if (skillId === 'dragon_breath_slash') {
-        this.triggerSkillAnimation(skillId)
-      }
 
       const nowMs = getNow()
       const activeVulnerability = this.monsterVulnerability
+      const delayedSpec = result.delayedDamage
+      const hasDelayedDamage = Boolean(delayedSpec && Number.isFinite(delayedSpec.delayMs))
       let dmg = Math.max(0, Math.round(result.damage ?? 0))
       const weaknessTriggered = Boolean(result.weaknessTriggered)
-      if (activeVulnerability) {
-        if (nowMs > activeVulnerability.expiresAt) {
-          this.monsterVulnerability = null
-        } else if (dmg > 0 && activeVulnerability.percent > 0) {
-          const multiplier = 1 + Math.max(activeVulnerability.percent, 0)
+      if (!hasDelayedDamage) {
+        if (activeVulnerability) {
+          if (nowMs > activeVulnerability.expiresAt) {
+            this.monsterVulnerability = null
+          } else if (dmg > 0 && activeVulnerability.percent > 0) {
+            const multiplier = 1 + Math.max(activeVulnerability.percent, 0)
+            dmg = Math.round(dmg * multiplier)
+            if (typeof result.coreDamage === 'number') {
+              result.coreDamage = Math.round(Math.max(result.coreDamage, 0) * multiplier)
+            }
+          }
+        }
+
+        const tigerBonus = this.resolveTigerFuryBonus(nowMs)
+        if (tigerBonus > 0 && dmg > 0) {
+          const multiplier = 1 + tigerBonus
           dmg = Math.round(dmg * multiplier)
           if (typeof result.coreDamage === 'number') {
             result.coreDamage = Math.round(Math.max(result.coreDamage, 0) * multiplier)
           }
         }
+      } else {
+        dmg = 0
       }
 
-      const hit = result.hit ?? dmg > 0
+      const hit = result.hit ?? (hasDelayedDamage ? true : dmg > 0)
+
+      if (!silent) {
+        const effectDef = getSkillEffectDefinition(skillId)
+        if (effectDef) {
+          this.triggerSkillEffect(effectDef.skillId, effectDef.durationMs)
+        }
+      }
 
       if (dmg > 0) {
         this.applyPlayerDamage(dmg, skill.flash, { weakness: weaknessTriggered })
@@ -1756,6 +1945,53 @@ export const useBattleStore = defineStore('battle', {
         }
       } else {
         this.triggerFlash(skill.flash)
+      }
+
+      if (hasDelayedDamage) {
+        const delayMs = Math.max(delayedSpec?.delayMs ?? 0, 0)
+        const pendingDamage = Math.max(0, Math.round(delayedSpec?.damage ?? result.damage ?? 0))
+        const pendingCore = delayedSpec?.coreDamage ?? result.coreDamage
+        const pendingWeakness = delayedSpec?.weaknessTriggered ?? weaknessTriggered
+        const pendingFlash = delayedSpec?.flash ?? skill.flash
+        setTimeout(() => {
+          if (!this.monster || this.concluded !== 'idle') return
+          const applyAt = getNow()
+          let finalDamage = pendingDamage
+          let finalCore = pendingCore
+          const vuln = this.monsterVulnerability
+          if (vuln) {
+            if (applyAt > vuln.expiresAt) {
+              this.monsterVulnerability = null
+            } else if (finalDamage > 0 && vuln.percent > 0) {
+              const mult = 1 + Math.max(vuln.percent, 0)
+              finalDamage = Math.round(finalDamage * mult)
+              if (typeof finalCore === 'number') {
+                finalCore = Math.round(Math.max(finalCore, 0) * mult)
+              }
+            }
+          }
+          const tigerBonusNow = this.resolveTigerFuryBonus(applyAt)
+          if (tigerBonusNow > 0 && finalDamage > 0) {
+            const mult = 1 + tigerBonusNow
+            finalDamage = Math.round(finalDamage * mult)
+            if (typeof finalCore === 'number') {
+              finalCore = Math.round(Math.max(finalCore, 0) * mult)
+            }
+          }
+          if (finalDamage > 0) {
+            this.applyPlayerDamage(finalDamage, pendingFlash, { weakness: pendingWeakness })
+            this.recordCultivationAction('attackHit', 1)
+            if (skillId === 'star_realm_dragon_blood_break') {
+              this.recordCultivationAction('finisherHit', 1)
+            }
+          } else {
+            this.triggerFlash(pendingFlash)
+          }
+          if (this.concluded !== 'idle') return
+          if (this.monsterHp <= 0 && this.monster) {
+            this.handleMonsterDefeat(player)
+          }
+        }, delayMs)
       }
 
       if (result.healSelf && result.healSelf > 0) {
@@ -1785,6 +2021,10 @@ export const useBattleStore = defineStore('battle', {
         this.pushFloat(result.message, 'miss')
       }
 
+      if (typeof result.setTigerFuryStacks === 'number') {
+        this.setTigerFuryStacks(result.setTigerFuryStacks, nowMs)
+      }
+
       if (result.cooldownBonus && result.cooldownBonus.targetSkillId && result.cooldownBonus.durationMs > 0) {
         const reduction = Math.min(Math.max(result.cooldownBonus.reductionPercent, 0), 0.9)
         if (reduction > 0) {
@@ -1805,17 +2045,31 @@ export const useBattleStore = defineStore('battle', {
         this.pushFloat('目标易伤', 'miss', 'enemyBuff')
       }
 
+      if (hit && result.applyPlayerAgiBuff && result.applyPlayerAgiBuff.percent > 0) {
+        const durationMs = Math.max(result.applyPlayerAgiBuff.durationMs, 0)
+        if (durationMs > 0) {
+          this.playerAgiBuff = {
+            percent: Math.max(result.applyPlayerAgiBuff.percent, 0),
+            expiresAt: nowMs + durationMs,
+            durationMs,
+          }
+          this.pushFloat('敏捷提升', 'miss', 'playerBuff')
+        }
+      }
+
       if (result.monsterStunMs && result.monsterStunMs > 0 && hit) {
         this.applyMonsterStun(result.monsterStunMs)
       }
 
       if (result.superArmorMs && result.superArmorMs > 0) {
         const durationMs = Math.max(result.superArmorMs, 0)
+        const label = (result.superArmorLabel || '').trim() || '霸体'
         this.playerSuperArmor = {
           expiresAt: nowMs + durationMs,
           durationMs,
+          label,
         }
-        this.pushFloat('霸体', 'miss', 'playerBuff')
+        this.pushFloat(label, 'miss', 'playerBuff')
       }
 
       const usage = player.recordSkillUsage(skill, {
@@ -1842,17 +2096,20 @@ export const useBattleStore = defineStore('battle', {
       this.playerQiMax = player.res.qiMax
       this.qiOperation = cloneQiOperationState(player.res.operation)
 
-      if (skillId === DODGE_SKILL_ID) {
+      if (isDodgeSkill(skill)) {
         this.dodgeAttempts += 1
         const attemptTime = getNow()
-        const refundTarget = player.res.qiMax * DODGE_REFUND_PERCENT
+        const dodgeConfig = resolveDodgeConfig(skill)
+        const refundTarget = player.res.qiMax * dodgeConfig.refundPercentOfQiMax
         const refund = Math.min(refundTarget, Math.max(qiCost, 0))
         this.pendingDodge = {
+          skillId,
           attemptedAt: attemptTime,
-          invincibleUntil: attemptTime + DODGE_WINDOW_MS,
+          invincibleUntil: attemptTime + dodgeConfig.windowMs,
           refundAmount: refund,
           consumedQi: qiCost,
           refundGranted: false,
+          successText: dodgeConfig.successText,
         }
       }
 
@@ -2044,7 +2301,7 @@ export const useBattleStore = defineStore('battle', {
     resolveMonsterAttackWithRng(rng: () => number, damageMultiplier = 1) {
       if (!this.monster || this.concluded !== 'idle') return
       const player = usePlayerStore()
-      const stats = player.finalStats
+      const stats = this.applyPlayerBattleStatBonuses(player.finalStats)
       const now = getNow()
       const agiAttacker = resolveMonsterAgi(this.monster)
       const agiDefender = stats.totals.AGI ?? 0
@@ -2058,7 +2315,8 @@ export const useBattleStore = defineStore('battle', {
           const chance = resolveDodgeSuccessChance(agiAttacker, agiDefender)
           if (chance > 0 && randBool(rng, chance)) {
             dodged = true
-            this.pushFloat('闪避!', 'miss')
+            // const successText = dodgeAttempt.successText || '闪避!'
+            // this.pushFloat(successText, 'miss')
             if (!dodgeAttempt.refundGranted) {
               const refund = Math.max(dodgeAttempt.refundAmount, 0)
               if (refund > 0) {
@@ -2084,6 +2342,7 @@ export const useBattleStore = defineStore('battle', {
 
       if (dodged) {
         this.dodgeSuccesses += 1
+        this.gainTigerFuryStack(now)
         this.playerQi = player.res.qi
         this.playerQiMax = player.res.qiMax
         this.qiOperation = cloneQiOperationState(player.res.operation)
@@ -2092,7 +2351,7 @@ export const useBattleStore = defineStore('battle', {
 
       // Check for super armor (invincibility)
       if (this.playerSuperArmor && now <= this.playerSuperArmor.expiresAt) {
-        this.pushFloat('霸体!', 'miss')
+        // this.pushFloat('霸体!', 'miss')
         this.playerQi = player.res.qi
         this.playerQiMax = player.res.qiMax
         this.qiOperation = cloneQiOperationState(player.res.operation)
@@ -2141,6 +2400,9 @@ export const useBattleStore = defineStore('battle', {
       const dealt = Math.round(Math.max(0, incoming))
       player.receiveDamage(dealt)
       this.pushFloat(`-${dealt}`, 'hitP')
+      if (dealt > 0) {
+        this.clearTigerFury()
+      }
       this.recordCultivationAction('damageTaken', 1)
       this.playerQi = player.res.qi
       this.playerQiMax = player.res.qiMax

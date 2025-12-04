@@ -55,8 +55,9 @@ interface BackpackStackEntry {
 
 const itemMeta = ITEMS.reduce<Record<string, { type: BackpackEntryType; name: string; detail?: string }>>((acc, def) => {
   const type: BackpackEntryType = (() => {
-    if (consumableIds.has(def.id)) return 'potion'
+    // 晶核优先标记为“晶核”分类，其次才是通用消耗品
     if (def.id.startsWith(CORE_SHARD_BASE_ID)) return 'coreShard'
+    if (consumableIds.has(def.id)) return 'potion'
     return 'material'
   })()
   const detail = 'description' in def && def.description ? def.description : 'usage' in def ? def.usage : undefined

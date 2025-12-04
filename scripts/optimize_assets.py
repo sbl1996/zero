@@ -7,6 +7,17 @@ def png_to_webp(png_path: Path, output_dir: Path):
     img = Image.open(png_path)
     webp_path = output_dir / png_path.with_suffix(".webp").name
     if not webp_path.exists() or webp_path.stat().st_mtime < png_path.stat().st_mtime:
+        # 长边不超过1024
+        max_size = 1024
+        w, h = img.size
+        if max(w, h) > max_size:
+            if w >= h:
+                new_w = max_size
+                new_h = int(h * max_size / w)
+            else:
+                new_h = max_size
+                new_w = int(w * max_size / h)
+            img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
         img.save(webp_path, "WEBP", quality=80)
         print(f"Saved {webp_path}")
 
@@ -99,22 +110,35 @@ def video_to_webp(
 
     print(f"生成完成: {dst_webp}")
 
+def mp3_to_ogg(mp3_path: Path, output_dir: Path):
+    ogg_path = output_dir / mp3_path.with_suffix(".ogg").name
+    if not ogg_path.exists() or ogg_path.stat().st_mtime < mp3_path.stat().st_mtime:
+        run([
+            "ffmpeg",
+            "-y",
+            "-i", str(mp3_path),
+            "-c:a", "libvorbis",
+            "-q:a", "3",
+            str(ogg_path),
+        ])
+        print(f"Saved {ogg_path}")
 
 if len(sys.argv) == 1:
     cur = Path(__file__).parent.parent
-    img_dir = cur / "src" / "assets" / "raw"
+    raw_dir = cur / "src" / "assets" / "raw"
     output_dir = cur / "src" / "assets"
     # 把所有png变成webp
-    all_mp4_path = list(img_dir.glob("*.mp4"))
-    all_img_path = []
+    all_mp4_path = list(raw_dir.glob("*.mp4"))
     # if mp4 files exist, not convert png to webp to avoid redundant work
-    for img_path in img_dir.glob("*.png"):
+    for img_path in raw_dir.glob("*.png"):
         if not any(mp4_path.stem == img_path.stem for mp4_path in all_mp4_path):
-            all_img_path.append(img_path)
-    for img_path in all_img_path:
-        png_to_webp(img_path, output_dir)
-    for video_path in img_dir.glob("*.mp4"):
+            png_to_webp(img_path, output_dir)
+    for video_path in all_mp4_path:
         video_to_webp(video_path, output_dir)
+    
+    for mp3_path in raw_dir.glob("*.mp3"):
+        mp3_to_ogg(mp3_path, output_dir)
+
 elif len(sys.argv) >= 2:
     path = Path(sys.argv[1])
     if len(sys.argv) == 3:

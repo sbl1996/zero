@@ -1,5 +1,6 @@
 import { getCultivationMethodDefinition } from '@/data/cultivationMethods'
 import { createDefaultSkillProgress } from '@/composables/useSkills'
+import { getInitialSkillIds } from '@/data/skillUnlocks'
 import { clamp } from '@/utils/math'
 import type {
   AttributeAllocation,
@@ -270,6 +271,7 @@ function createDefaultResources(hpMax: number, qiMax: number): Resources {
       qiPerSecond: 0,
       hpPerSecond: 0,
       updatedAt: null,
+      meditationStartedAt: null,
     },
     activeCoreBoost: null,
   }
@@ -380,8 +382,17 @@ export function computeRecoveryRates(params: {
   recoveryMode: RecoveryMode
   inBattle?: boolean
   bossBattle?: boolean
+  qiRecoveryBonusMultiplier?: number
 }): { qiPerSecond: number; hpPerSecond: number } {
-  const { stats, method, operation, recoveryMode, inBattle = false, bossBattle = false } = params
+  const {
+    stats,
+    method,
+    operation,
+    recoveryMode,
+    inBattle = false,
+    bossBattle = false,
+    qiRecoveryBonusMultiplier = 1,
+  } = params
   const { qiStateMultiplier, qiFMultiplier } = computeRecoveryMultipliers(operation.mode, recoveryMode, operation.fValue)
 
   const isPurple = method.id === 'purple_flame'
@@ -389,7 +400,8 @@ export function computeRecoveryRates(params: {
   const recForRecovery = baseRec
   const baseQiRate = (BASE_RECOVERY_OFFSET + BASE_RECOVERY_SLOPE * recForRecovery) * qiStateMultiplier * qiFMultiplier
   const qiBonus = isPurple ? 2 : 1
-  const qiPerSecond = baseQiRate * qiBonus
+  const qiRecoveryMult = Math.max(qiRecoveryBonusMultiplier, 0)
+  const qiPerSecond = baseQiRate * qiBonus * qiRecoveryMult
 
   let hpPerSecond = HP_RECOVERY_PER_REC * recForRecovery
   if (recoveryMode === 'meditate') {
@@ -531,7 +543,13 @@ export function createDefaultPlayer(): Player {
   const bpCurrent = cultivation.bp.current
   const stats = composeStats(DEFAULT_ATTRIBUTE_ALLOCATION, bpCurrent, cultivation.method, 0)
   const res = createDefaultResources(stats.caps.hpMax, stats.caps.qiMax)
-  const starterSkill = 'dragon_breath_slash'
+  const starterSkills = getInitialSkillIds(cultivation.method.id)
+  const starter = starterSkills.length > 0 ? starterSkills : ['dragon_breath_slash']
+  const starterLoadout: Player['skills']['loadout'] = [starter[0] ?? null, null, null, null]
+  const starterProgress = starter.reduce((acc, skillId) => {
+    acc[skillId] = createDefaultSkillProgress(skillId)
+    return acc
+  }, {} as Record<string, ReturnType<typeof createDefaultSkillProgress>>)
 
   return {
     name: '',
@@ -543,11 +561,9 @@ export function createDefaultPlayer(): Player {
     res,
     cultivation,
     skills: {
-      known: [starterSkill],
-      loadout: [starterSkill, null, null, null],
-      progress: {
-        [starterSkill]: createDefaultSkillProgress(starterSkill),
-      },
+      known: [...starter],
+      loadout: starterLoadout,
+      progress: starterProgress,
     },
   }
 }

@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { MONSTERS } from '@/data/monsters'
+import { MONSTER_BLUEPRINTS } from '@/data/monsters'
 import { maps, defaultMapId } from '@/data/maps'
 import type { UnlockState } from '@/types/domain'
 
@@ -70,7 +70,7 @@ export const useProgressStore = defineStore('progress', {
     },
     clearAllMonsters() {
       // Mark all monsters as cleared
-      MONSTERS.forEach(monster => {
+      MONSTER_BLUEPRINTS.forEach(monster => {
         this.data.clearedMonsters[monster.id] = true
       })
       // Also unlock all maps

@@ -4,16 +4,11 @@ import { storeToRefs } from 'pinia'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import { usePlayerStore } from '@/stores/player'
 import { getSkillDefinition, getSkillDescription } from '@/data/skills'
+import { getPurchaseCourses } from '@/data/skillUnlocks'
 import type { SkillCost, SkillDefinition } from '@/types/domain'
+import type { PurchaseCourseDefinition } from '@/data/skillUnlocks'
 
-interface GuildCourseConfig {
-  skillId: string
-  price: number
-  requiredTier: number
-  unlockMessage: string
-}
-
-interface GuildCourseViewModel extends GuildCourseConfig {
+interface GuildCourseViewModel extends PurchaseCourseDefinition {
   skillDefinition: SkillDefinition | null
   cooldownText: string
   alreadyKnown: boolean
@@ -23,15 +18,6 @@ interface GuildCourseViewModel extends GuildCourseConfig {
   requiredTierLabel: string
   description: string | null
 }
-
-const COURSE_CONFIGS: GuildCourseConfig[] = [
-  {
-    skillId: 'qi_dodge',
-    price: 1000,
-    requiredTier: 2,
-    unlockMessage: '你习得了《斗气闪避》。',
-  },
-]
 
 const playerStore = usePlayerStore()
 const { gold, cultivation, skills } = storeToRefs(playerStore)
@@ -65,18 +51,22 @@ const currentTierLabel = computed(() => {
 })
 
 const guildCourses = computed<GuildCourseViewModel[]>(() => {
+  const methodId = cultivation.value.method.id
   const currentTier = realmTier.value ?? 0
-  return COURSE_CONFIGS.map((config) => {
-    const skillDefinition = getSkillDefinition(config.skillId)
+  const courses = getPurchaseCourses(methodId)
+  return courses.map((course) => {
+    const skillId = course.skillId
+    const skillDefinition = getSkillDefinition(skillId)
     const cooldown = skillDefinition?.cooldown
     const cooldownText = typeof cooldown === 'number' ? `${cooldown.toFixed(1)} s` : '无冷却'
     const description = skillDefinition ? getSkillDescription(skillDefinition, 1) : null
-    const alreadyKnown = knownSkills.value.includes(config.skillId)
-    const meetsRequirement = currentTier >= config.requiredTier
-    const canAfford = gold.value >= config.price
-    const requiredTierLabel = tierLabels[config.requiredTier] ?? `${config.requiredTier}级`
+    const alreadyKnown = knownSkills.value.includes(skillId)
+    const meetsRequirement = currentTier >= course.requiredTier
+    const canAfford = gold.value >= course.price
+    const requiredTierLabel = tierLabels[course.requiredTier] ?? `${course.requiredTier}级`
     return {
-      ...config,
+      ...course,
+      skillId,
       skillDefinition,
       cooldownText,
       alreadyKnown,
@@ -144,7 +134,7 @@ function attemptPurchase(course: GuildCourseViewModel) {
   <div class="guild-scene">
     <div class="guild-overlay" />
     <div class="guild-content">
-      <PlayerStatusPanel class="guild-status" />
+      <PlayerStatusPanel class="guild-status" :auto-tick="false" />
       <section class="panel guild-panel">
         <header class="guild-header">
           <div>
