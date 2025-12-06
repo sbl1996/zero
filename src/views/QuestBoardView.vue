@@ -1,13 +1,12 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import QuestDetailCard from '@/components/QuestDetailCard.vue'
-import { ITEMS } from '@/data/items'
-import { BASE_EQUIPMENT_TEMPLATES } from '@/data/equipment'
-import { getSkillDefinition } from '@/data/skills'
 import { useQuestStore } from '@/stores/quests'
-import type { QuestDefinition, QuestReward, QuestRuntimeStatus } from '@/types/domain'
+import { useQuestOverlayStore } from '@/stores/questOverlay'
+import type { QuestDefinition, QuestRuntimeStatus } from '@/types/domain'
 
 const questStore = useQuestStore()
+const questOverlay = useQuestOverlayStore()
 
 const readyQuests = computed(() => questStore.readyQuests)
 const activeQuests = computed(() => questStore.activeQuests)
@@ -80,21 +79,6 @@ const selectedProgress = computed(() => {
   return questStore.progressOf(id)
 })
 
-const itemNameMap = new Map(ITEMS.map(item => [item.id, item.name]))
-const equipmentNameMap = new Map(BASE_EQUIPMENT_TEMPLATES.map(template => [template.id, template.name]))
-
-function formatItemName(itemId: string) {
-  return itemNameMap.get(itemId) ?? itemId
-}
-
-function formatEquipmentName(templateId: string) {
-  return equipmentNameMap.get(templateId) ?? templateId
-}
-
-function formatSkillName(skillId: string) {
-  return getSkillDefinition(skillId)?.name ?? skillId
-}
-
 const feedback = ref<{ message: string; kind: 'success' | 'error' } | null>(null)
 
 function setFeedback(message: string, kind: 'success' | 'error') {
@@ -113,7 +97,8 @@ function selectQuest(id: string) {
 function acceptQuest(id: string) {
   const ok = questStore.accept(id)
   if (ok) {
-    setFeedback('已接受任务。', 'success')
+    const questName = questStore.definitionMap[id]?.name ?? '任务'
+    questOverlay.showAccepted(id, questName, '任务已记录，可在任务页查看。')
   } else {
     setFeedback('无法接受任务。', 'error')
   }
@@ -124,100 +109,16 @@ function submitQuest(id: string) {
   if (rewards) {
     setFeedback('任务提交完成。', 'success')
     const questName = questStore.definitionMap[id]?.name ?? '任务'
-    showRewardNotice(id, questName, rewards)
+    questOverlay.showReward(id, questName, rewards, rewards.notes ?? '奖励已发放。')
   } else {
     setFeedback('尚未满足提交条件。', 'error')
   }
 }
-
-interface RewardNotice {
-  questId: string
-  questName: string
-  rewards: QuestReward
-}
-
-const rewardNotice = ref<RewardNotice | null>(null)
-let rewardNoticeTimeout: ReturnType<typeof setTimeout> | null = null
-
-function clearRewardNoticeTimeout() {
-  if (rewardNoticeTimeout) {
-    clearTimeout(rewardNoticeTimeout)
-    rewardNoticeTimeout = null
-  }
-}
-
-function showRewardNotice(questId: string, questName: string, rewards: QuestReward) {
-  rewardNotice.value = { questId, questName, rewards }
-  clearRewardNoticeTimeout()
-  rewardNoticeTimeout = setTimeout(() => {
-    rewardNotice.value = null
-    rewardNoticeTimeout = null
-  }, 6000)
-}
-
-function dismissRewardNotice() {
-  clearRewardNoticeTimeout()
-  rewardNotice.value = null
-}
-
-function rewardHasContent(reward: QuestReward): boolean {
-  return Boolean(
-    (reward.gold && reward.gold > 0) ||
-      (reward.items && reward.items.length > 0) ||
-      (reward.equipmentTemplates && reward.equipmentTemplates.length > 0) ||
-      (reward.skillUnlocks && reward.skillUnlocks.length > 0),
-  )
-}
-
-onBeforeUnmount(() => {
-  clearRewardNoticeTimeout()
-})
 </script>
 
 <template>
   <div class="quest-board">
     <section class="panel quest-board__panel">
-      <transition name="reward-toast">
-        <div v-if="rewardNotice" class="quest-board__reward-card" role="status" aria-live="polite">
-          <button type="button" class="reward-card__close" aria-label="关闭奖励提示" @click="dismissRewardNotice">
-            ×
-          </button>
-          <h3 class="reward-card__title">奖励结算</h3>
-          <p class="reward-card__subtitle">完成「{{ rewardNotice.questName }}」获得：</p>
-          <ul v-if="rewardHasContent(rewardNotice.rewards)" class="reward-card__list">
-            <li v-if="rewardNotice.rewards.gold" class="reward-card__item">
-              GOLD {{ rewardNotice.rewards.gold }}
-            </li>
-            <li
-              v-for="item in rewardNotice.rewards.items ?? []"
-              :key="`${rewardNotice.questId}-reward-card-item-${item.itemId}`"
-              class="reward-card__item"
-            >
-              {{ formatItemName(item.itemId) }} ×{{ item.quantity }}
-            </li>
-            <li
-              v-for="equipment in rewardNotice.rewards.equipmentTemplates ?? []"
-              :key="`${rewardNotice.questId}-reward-card-equipment-${equipment.templateId}`"
-              class="reward-card__item"
-            >
-              {{ formatEquipmentName(equipment.templateId) }}
-              {{ equipment.initialLevel ? `（初始 Lv.${equipment.initialLevel}）` : '' }}
-            </li>
-            <li
-              v-for="skillId in rewardNotice.rewards.skillUnlocks ?? []"
-              :key="`${rewardNotice.questId}-reward-card-skill-${skillId}`"
-              class="reward-card__item"
-            >
-              解锁技能 {{ formatSkillName(skillId) }}
-            </li>
-          </ul>
-          <p v-else class="reward-card__empty">本次提交未包含额外奖励。</p>
-          <p v-if="rewardNotice.rewards.notes" class="reward-card__notes">
-            {{ rewardNotice.rewards.notes }}
-          </p>
-        </div>
-      </transition>
-
       <header class="quest-board__header">
         <div>
           <h2 class="section-title">任务板</h2>
@@ -350,89 +251,6 @@ onBeforeUnmount(() => {
     0 22px 40px rgba(0, 0, 0, 0.38),
     0 0 42px rgba(76, 201, 240, 0.08);
   backdrop-filter: blur(14px);
-}
-
-.quest-board__reward-card {
-  position: absolute;
-  top: 16px;
-  right: 16px;
-  width: 280px;
-  padding: 16px 18px;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid var(--quest-outline);
-  border-radius: 16px;
-  box-shadow: 0 18px 42px rgba(0, 0, 0, 0.48), inset 0 0 0 1px rgba(255, 255, 255, 0.04);
-  color: var(--quest-text);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  backdrop-filter: blur(12px);
-  z-index: 2;
-}
-
-.reward-card__close {
-  position: absolute;
-  top: 8px;
-  right: 10px;
-  background: transparent;
-  color: var(--quest-text-dim);
-  border: none;
-  font-size: 18px;
-  line-height: 1;
-  cursor: pointer;
-  transition: color 0.18s ease;
-}
-
-.reward-card__close:hover {
-  color: var(--quest-text);
-}
-
-.reward-card__title {
-  font-size: 15px;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-}
-
-.reward-card__subtitle {
-  font-size: 13px;
-  color: var(--quest-text-dim);
-  margin: 0;
-}
-
-.reward-card__list {
-  margin: 0;
-  padding-left: 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  font-size: 13px;
-}
-
-.reward-card__item {
-  list-style: disc;
-}
-
-.reward-card__empty {
-  font-size: 13px;
-  color: var(--quest-text-dim);
-}
-
-.reward-card__notes {
-  font-size: 12px;
-  color: var(--quest-text-dim);
-  border-top: 1px solid var(--quest-outline);
-  padding-top: 8px;
-}
-
-.reward-toast-enter-active,
-.reward-toast-leave-active {
-  transition: opacity 0.28s ease, transform 0.28s ease;
-}
-
-.reward-toast-enter-from,
-.reward-toast-leave-to {
-  opacity: 0;
-  transform: translateY(-8px);
 }
 
 .quest-board__header {
@@ -666,10 +484,6 @@ onBeforeUnmount(() => {
 @media (max-width: 900px) {
   .quest-board__layout {
     grid-template-columns: 1fr;
-  }
-  .quest-board__reward-card {
-    position: static;
-    width: auto;
   }
   .quest-board__list {
     max-height: none;

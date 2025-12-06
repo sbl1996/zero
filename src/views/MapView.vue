@@ -30,6 +30,7 @@
               <span class="location-label">{{ location.name }}</span>
             </button>
             <NpcDialoguePanel />
+            <AiNpcPanel />
           </div>
           <aside class="city-sidebar">
             <div class="city-sidebar__header">
@@ -159,6 +160,7 @@
                 <span class="node-label">{{ node.label }}</span>
               </button>
               <NpcDialoguePanel />
+              <AiNpcPanel />
             </div>
             <aside class="node-sidebar">
               <div class="node-header">
@@ -296,6 +298,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import NpcDialoguePanel from '@/components/NpcDialoguePanel.vue'
+import AiNpcPanel from '@/components/AiNpcPanel.vue'
 import { defaultMapId, maps as mapDefinitions } from '@/data/maps'
 import { NPC_MAP } from '@/data/npcs'
 import { formatMonsterRewards, describeMonsterRealm, getMonsterRankLabel } from '@/utils/monsterUtils'
@@ -304,6 +307,7 @@ import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'
 import { useNodeSpawnStore } from '@/stores/nodeSpawns'
 import { useNpcDialogStore } from '@/stores/npcDialog'
+import { useAiNpcStore } from '@/stores/aiNpc'
 import type { GameMap, MapCategory, MapLocation, MapNode } from '@/types/map'
 import type { Monster, MonsterSpecialization } from '@/types/domain'
 
@@ -315,6 +319,7 @@ const progress = useProgressStore()
 const player = usePlayerStore()
 const nodeSpawns = useNodeSpawnStore()
 const npcDialog = useNpcDialogStore()
+const aiNpc = useAiNpcStore()
 
 const travelHubId = 'courier-station'
 
@@ -879,7 +884,14 @@ function handleEntryClick(entry: NodeListEntry) {
     return
   }
   if (entry.kind === 'npc') {
-    npcDialog.open(entry.id)
+    const npc = NPC_MAP[entry.id]
+    if (npc?.mode === 'ai') {
+      npcDialog.close()
+      aiNpc.open(entry.id)
+    } else {
+      aiNpc.close()
+      npcDialog.open(entry.id)
+    }
     return
   }
   if (entry.kind === 'travel') {

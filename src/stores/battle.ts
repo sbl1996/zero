@@ -50,6 +50,7 @@ import type {
   PendingItemUseState,
   SkillChargeState,
   Stats,
+  QuestLootResult,
 } from '@/types/domain'
 
 const ITEM_MAP = new Map(ITEMS.map((item) => [item.id, item]))
@@ -2157,6 +2158,13 @@ export const useBattleStore = defineStore('battle', {
       const questRng = makeRng(this.rngSeed ^ 0x1b873593)
       this.rngSeed = (this.rngSeed + 0x85ebca6b) >>> 0
       const questResult = questStore.handleMonsterDefeat(this.monster.id, { rng: questRng, mapId: progress.currentMapId })
+      const questLoot: QuestLootResult[] = questResult.drops.map(drop => ({
+        kind: 'questItem',
+        itemId: drop.itemId,
+        name: drop.name,
+        quantity: drop.quantity,
+        questId: drop.questId,
+      }))
       // Show quest item drop notices
       for (const drop of questResult.drops) {
         this.pushFloat(`获得 ${drop.name} x${drop.quantity}`, 'loot')
@@ -2171,7 +2179,7 @@ export const useBattleStore = defineStore('battle', {
       }
 
       const coreLoot = this.awardCoreDrop(this.monster)
-      const loot = this.applyVictoryLoot(this.monster, player)
+      const loot = [...questLoot, ...this.applyVictoryLoot(this.monster, player)]
       if (coreLoot) {
         loot.unshift(coreLoot)
       }

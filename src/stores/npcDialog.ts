@@ -70,7 +70,7 @@ export const useNpcDialogStore = defineStore('npc-dialog', {
     createScriptEnvironment(): ScriptEnvironment | null {
       if (!this.isOpen || !this.activeNpcId) return null
       const npc = NPC_MAP[this.activeNpcId]
-      if (!npc) return null
+      if (!npc || npc.mode === 'ai' || !npc.script) return null
       const quests = useQuestStore()
       const context: DialogueScriptContext = {
         state: this.dialogueState,

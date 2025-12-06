@@ -138,7 +138,8 @@
           },
           "destination": null,
           "npcs": [
-            "guard-zhenxiang"
+            "guard-zhenxiang",
+            "guard-thomas"
           ],
           "description": null
         },

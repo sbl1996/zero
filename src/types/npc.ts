@@ -1,6 +1,19 @@
 import type { QuestDefinition, QuestProgressEntry, QuestRuntimeStatus } from '@/types/domain'
 import type { useQuestStore } from '@/stores/quests'
 
+export type NpcMode = 'script' | 'ai'
+
+export interface AiNpcToolDefinition {
+  name: 'accept_quest' | 'submit_quest'
+  description: string
+}
+
+export interface AiNpcProfile {
+  questId: string
+  systemPrompt: string
+  tools: AiNpcToolDefinition[]
+}
+
 export interface DialogueLine {
   id: string
   speaker?: string
@@ -49,7 +62,9 @@ export interface NpcDefinition {
     image?: string
     variant?: 'default' | 'silhouette'
   }
-  script: (context: DialogueScriptContext) => DialoguePage
+  mode?: NpcMode
+  aiProfile?: AiNpcProfile
+  script?: (context: DialogueScriptContext) => DialoguePage
 }
 
 export interface DialogueScriptContext extends DialogueContext {

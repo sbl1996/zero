@@ -37,6 +37,7 @@
   <CheatPanel v-if="hasCharacter" />
   <SettingsPanel v-if="hasCharacter" />
   <CultivationTicker v-if="hasCharacter" />
+  <QuestOverlay v-if="hasCharacter" />
 </template>
 
 <script setup lang="ts">
@@ -46,15 +47,18 @@ import { storeToRefs } from 'pinia'
 import CheatPanel from '@/components/CheatPanel.vue'
 import SettingsPanel from '@/components/SettingsPanel.vue'
 import CultivationTicker from '@/components/CultivationTicker.vue'
+import QuestOverlay from '@/components/QuestOverlay.vue'
 import { useUiStore } from '@/stores/ui'
 import { usePlayerStore } from '@/stores/player'
 import { useProgressStore } from '@/stores/progress'
 import { useBgmStore } from '@/stores/bgm'
+import { useAiNpcStore } from '@/stores/aiNpc'
 
 const ui = useUiStore()
 const player = usePlayerStore()
 const progress = useProgressStore()
 const bgm = useBgmStore()
+const aiNpc = useAiNpcStore()
 const route = useRoute()
 
 const { showCheatPanel, showSettings } = storeToRefs(ui)
@@ -80,6 +84,14 @@ watch(
   () => route.name,
   (routeName) => {
     bgm.setScene(routeName === 'battle' ? 'battle' : 'ambient')
+  },
+  { immediate: true },
+)
+
+watch(
+  () => player.name,
+  (name) => {
+    aiNpc.setPlayerName(name)
   },
   { immediate: true },
 )

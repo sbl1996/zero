@@ -451,12 +451,19 @@ button {
 
 .cheat-panel,
 .settings-panel {
-  width: min(360px, 100%);
   padding: 22px 26px;
   border-radius: 20px;
   background: rgba(10, 14, 28, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.08);
   box-shadow: 0 24px 48px rgba(0, 0, 0, 0.5);
+}
+.cheat-panel {
+  width: min(360px, 100%);
+}
+.settings-panel {
+  width: min(960px, calc(100vw - 48px));
+  max-height: 90vh;
+  overflow: auto;
 }
 
 .cheat-header,

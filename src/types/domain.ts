@@ -697,7 +697,7 @@ export interface SaveData {
   quests: QuestSaveState
 }
 
-export type LootKind = 'item' | 'equipment' | 'gold'
+export type LootKind = 'item' | 'equipment' | 'gold' | 'questItem'
 
 export interface ItemLootResult {
   kind: 'item'
@@ -720,7 +720,15 @@ export interface GoldLootResult {
   hasBonus?: boolean
 }
 
-export type LootResult = ItemLootResult | EquipmentLootResult | GoldLootResult
+export interface QuestLootResult {
+  kind: 'questItem'
+  itemId: string
+  name: string
+  quantity: number
+  questId?: string
+}
+
+export type LootResult = ItemLootResult | EquipmentLootResult | GoldLootResult | QuestLootResult
 
 // Quest system types
 export type QuestObjectiveType = 'kill' | 'killCollect' | 'collect'

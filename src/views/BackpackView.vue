@@ -13,11 +13,13 @@ import { CORE_SHARD_BASE_ID } from '@/data/cultivationCores'
 import { resolveItemIcon, textIcon } from '@/utils/itemIcon'
 import { travelToMap } from '@/utils/travel'
 import { createEquipmentGridEntry, type EquipmentEntryBuilderContext } from '@/utils/equipmentEntry'
+import { useQuestStore } from '@/stores/quests'
 import type { ItemIcon } from '@/utils/itemIcon'
 import type { EquipSlotKey, Equipment } from '@/types/domain'
 import type { EquipmentGridEntry, EquipmentSubType } from '@/types/equipment-ui'
 
 const inventory = useInventoryStore()
+const questStore = useQuestStore()
 const player = usePlayerStore()
 const router = useRouter()
 const { requestEquip, requestUnequip } = useEquipmentActions()
@@ -92,9 +94,10 @@ const stackEntries = computed<BackpackStackEntry[]>(() =>
 
 type EquipmentFilterId = 'all-equipment' | 'equipped' | EquipmentSubType
 type StackFilterId = 'potion' | 'coreShard' | 'material'
-type InventoryFilterId = EquipmentFilterId | StackFilterId
+type InventoryFilterId = EquipmentFilterId | StackFilterId | 'questItem'
+type InventoryFilterKind = 'equipment' | 'stack' | 'quest'
 
-const inventoryFilterOptions: Array<{ value: InventoryFilterId; label: string; kind: 'equipment' | 'stack' }> = [
+const inventoryFilterOptions: Array<{ value: InventoryFilterId; label: string; kind: InventoryFilterKind }> = [
   { value: 'all-equipment', label: '全部装备', kind: 'equipment' },
   { value: 'equipped', label: '已穿戴', kind: 'equipment' },
   { value: 'weapon', label: '武器', kind: 'equipment' },
@@ -104,10 +107,13 @@ const inventoryFilterOptions: Array<{ value: InventoryFilterId; label: string; k
   { value: 'potion', label: '药水', kind: 'stack' },
   { value: 'coreShard', label: '晶核', kind: 'stack' },
   { value: 'material', label: '材料', kind: 'stack' },
+  { value: 'questItem', label: '任务物品', kind: 'quest' },
 ]
 
 const inventoryFilter = ref<InventoryFilterId>('all-equipment')
-const viewingStacks = computed(() => inventoryFilter.value === 'potion' || inventoryFilter.value === 'coreShard' || inventoryFilter.value === 'material')
+const activeFilterKind = computed<InventoryFilterKind>(() => inventoryFilterOptions.find((option) => option.value === inventoryFilter.value)?.kind ?? 'equipment')
+const viewingStacks = computed(() => activeFilterKind.value === 'stack')
+const viewingQuestItems = computed(() => activeFilterKind.value === 'quest')
 const activeStackFilter = computed<StackFilterId | null>(() => (viewingStacks.value ? (inventoryFilter.value as StackFilterId) : null))
 const activeEquipmentFilter = computed<EquipmentFilterId>(() =>
   viewingStacks.value ? 'all-equipment' : (inventoryFilter.value as EquipmentFilterId),
@@ -210,7 +216,15 @@ const visibleStacks = computed(() => {
   return stackByFilter.value[filter]
 })
 
-const viewingEquipment = computed(() => !viewingStacks.value)
+const questItemEntries = computed(() =>
+  questStore.questItemsView.map((entry) => ({
+    id: entry.itemId,
+    name: entry.name,
+    quantity: entry.quantity,
+  })),
+)
+
+const viewingEquipment = computed(() => activeFilterKind.value === 'equipment')
 const activeFilterLabel = computed(() => inventoryFilterOptions.find((option) => option.value === inventoryFilter.value)?.label ?? '')
 
 const actionLocked = ref(false)
@@ -392,6 +406,36 @@ const displayAttributeOverview = computed(() =>
           @enter="handleGridEnter"
         />
 
+        <section v-else-if="viewingQuestItems" class="stack-panel">
+          <header class="stack-panel__header">
+            <div>
+              <p class="stack-panel__title">{{ activeFilterLabel }}</p>
+              <p class="stack-panel__subtitle">战斗掉落的任务专用物品，完成相关任务后自动消耗。</p>
+            </div>
+          </header>
+
+          <div class="stack-panel__body stack-panel__body--inline">
+            <div v-if="questItemEntries.length" class="stack-grid stack-grid--quest">
+              <article v-for="entry in questItemEntries" :key="entry.id" class="stack-card stack-card--quest">
+                <div class="stack-card__header">
+                  <div class="stack-card__icon stack-card__icon--quest">
+                    <span>📜</span>
+                  </div>
+                  <div>
+                    <p class="stack-card__name">{{ entry.name }}</p>
+                    <p class="stack-card__quest-id">收集进度</p>
+                  </div>
+                </div>
+                <p class="stack-card__detail">任务物品会被自动上交</p>
+                <div class="stack-card__footer">
+                  <p class="stack-card__quantity">库存：{{ entry.quantity }}</p>
+                </div>
+              </article>
+            </div>
+            <p v-else class="stack-panel__empty">暂无任务物品</p>
+          </div>
+        </section>
+
         <section v-else class="stack-panel">
           <header class="stack-panel__header">
             <div>
@@ -543,6 +587,10 @@ const displayAttributeOverview = computed(() =>
   gap: 12px;
 }
 
+.stack-grid--quest {
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+}
+
 .stack-card {
   display: flex;
   flex-direction: column;
@@ -552,6 +600,11 @@ const displayAttributeOverview = computed(() =>
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.08);
   min-height: 168px;
+}
+
+.stack-card--quest {
+  border-color: rgba(125, 211, 252, 0.3);
+  background: linear-gradient(135deg, rgba(125, 211, 252, 0.08), rgba(255, 255, 255, 0.02));
 }
 
 .stack-card__header {
@@ -577,9 +630,19 @@ const displayAttributeOverview = computed(() =>
   object-fit: contain;
 }
 
+.stack-card__icon--quest {
+  background: rgba(125, 211, 252, 0.14);
+}
+
 .stack-card__name {
   margin: 0;
   font-size: 15px;
+}
+
+.stack-card__quest-id {
+  margin: 2px 0 0;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.6);
 }
 
 .stack-card__detail {

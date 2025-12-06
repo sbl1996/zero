@@ -759,12 +759,16 @@ function floatTextStyle(text: FloatText): StyleMap {
 function lootEntryKey(entry: LootResult, index: number) {
   if (entry.kind === 'equipment') return `equip-${entry.equipment.id}`
   if (entry.kind === 'item') return `item-${entry.itemId}`
+  if (entry.kind === 'questItem') return `quest-${entry.itemId}-${entry.questId ?? index}`
   return `gold-${index}-${entry.amount}`
 }
 
 function formatLootEntry(entry: LootResult) {
   if (entry.kind === 'item') {
     return `${entry.name} x${entry.quantity}`
+  }
+  if (entry.kind === 'questItem') {
+    return `任务物品·${entry.name} x${entry.quantity}`
   }
   if (entry.kind === 'equipment') {
     const level = entry.equipment.level
@@ -789,6 +793,9 @@ function lootEntryStyle(entry: LootResult): StyleMap {
       '--loot-color': color,
       '--loot-glow': hexToRgba(color, 0.8),
     }
+  }
+  if (entry.kind === 'questItem') {
+    return { color: '#7dd3fc' }
   }
   return { color: '#fff' }
 }
@@ -1209,6 +1216,11 @@ onBeforeUnmount(() => {
 
 .loot-normal {
   color: #fff;
+}
+
+.loot-quest {
+  color: #7dd3fc;
+  text-shadow: 0 0 6px rgba(125, 211, 252, 0.6);
 }
 
 .loot-gold-bonus {
@@ -1803,7 +1815,7 @@ onBeforeUnmount(() => {
             <div
               v-for="(entry, index) in getFilteredLootList(lootList)"
               :key="`loot-${lootEntryKey(entry, index)}`"
-              :class="entry.kind === 'equipment' ? 'loot-equipment' : 'loot-normal'"
+              :class="entry.kind === 'equipment' ? 'loot-equipment' : entry.kind === 'questItem' ? 'loot-quest' : 'loot-normal'"
               :style="[lootEntryStyle(entry)]"
               class="battle-result-drop"
             >
