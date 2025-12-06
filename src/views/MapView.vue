@@ -398,7 +398,7 @@ function getMonsterNameColorClass(monster?: Monster): string | undefined {
 }
 
 const now = ref(Date.now())
-let nowTimer: ReturnType<typeof setInterval> | null = null
+let nowTimer: number | null = null
 
 onMounted(() => {
   if (typeof window !== 'undefined') {
@@ -994,6 +994,11 @@ watch(
   height: auto;
 }
 
+.wild-map-canvas .map-image {
+  height: 100%;
+  object-fit: cover;
+}
+
 .map-location {
   position: absolute;
   transform: translate(-50%, -50%);
@@ -1297,6 +1302,7 @@ watch(
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(8, 12, 18, 0.5);
   min-height: 360px;
+  aspect-ratio: 1 / 1;
 }
 
 .node-graph {
@@ -1621,7 +1627,7 @@ watch(
   color: rgba(255, 220, 150, 0.95);
 }
 
-@media (max-width: 960px) {
+@media (max-width: 1000px) {
   .city-layout {
     grid-template-columns: 1fr;
   }
@@ -1638,7 +1644,23 @@ watch(
     flex: 1 1 auto;
   }
   .wild-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(200px, 240px) 1fr;
+  }
+
+  .wild-layout .wild-map-canvas {
+    flex: 0 0 auto;
+    min-height: 0;
+  }
+
+  .wild-layout .node-entry-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 0.5rem;
+  }
+
+  .wild-layout .node-entry {
+    height: 100%;
+    align-items: flex-start;
   }
 }
 

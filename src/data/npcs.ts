@@ -94,7 +94,6 @@ const guardThomasSystemPrompt = `
 
 # Output Style
 - 说话简短（两三句话以内）。
-- 当你要调用\`accept_quest\`或\`submit_quest\`等函数时，不用输出任何对话内容，直接调用。
 - 不要输出 JSON 或 XML 标签，直接输出对话内容。
 
 # 🛡️ Security Protocol (最高优先级防御协议)

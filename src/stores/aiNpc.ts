@@ -17,6 +17,7 @@ import type { QuestReward, QuestRuntimeStatus } from '@/types/domain'
 import { useQuestStore } from './quests'
 import { usePlayerStore } from './player'
 import { useQuestOverlayStore } from './questOverlay'
+import type { NpcDefinition } from '@/types/npc'
 
 interface AiNpcSessionState {
   npcId: string
@@ -152,10 +153,12 @@ function toChatMessage(message: AiNpcMessage): ChatCompletionMessageParam | null
     } as ChatCompletionMessageParam
   }
   if (message.role === 'tool') {
+    const toolCallId = message.toolCallId ?? message.toolCalls?.[0]?.id
+    if (!toolCallId) return null
     return {
       role: 'tool',
       content: message.content,
-      tool_call_id: message.toolCallId ?? message.toolCalls?.[0]?.id,
+      tool_call_id: toolCallId,
     }
   }
   return {
@@ -169,22 +172,21 @@ function cleanContext(messages: ChatCompletionMessageParam[]): ChatCompletionMes
   let keepFull = false
   const sanitized: ChatCompletionMessageParam[] = []
 
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const m = messages[i]
-    if (m.role === 'user' && typeof m.content === 'string') {
+  for (const message of [...messages].reverse()) {
+    if (message.role === 'user' && typeof message.content === 'string') {
       if (!keepFull) {
         keepFull = true
-        sanitized.push(m)
-      } else {
-        const idx = m.content.indexOf(keyword)
-        sanitized.push({
-          ...m,
-          content: idx >= 0 ? m.content.slice(idx) : m.content,
-        })
+        sanitized.push(message)
+        continue
       }
-    } else {
-      sanitized.push(m)
+      const idx = message.content.indexOf(keyword)
+      sanitized.push({
+        ...message,
+        content: idx >= 0 ? message.content.slice(idx) : message.content,
+      })
+      continue
     }
+    sanitized.push(message)
   }
 
   const reversed = sanitized.reverse()
@@ -197,6 +199,7 @@ function cleanContext(messages: ChatCompletionMessageParam[]): ChatCompletionMes
   ) {
     endIndex -= 2
   } else if (
+    endIndex >= 1 &&
     reversed[endIndex - 1]?.role === 'assistant' &&
     (reversed[endIndex - 1] as any).tool_calls
   ) {
@@ -205,10 +208,11 @@ function cleanContext(messages: ChatCompletionMessageParam[]): ChatCompletionMes
 
   const filtered: ChatCompletionMessageParam[] = []
   for (let i = 0; i < endIndex; i += 1) {
-    const m = reversed[i]
-    if (m.role === 'tool') continue
-    if (m.role === 'assistant' && (m as any).tool_calls) continue
-    filtered.push(m)
+    const message = reversed[i]
+    if (!message) continue
+    if (message.role === 'tool') continue
+    if (message.role === 'assistant' && (message as any).tool_calls) continue
+    filtered.push(message)
   }
   return filtered.concat(reversed.slice(endIndex))
 }
@@ -234,9 +238,9 @@ export const useAiNpcStore = defineStore('ai-npc', {
       if (!state.activeNpcId) return null
       return state.sessions[state.activeNpcId] ?? null
     },
-    activeNpc() {
-      if (!this.activeNpcId) return null
-      return NPC_MAP[this.activeNpcId] ?? null
+    activeNpc(state): NpcDefinition | null {
+      if (!state.activeNpcId) return null
+      return NPC_MAP[state.activeNpcId] ?? null
     },
   },
   actions: {
@@ -463,11 +467,13 @@ export const useAiNpcStore = defineStore('ai-npc', {
         toolCallPending: false,
       }
       this.appendMessage(session, assistantMessage)
-      let streamingMessage = session.messages[session.messages.length - 1]
-      if (!streamingMessage) return
+      const latestIndex = session.messages.length - 1
+      const initialStreamingMessage = session.messages[latestIndex]
+      if (!initialStreamingMessage) return
+      let streamingMessage: AiNpcMessage = initialStreamingMessage
 
       const controller = new AbortController()
-      let timeout: ReturnType<typeof setTimeout> | null = null
+      let timeout: number | null = null
       if (typeof window !== 'undefined') {
         timeout = window.setTimeout(() => {
           controller.abort()
@@ -528,11 +534,13 @@ export const useAiNpcStore = defineStore('ai-npc', {
         streamingMessage.displayContent = result.content?.trim()
           ? result.content
           : streamingMessage.displayContent
-        streamingMessage.toolCalls = result.toolCalls.map(call => ({
-          id: call.id,
-          name: call.function.name as AiNpcToolCall['name'],
-          arguments: call.function.arguments,
-        }))
+        streamingMessage.toolCalls = result.toolCalls
+          .filter(call => call.type === 'function')
+          .map(call => ({
+            id: call.id,
+            name: call.function.name as AiNpcToolCall['name'],
+            arguments: call.function.arguments,
+          }))
         streamingMessage.toolCallPending = sawToolCall
         session = this.touchMessages(session)
 
@@ -554,7 +562,7 @@ export const useAiNpcStore = defineStore('ai-npc', {
         session.loading = false
         session = this.touchMessages(session)
       } finally {
-        if (timeout) {
+        if (timeout !== null) {
           window.clearTimeout(timeout)
         }
         session.streamAbort = null

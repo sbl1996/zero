@@ -91,7 +91,7 @@ watch(
 watch(
   () => player.name,
   (name) => {
-    aiNpc.setPlayerName(name)
+    aiNpc.setPlayerName(name ?? '')
   },
   { immediate: true },
 )

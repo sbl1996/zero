@@ -22,9 +22,11 @@ export interface StreamCallbacks {
 export interface StreamResult {
   content: string
   reasoningContent: string
-  toolCalls: ChatCompletionMessageToolCall[]
+  toolCalls: FunctionToolCall[]
   finishReason?: string | null
 }
+
+type FunctionToolCall = Extract<ChatCompletionMessageToolCall, { type: 'function' }>
 
 type StreamParams = {
   settings: AiNpcSettings
@@ -45,15 +47,17 @@ async function streamOnce(params: StreamParams): Promise<StreamResult> {
     maxRetries: 0,
   })
 
-  const resp = await client.chat.completions.create({
-    model: settings.model,
-    messages,
-    tools,
-    tool_choice: params.toolChoice ?? (tools?.length ? 'auto' : undefined),
-    temperature: settings.temperature,
-    stream: true,
-    signal,
-  })
+  const resp = await client.chat.completions.create(
+    {
+      model: settings.model,
+      messages,
+      tools,
+      tool_choice: params.toolChoice ?? (tools?.length ? 'auto' : undefined),
+      temperature: settings.temperature,
+      stream: true,
+    },
+    { signal },
+  )
   console.log(messages)
 
   const toolCallsBuffer: Record<number, { id?: string; name?: string; arguments: string }> = {}
@@ -98,7 +102,7 @@ async function streamOnce(params: StreamParams): Promise<StreamResult> {
     }
   }
 
-  const toolCalls: ChatCompletionMessageToolCall[] = Object.keys(toolCallsBuffer)
+  const toolCalls: FunctionToolCall[] = Object.keys(toolCallsBuffer)
     .map(key => Number(key))
     .sort((a, b) => a - b)
     .map((key) => {

@@ -168,7 +168,7 @@ function handleRetryCountInput(event: Event) {
               <input
                 class="settings-input"
                 type="password"
-                placeholder="优先使用 VITE_AI_NPC_API_KEY"
+                placeholder="输入你的API Key"
                 :value="aiSettings.apiKey"
                 @input="(event) => handleAiTextInput(event, 'apiKey')"
               >

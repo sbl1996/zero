@@ -9,6 +9,15 @@
         </div>
       </div>
       <div class="ai-npc-panel" role="dialog" aria-modal="true">
+        <button
+          type="button"
+          class="panel-close"
+          :disabled="sending"
+          aria-label="离开对话"
+          @click="handleLeave"
+        >
+          ×
+        </button>
         <div v-if="isUnavailable" class="ai-unavailable">
           <p>{{ unavailableMessage }}</p>
           <button type="button" class="retry-button" @click="handleRetry">重新发送</button>
@@ -39,51 +48,76 @@
           </div>
 
           <div class="ai-input">
-            <input
-              v-model="inputValue"
-              class="ai-input__field"
-              type="text"
-              name="ai-chat"
-              autocomplete="off"
-              placeholder="输入想说的话，Enter 发送"
-              :disabled="sending"
-              @keydown.enter.prevent="handleSend"
-            >
-            <div class="ai-input__actions">
+            <div class="ai-input__row">
               <button
                 type="button"
-                class="history-button"
+                class="history-icon-button"
+                aria-label="历史对话"
                 @click="openHistory"
               >
-                历史对话
+                <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    stroke-width="2" 
+                    stroke-linecap="round" 
+                    stroke-linejoin="round"
+                  />
+                  <path d="M14 2v6h6" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    stroke-width="2" 
+                    stroke-linecap="round" 
+                    stroke-linejoin="round"
+                  />
+                  <path d="M16 13H8M16 17H8M10 9H8" 
+                    fill="none" 
+                    stroke="currentColor" 
+                    stroke-width="2" 
+                    stroke-linecap="round" 
+                    stroke-linejoin="round"
+                  />
+                </svg>
               </button>
-              <div class="ai-input__actions-right">
-                <button
-                  v-if="showRetry"
-                  type="button"
-                  class="retry-button"
+              <div class="ai-input__field-wrapper">
+                <input
+                  v-model="inputValue"
+                  class="ai-input__field"
+                  type="text"
+                  name="ai-chat"
+                  autocomplete="off"
+                  placeholder="输入想说的话，Enter 发送"
                   :disabled="sending"
-                  @click="handleRetry"
+                  @keydown.enter.prevent="handleSend"
+                >
+                <button
+                  type="button"
+                  class="send-icon-button"
+                  :disabled="!canSend"
+                  aria-label="发送"
+                  @click="handleSend"
+                >
+                  <svg viewBox="0 0 24 24" aria-hidden="true" width="20" height="20">
+                    <path
+                      d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"
+                      fill="none"
+                      stroke="currentColor"
+                      stroke-width="2"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                </button>
+              </div>
+              <button
+                v-if="showRetry"
+                type="button"
+                class="retry-button ai-input__retry"
+                :disabled="sending"
+                @click="handleRetry"
               >
                 重新发送
               </button>
-              <button
-                type="button"
-                class="leave-button"
-                :disabled="sending"
-                @click="handleLeave"
-              >
-                离开
-              </button>
-              <button
-                type="button"
-                class="send-button"
-                :disabled="!canSend"
-                @click="handleSend"
-              >
-                  发送
-                </button>
-              </div>
             </div>
           </div>
         </div>
@@ -173,10 +207,11 @@ const canSend = computed(() => {
 const showRetry = computed(() => Boolean(session.value?.error || messages.value.some(msg => msg.error)))
 const initialDescription = computed(() => '（托马斯握着长矛，在青苔原哨点百无聊赖地打着哈欠。）')
 const latestMessage = computed<AiNpcMessage | null>(() => {
-  const streaming = messages.value.find(msg => msg.isStreaming)
+  const streaming = messages.value.find(msg => msg?.isStreaming)
   if (streaming) return streaming
   for (let i = messages.value.length - 1; i >= 0; i -= 1) {
     const msg = messages.value[i]
+    if (!msg) continue
     if (msg.role !== 'user') return msg
   }
   return null
@@ -187,18 +222,18 @@ const streamingPlaceholderActive = computed(() =>
   messages.value.some(msg => msg.isStreaming && !msg.displayContent?.trim() && !msg.content?.trim()),
 )
 
-let ellipsisTimer: ReturnType<typeof setInterval> | null = null
+let ellipsisTimer: number | null = null
 
 watch(
   streamingPlaceholderActive,
   (active) => {
     if (active && !ellipsisTimer && typeof window !== 'undefined') {
-      const frames = ['.', '..', '...']
+      const frames = ['.', '..', '...'] as const
       let idx = 0
-      animatedEllipsis.value = frames[idx]
+      animatedEllipsis.value = frames[idx % frames.length] as string
       ellipsisTimer = window.setInterval(() => {
         idx = (idx + 1) % frames.length
-        animatedEllipsis.value = frames[idx]
+        animatedEllipsis.value = frames[idx % frames.length] as string
       }, 420)
     } else if (!active && ellipsisTimer) {
       clearInterval(ellipsisTimer)
@@ -337,64 +372,55 @@ onBeforeUnmount(() => {
   left: 2%;
   right: 2%;
   bottom: 1rem;
-  max-height: 65%;
+  width: auto;
+  max-height: 55%;
   background: rgba(6, 10, 18, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 16px;
   box-shadow: 0 15px 50px rgba(0, 0, 0, 0.45);
-  padding: 1.1rem 1.25rem;
+  padding: 1.0rem 1.25rem;
   display: flex;
   flex-direction: column;
-  gap: 0.75rem;
+  gap: 0.9rem;
   backdrop-filter: blur(6px);
   pointer-events: auto;
 }
-.ai-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 1rem;
-}
-.ai-header__title {
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-}
-.ai-header__actions {
-  margin-left: auto;
-}
-.history-button {
-  padding: 0.4rem 0.65rem;
-  border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.08);
-  color: #e2e8f0;
+.panel-close {
+  position: absolute;
+  top: 0.3rem;
+  right: 0.3rem;
+  padding: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: 8px;
+  border: none;
+  background: transparent;
+  color: #e7f0ff;
   cursor: pointer;
+  line-height: 1;
+  font-size: 1.35rem;
 }
-.history-button:hover {
-  background: rgba(255, 255, 255, 0.14);
+.panel-close:hover {
+  background: rgba(255, 255, 255, 0.08);
 }
-.ai-name {
-  margin: 0;
-  font-size: 1.2rem;
-  font-weight: 700;
-  color: #f8fafc;
-}
-.ai-subtitle {
-  margin: 0;
-  font-size: 0.95rem;
-  color: rgba(248, 250, 252, 0.75);
+.panel-close:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
 }
 .ai-body {
   display: flex;
   flex-direction: column;
   gap: 0.65rem;
+  flex: 1 1 auto;
+  min-height: 0;
 }
 .ai-single {
   min-height: 160px;
   padding: 0.75rem 0.25rem 0.25rem;
   color: #e2e8f0;
   line-height: 1.6;
+  flex: 1 1 auto;
+  overflow-y: auto;
 }
 .ai-single__block {
   margin-bottom: 0.25rem;
@@ -474,52 +500,77 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex-shrink: 0;
+}
+.ai-input__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+.ai-input__field-wrapper {
+  position: relative;
+  flex: 1 1 auto;
 }
 .ai-input__field {
   width: 100%;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   padding: 0.65rem 0.75rem;
+  padding-right: 2.85rem;
   background: rgba(10, 16, 26, 0.9);
   color: #f8fafc;
 }
 .ai-input__field:disabled {
   opacity: 0.6;
 }
-.ai-input__actions {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.ai-input__actions-right {
-  margin-left: auto;
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-}
-.send-button,
-.retry-button,
-.leave-button {
-  padding: 0.5rem 0.85rem;
+.history-icon-button {
+  width: 32px;
+  height: 32px;
   border-radius: 10px;
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  background: rgba(68, 158, 255, 0.15);
-  color: #e7f0ff;
-  cursor: pointer;
-}
-.retry-button {
+  border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.08);
   color: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
 }
-.leave-button {
-  background: rgba(255, 255, 255, 0.06);
+.send-icon-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
   color: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
 }
-.send-button:disabled,
-.retry-button:disabled,
-.leave-button:disabled {
+.history-icon-button:hover,
+.send-icon-button:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+.send-icon-button {
+  position: absolute;
+  top: 50%;
+  right: 0.45rem;
+  transform: translateY(-50%);
+}
+.send-icon-button:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+.history-icon-button svg,
+.send-icon-button svg {
+  width: 18px;
+  height: 18px;
+}
+.ai-input__retry {
+  padding: 0.45rem 0.8rem;
+  white-space: nowrap;
 }
 .ai-unavailable {
   min-height: 220px;
@@ -530,6 +581,21 @@ onBeforeUnmount(() => {
   border: 1px dashed rgba(255, 255, 255, 0.2);
   border-radius: 12px;
   color: rgba(226, 232, 240, 0.9);
+}
+.ai-unavailable .retry-button {
+  min-width: 120px;
+}
+.retry-button {
+  padding: 0.5rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
+  cursor: pointer;
+}
+.retry-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 .history-overlay {
   position: fixed;
@@ -584,14 +650,21 @@ onBeforeUnmount(() => {
 .history-close:hover {
   color: #fff;
 }
-@media (max-width: 768px) {
+@media (max-width: 1000px) {
   .ai-npc-portrait {
     left: 1rem;
-    width: min(55vw, 260px);
+    width: auto;
+    aspect-ratio: 3 / 4;
+    height: 45%;
+  }
+  .ai-npc-portrait__label {
+    inset: 0 0 auto 0;
+    background: linear-gradient(180deg, rgba(3, 5, 12, 0.88), rgba(3, 5, 12, 0));
   }
   .ai-npc-panel {
     left: 1rem;
     right: 1rem;
+    max-height: 55%;
   }
 }
 @media (max-width: 540px) {

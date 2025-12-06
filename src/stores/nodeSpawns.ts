@@ -78,7 +78,7 @@ function resolveRespawnDelay(config?: MapNodeSpawnConfig): number {
 export const useNodeSpawnStore = defineStore('node-spawns', {
   state: () => ({
     nodeStates: {} as Record<string, NodeSpawnState>,
-    tickHandle: null as ReturnType<typeof setInterval> | null,
+    tickHandle: null as number | null,
   }),
   actions: {
     ensureInitialized(mapId: string, node: MapNode | undefined) {

@@ -613,7 +613,7 @@ export interface BattleState {
   skillEffects: SkillEffect[]
   concluded: BattleResolution
   lastOutcome: BattleOutcome | null
-  rematchTimer: number | null
+  rematchTimer: ReturnType<typeof setTimeout> | null
   lastAutoRematchAt: number | null
   loot: LootResult[]
   loopHandle: ReturnType<typeof setInterval> | null

@@ -156,37 +156,6 @@ onBeforeUnmount(() => {
   backdrop-filter: blur(6px);
   pointer-events: auto;
 }
-.npc-dialog__header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 1rem;
-}
-.npc-dialog__header-text {
-  display: flex;
-  flex-direction: column;
-}
-.npc-dialog__header-title {
-  margin: 0;
-  font-size: 1.4rem;
-  color: #f8fafc;
-}
-.npc-dialog__sub {
-  margin-left: 0.5rem;
-  font-size: 0.95rem;
-  color: rgba(248, 250, 252, 0.75);
-}
-.npc-dialog__close {
-  background: transparent;
-  border: none;
-  color: rgba(248, 250, 252, 0.7);
-  font-size: 1.5rem;
-  cursor: pointer;
-  line-height: 1;
-}
-.npc-dialog__close:hover {
-  color: #fff;
-}
 .npc-dialog__lines {
   flex: 1;
   background: rgba(3, 5, 12, 0.45);
@@ -278,15 +247,21 @@ onBeforeUnmount(() => {
   color: rgba(241, 245, 249, 0.65);
   text-align: right;
 }
-@media (max-width: 768px) {
+@media (max-width: 1000px) {
   .npc-dialog-portrait {
     left: 1rem;
-    width: min(55vw, 260px);
+    width: auto;
+    aspect-ratio: 3 / 4;
+    height: 45%;
+  }
+  .npc-portrait__label {
+    inset: 0 0 auto 0;
+    background: linear-gradient(180deg, rgba(3, 5, 12, 0.88), rgba(3, 5, 12, 0));
   }
   .npc-dialog-panel {
     left: 1rem;
     right: 1rem;
-    max-height: 65%;
+    max-height: 55%;
   }
 }
 @media (max-width: 540px) {
