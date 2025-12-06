@@ -70,10 +70,10 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
   {
     id: 'quest-wolf-teeth',
     name: '野狼利齿样本',
-    giver: '铁匠罗恩',
-    location: '翡冷翠任务板',
+    giver: '卫兵 托马斯',
+    location: '青苔原',
     description:
-      '“那些在夜里嚎叫的野狼总是在铁矿道附近徘徊，我想看看它们的牙齿是不是被矿粉磨得更锋利。帮我带些利齿回来，我可以给你打折——当然，只是一点点。”',
+      '青苔原上的野狼越来越泛滥了，卫兵托马斯总是接到投诉，说这些狼群在夜里嚎叫，吓坏了过路的行人。他怀疑这些野狼的牙齿被附近矿道的矿粉磨得更锋利，想收集一些样本进行研究。',
     recommendedRealmTier: 1,
     difficultyLabel: '★☆',
     objectives: [
@@ -92,7 +92,6 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
       gold: 200,
       items: [{ itemId: 'potionQi', quantity: 2 }],
       skillUnlocks: [],
-      notes: '完成后铁匠罗恩会对你另眼相看。',
     },
     allowAbandon: true,
     repeatable: true,
@@ -102,7 +101,7 @@ export const QUEST_DEFINITIONS: QuestDefinition[] = [
     id: 'quest-frost-core-investigation',
     name: '寒岩碎核调查',
     giver: '远行学者米洛',
-    location: '翡冷翠任务板',
+    location: '熔冰之脊',
     description:
       '“熔冰之脊的寒岩巨像似乎不是天然形成的岩石，它们体内有一种奇特的晶核，在冰与火之间不断震荡。帮我敲下一些碎核，我想研究它们与晶核修炼之间的关系。”',
     recommendedRealmTier: 2,

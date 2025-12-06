@@ -1,7 +1,7 @@
 import type { QuestReward, QuestRuntimeStatus } from '@/types/domain'
 import type { DialoguePage, DialogueScriptContext, NpcDefinition } from '@/types/npc'
 import { ITEMS } from '@/data/items'
-import { QUEST_DEFINITION_MAP, QUEST_ITEM_DEFINITIONS } from '@/data/quests'
+import { QUEST_DEFINITION_MAP } from '@/data/quests'
 import { useQuestOverlayStore } from '@/stores/questOverlay'
 
 const QUEST_SLIME_MENACE = 'quest-slime-menace'
@@ -13,7 +13,7 @@ function getItemName(itemId: string): string {
 }
 
 function formatRewardSummary(reward?: QuestReward | null): string {
-  if (!reward) return '奖励未知。'
+  if (!reward) return '未知'
   const parts: string[] = []
   if (reward.gold) {
     parts.push(`${reward.gold} 金币`)
@@ -23,7 +23,7 @@ function formatRewardSummary(reward?: QuestReward | null): string {
       parts.push(`${getItemName(item.itemId)} x${item.quantity}`)
     })
   }
-  return parts.length ? `奖励：${parts.join('，')}。` : '奖励：无额外物资。'
+  return parts.length ? `${parts.join('，')}。` : '无额外奖励。'
 }
 
 function resolveQuestEntryView(status: QuestRuntimeStatus): string {
@@ -33,34 +33,25 @@ function resolveQuestEntryView(status: QuestRuntimeStatus): string {
   return 'questLocked'
 }
 
-const QUEST_ITEM_NAME_MAP = QUEST_ITEM_DEFINITIONS.reduce(
-  (acc, item) => {
-    acc[item.id] = item.name
-    return acc
-  },
-  {} as Record<string, string>,
-)
-
-const guardThomasQuestDefinition = QUEST_DEFINITION_MAP[QUEST_WOLF_TEETH]
-const guardThomasObjective = guardThomasQuestDefinition?.objectives?.[0]
-const guardThomasQuestItemName = guardThomasObjective && 'itemId' in guardThomasObjective
-  ? (QUEST_ITEM_NAME_MAP[guardThomasObjective.itemId] ?? guardThomasObjective.itemId)
-  : '任务物资'
-const guardThomasObjectiveTarget = guardThomasObjective && 'amount' in guardThomasObjective
-  ? guardThomasObjective.amount
-  : 0
-const guardThomasRewardSummary = formatRewardSummary(guardThomasQuestDefinition?.rewards)
+const guardThomasQuestDefinition = QUEST_DEFINITION_MAP[QUEST_WOLF_TEETH]!
+const guardThomasQuestName = guardThomasQuestDefinition.name
+const guardThomasQuestLocation = guardThomasQuestDefinition.location
+const guardThomasRepeatableLabel = guardThomasQuestDefinition.repeatable ? '可重复' : '不可重复'
+const guardThomasObjective = guardThomasQuestDefinition.objectives[0]!
+const guardThomasObjectiveDescription = guardThomasObjective.description!.replace(/[。.]$/, '')
+const guardThomasRewardSummary = formatRewardSummary(guardThomasQuestDefinition.rewards)
 
 const guardThomasSystemPrompt = `
 # Role (角色设定)
-- 你是卫兵“托马斯”，驻守在翡冷翠城门附近的哨点（青苔原01），正在观察野狼的动向。性格直接、务实。
-- 你只熟悉青苔原与狼群生态，不清楚城市锻造细节或其他 NPC 的情况。
+你是卫兵“托马斯”，驻守在翡冷翠城门附近的哨点（青苔原01），正在观察野狼的动向。
+性格：忠诚、直爽、有点迷信，讨厌复杂的魔法。
+**当前环境**：你站在哨点（青苔原01）里，手里拿着长矛。
 
 # Quest (任务知识)
-- 任务：野狼利齿样本（quest-wolf-teeth），可重复。
-- 目标：击败 m-wolf 并收集 ${guardThomasObjectiveTarget} 份「${guardThomasQuestItemName}」（掉落物品 id：quest-wolf-fang）。
+- 任务：${guardThomasQuestName}（${guardThomasQuestDefinition.id}），${guardThomasRepeatableLabel}。
+- 目标：${guardThomasObjectiveDescription}。
 - 奖励：${guardThomasRewardSummary}
-- 场景：青苔原，野狼附近可见。
+- 场景：${guardThomasQuestLocation}
 
 # 🛡️ Anti-Hallucination & Boundaries (核心防幻觉指令)
 1. **严禁穿越**：你完全不知道现代科技（手机、电脑、网络）、现实世界政治或流行文化。如果玩家提到这些，用困惑的语气回应，例如：“你是在念什么奇怪的咒语吗？”或者“我不懂你在说什么，别耽误我站岗。”
@@ -95,15 +86,15 @@ const guardThomasSystemPrompt = `
 ## 3. 当 status == "can_submit" (可提交)
 - **逻辑**：你知道他已经完成目标了。
 - **回复**：如果玩家来对话，夸奖他的英勇。
-- **行动**：当玩家表达“交任务”、“我回来了”或索要奖励时，**调用 \`submit_quest\`**。
+- **行动**：当玩家表达“搞定了”、“我回来了”或索要奖励等类似要提交任务的意图时，**调用 \`submit_quest\`**。
 
 ## 4. 当 status == "completed" (已完成)
 - **逻辑**：任务已结束。
-- **回复**：把他当做朋友或英雄，感谢他之前的帮助。
-- **引导与行动**：同“available”状态，鼓励他继续接受任务。
+- **回复**：把他当做朋友，感谢他之前的帮助。不再提供该任务。
 
 # Output Style
 - 说话简短（两三句话以内）。
+- 当你要调用\`accept_quest\`或\`submit_quest\`等函数时，不用输出任何对话内容，直接调用。
 - 不要输出 JSON 或 XML 标签，直接输出对话内容。
 
 # 🛡️ Security Protocol (最高优先级防御协议)

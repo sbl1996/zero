@@ -35,6 +35,18 @@ function numberOr<T extends number>(value: unknown, fallback: T): T {
   return fallback
 }
 
+function normalizeSettings(partial: Partial<AiNpcSettings>, fallback: AiNpcSettings): AiNpcSettings {
+  return {
+    apiKey: partial.apiKey?.trim() ?? fallback.apiKey,
+    baseUrl: partial.baseUrl?.trim() ?? fallback.baseUrl,
+    model: partial.model?.trim() ?? fallback.model,
+    temperature: Math.max(0, numberOr(partial.temperature, fallback.temperature)),
+    timeoutMs: Math.max(1000, numberOr(partial.timeoutMs, fallback.timeoutMs)),
+    historyLimit: Math.max(6, numberOr(partial.historyLimit, fallback.historyLimit)),
+    maxRetries: Math.max(0, numberOr(partial.maxRetries, fallback.maxRetries)),
+  }
+}
+
 function loadDefaultSettings(): AiNpcSettings {
   const env = import.meta.env
   const defaults: AiNpcSettings = {
@@ -52,7 +64,7 @@ function loadDefaultSettings(): AiNpcSettings {
     const stored = localStorage.getItem(SETTINGS_STORAGE_KEY)
     if (!stored) return defaults
     const parsed = JSON.parse(stored) as Partial<AiNpcSettings>
-    return { ...defaults, ...parsed }
+    return normalizeSettings(parsed, defaults)
   } catch (err) {
     console.warn('[ai-npc] Failed to parse stored settings', err)
     return defaults
@@ -254,8 +266,9 @@ export const useAiNpcStore = defineStore('ai-npc', {
       return this.sessions[npcId]
     },
     setSettings(next: Partial<AiNpcSettings>) {
-      this.settings = { ...this.settings, ...next }
-      persistSettings(this.settings)
+      const merged = normalizeSettings({ ...this.settings, ...next }, this.settings)
+      this.settings = merged
+      persistSettings(merged)
     },
     resetSession(npcId: string) {
       this.sessions[npcId] = {
@@ -376,7 +389,7 @@ export const useAiNpcStore = defineStore('ai-npc', {
           return { ok: false, message: '接取失败：状态不满足或已接取。' }
         }
         questOverlay.showAccepted(questId, questDef?.name ?? '任务', '任务已记录，可在任务页查看进度。')
-        return { ok: true, message: '任务已接受，去收集利齿吧。' }
+        return { ok: true, message: '任务已接受。' }
       }
 
       if (toolCall.name === 'submit_quest') {
@@ -392,7 +405,7 @@ export const useAiNpcStore = defineStore('ai-npc', {
           questId,
           questDef?.name ?? '任务',
           rewards,
-          rewards.notes ?? '奖励已发放，辛苦了。',
+          rewards.notes ?? '奖励已发放。',
         )
         return {
           ok: true,
@@ -510,6 +523,11 @@ export const useAiNpcStore = defineStore('ai-npc', {
         streamingMessage.isStreaming = false
         streamingMessage.reasoningContent = result.reasoningContent
         streamingMessage.content = result.content
+        // Ensure we don't leave the placeholder ellipsis when the model
+        // returns both tool calls and a content string in the same turn.
+        streamingMessage.displayContent = result.content?.trim()
+          ? result.content
+          : streamingMessage.displayContent
         streamingMessage.toolCalls = result.toolCalls.map(call => ({
           id: call.id,
           name: call.function.name as AiNpcToolCall['name'],

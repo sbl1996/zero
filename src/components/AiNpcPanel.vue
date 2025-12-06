@@ -81,7 +81,7 @@
                 :disabled="!canSend"
                 @click="handleSend"
               >
-                  {{ sending ? '发送中...' : '发送' }}
+                  发送
                 </button>
               </div>
             </div>
@@ -97,11 +97,11 @@
               <button type="button" class="history-close" @click="closeHistory">×</button>
             </header>
             <div class="ai-messages">
-              <div v-if="messages.length === 0" class="ai-bubble ai-bubble--system">
+              <div v-if="historyMessages.length === 0" class="ai-bubble ai-bubble--system">
                 <p class="ai-bubble__text">{{ initialDescription }}</p>
               </div>
               <div
-                v-for="message in messages"
+                v-for="message in historyMessages"
                 :key="message.id"
                 class="ai-bubble"
                 :class="{
@@ -142,6 +142,13 @@ const { isOpen, settings } = storeToRefs(aiNpc)
 const npc = computed(() => aiNpc.activeNpc)
 const session = computed(() => aiNpc.activeSession)
 const messages = computed(() => session.value?.messages ?? [])
+const historyMessages = computed(() =>
+  messages.value.filter((msg) => {
+    if (msg.role === 'tool') return false
+    if (msg.role === 'assistant' && (msg.toolCallPending || (msg.toolCalls?.length && !msg.content))) return false
+    return true
+  }),
+)
 const sending = computed(() => session.value?.loading ?? false)
 const npcPortraitSrc = computed(() => npc.value?.portrait?.image ? resolveAssetUrl(npc.value.portrait.image) : '')
 const showPortrait = computed(() => npcPortraitSrc.value.length > 0)
@@ -533,8 +540,10 @@ onBeforeUnmount(() => {
   justify-content: center;
   align-items: center;
   padding: 1rem;
+  transform: translateX(2.5%);
 }
 .history-panel {
+  height: min(600px, 80vh);
   width: min(720px, 95vw);
   max-height: 80vh;
   background: rgba(6, 10, 18, 0.95);
