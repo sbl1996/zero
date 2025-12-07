@@ -81,6 +81,7 @@
               </button>
               <div class="ai-input__field-wrapper">
                 <input
+                  ref="inputEl"
                   v-model="inputValue"
                   class="ai-input__field"
                   type="text"
@@ -189,6 +190,8 @@ const showPortrait = computed(() => npcPortraitSrc.value.length > 0)
 const portraitVariant = computed(() => npc.value?.portrait?.variant ?? 'default')
 const portraitAlt = computed(() => `${npc.value?.name ?? 'NPC'}立绘`)
 const inputValue = ref('')
+const inputEl = ref<HTMLInputElement | null>(null)
+const pendingInputFocus = ref(false)
 const messageListEl = ref<HTMLElement | null>(null)
 const showHistory = ref(false)
 
@@ -251,11 +254,26 @@ watch(messages, async () => {
   el.scrollTop = el.scrollHeight
 })
 
+function focusInput() {
+  nextTick(() => {
+    const el = inputEl.value
+    if (!el) return
+    if (el.disabled) {
+      pendingInputFocus.value = true
+      return
+    }
+    el.focus({ preventScroll: true })
+    pendingInputFocus.value = false
+  })
+}
+
 function handleSend() {
   const text = inputValue.value.trim()
   if (!text || !canSend.value) return
   aiNpc.sendUserMessage(text)
   inputValue.value = ''
+  pendingInputFocus.value = true
+  focusInput()
 }
 
 function handleRetry() {
@@ -295,9 +313,23 @@ function handleKeydown(event: KeyboardEvent) {
   }
 }
 
+watch(isOpen, (open) => {
+  if (open) {
+    pendingInputFocus.value = true
+    focusInput()
+  }
+})
+
+watch(sending, (loading) => {
+  if (!loading && pendingInputFocus.value) {
+    focusInput()
+  }
+})
+
 onMounted(() => {
   if (typeof window !== 'undefined') {
     window.addEventListener('keydown', handleKeydown)
+    focusInput()
   }
 })
 
@@ -513,6 +545,7 @@ onBeforeUnmount(() => {
 }
 .ai-input__field {
   width: 100%;
+  font-size: 16px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.15);
   padding: 0.65rem 0.75rem;
@@ -524,8 +557,8 @@ onBeforeUnmount(() => {
   opacity: 0.6;
 }
 .history-icon-button {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
   border: 1px solid rgba(255, 255, 255, 0.2);
   background: rgba(255, 255, 255, 0.08);

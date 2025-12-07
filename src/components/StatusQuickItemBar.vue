@@ -76,9 +76,7 @@ function formatTitle(item: StatusConsumable) {
 <style scoped>
 .status-quick-items__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(48px, 1fr));
-  gap: 6px;
-  margin-top: 8px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
 .status-quick-item {
@@ -89,7 +87,7 @@ function formatTitle(item: StatusConsumable) {
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.15);
   border-radius: 8px;
-  padding: 4px;
+  padding: 1px;
   cursor: pointer;
   transition: all 0.2s ease;
   color: white;

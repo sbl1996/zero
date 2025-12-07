@@ -99,7 +99,6 @@ type InventoryFilterKind = 'equipment' | 'stack' | 'quest'
 
 const inventoryFilterOptions: Array<{ value: InventoryFilterId; label: string; kind: InventoryFilterKind }> = [
   { value: 'all-equipment', label: '全部装备', kind: 'equipment' },
-  { value: 'equipped', label: '已穿戴', kind: 'equipment' },
   { value: 'weapon', label: '武器', kind: 'equipment' },
   { value: 'armor', label: '防具', kind: 'equipment' },
   { value: 'accessory', label: '饰品', kind: 'equipment' },
@@ -107,7 +106,7 @@ const inventoryFilterOptions: Array<{ value: InventoryFilterId; label: string; k
   { value: 'potion', label: '药水', kind: 'stack' },
   { value: 'coreShard', label: '晶核', kind: 'stack' },
   { value: 'material', label: '材料', kind: 'stack' },
-  { value: 'questItem', label: '任务物品', kind: 'quest' },
+  { value: 'questItem', label: '任务', kind: 'quest' },
 ]
 
 const inventoryFilter = ref<InventoryFilterId>('all-equipment')

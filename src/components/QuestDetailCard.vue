@@ -397,7 +397,7 @@ const rewardEntries = computed<RewardEntry[]>(() => {
           class="action-button outline"
           @click="emit('track')"
         >
-          前往目标 / 追踪任务
+          追踪任务
         </button>
       </div>
       <div class="action-hints">

@@ -13,16 +13,22 @@ importers:
     dependencies:
       openai:
         specifier: ^6.10.0
-        version: 6.10.0
+        version: 6.10.0(ws@8.18.3)
       pinia:
         specifier: ^3.0.3
         version: 3.0.3(typescript@5.9.3)(vue@3.5.22(typescript@5.9.3))
+      uuid:
+        specifier: ^13.0.0
+        version: 13.0.0
       vue:
         specifier: ^3.5.22
         version: 3.5.22(typescript@5.9.3)
       vue-router:
         specifier: ^4.5.1
         version: 4.5.1(vue@3.5.22(typescript@5.9.3))
+      ws:
+        specifier: ^8.18.3
+        version: 8.18.3
     devDependencies:
       '@types/node':
         specifier: ^24.6.0
@@ -33,6 +39,9 @@ importers:
       '@vue/tsconfig':
         specifier: ^0.8.1
         version: 0.8.1(typescript@5.9.3)(vue@3.5.22(typescript@5.9.3))
+      microsoft-cognitiveservices-speech-sdk:
+        specifier: ^1.47.0
+        version: 1.47.0
       ts-node:
         specifier: ^10.9.2
         version: 10.9.2(@types/node@24.6.2)(typescript@5.9.3)
@@ -368,6 +377,9 @@ packages:
   '@types/node@24.6.2':
     resolution: {integrity: sha512-d2L25Y4j+W3ZlNAeMKcy7yDsK425ibcAOO2t7aPTz6gNMH0z2GThtwENCDc0d/Pw9wgyRqE5Px1wkV7naz8ang==}
 
+  '@types/webrtc@0.0.37':
+    resolution: {integrity: sha512-JGAJC/ZZDhcrrmepU4sPLQLIOIAgs5oIK+Ieq90K8fdaNMhfdfqmYatJdgif1NDQtvrSlTOGJDUYHIDunuufOg==}
+
   '@vitejs/plugin-vue@6.0.1':
     resolution: {integrity: sha512-+MaE752hU0wfPFJEUAIxqw18+20euHHdxVtMvbFcOEpjEyfqXH/5DCoTHiVJ0J29EhTJdoTkjEv5YBKU9dnoTw==}
     engines: {node: ^20.19.0 || >=22.12.0}
@@ -453,6 +465,14 @@ packages:
     engines: {node: '>=0.4.0'}
     hasBin: true
 
+  agent-base@5.1.1:
+    resolution: {integrity: sha512-TMeqbNl2fMW0nMjTEPOwe3J/PRFP4vqeoNuQMG0HlMrtm5QxKqdvAkZ1pRBQ/ulIyDD5Yq0nJ7YbdD8ey0TO3g==}
+    engines: {node: '>= 6.0.0'}
+
+  agent-base@6.0.2:
+    resolution: {integrity: sha512-RZNwNclF7+MS/8bDg70amg32dyeZGZxiDuQmZxKLAlQjr3jGyLx+4Kkk58UO7D2QdgFIQCovuSuZESne6RG6XQ==}
+    engines: {node: '>= 6.0.0'}
+
   alien-signals@3.0.0:
     resolution: {integrity: sha512-JHoRJf18Y6HN4/KZALr3iU+0vW9LKG+8FMThQlbn4+gv8utsLIkwpomjElGPccGeNwh0FI2HN6BLnyFLo6OyLQ==}
 
@@ -463,8 +483,17 @@ packages:
   arg@4.1.3:
     resolution: {integrity: sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==}
 
+  bent@7.3.12:
+    resolution: {integrity: sha512-T3yrKnVGB63zRuoco/7Ybl7BwwGZR0lceoVG5XmQyMIH9s19SV5m+a8qam4if0zQuAmOQTyPTPmsQBdAorGK3w==}
+
   birpc@2.6.1:
     resolution: {integrity: sha512-LPnFhlDpdSH6FJhJyn4M0kFO7vtQ5iPw24FnG0y21q09xC7e8+1LeR31S1MAIrDAHp4m7aas4bEkTDTvMAtebQ==}
+
+  bytesish@0.4.4:
+    resolution: {integrity: sha512-i4uu6M4zuMUiyfZN4RU2+i9+peJh//pXhd9x1oSe1LBkZ3LEbCoygu8W0bXTukU1Jme2txKuotpCZRaC3FLxcQ==}
+
+  caseless@0.12.0:
+    resolution: {integrity: sha512-4tYFyifaFfGacoiObjJegolkwSU4xQNGbVgUiNYVUxbQ2x2lUsFvY4hVgVzGiIe6WLOPqycWXA40l+PWsxthUw==}
 
   copy-anything@3.0.5:
     resolution: {integrity: sha512-yCEafptTtb4bk7GLEQoM8KVJpxAfdBJYaXyzQEgQQQgYrZiDp8SJmGKlYza6CYjEDNstAdNdKA3UuoULlEbS6w==}
@@ -475,6 +504,15 @@ packages:
 
   csstype@3.1.3:
     resolution: {integrity: sha512-M1uQkMl8rQK/szD0LNhtqxIPLpimGm8sOBwU7lLnCpSbTyY3yeU1Vc7l4KT5zT4s/yOxHH5O7tIuuLOCnLADRw==}
+
+  debug@4.4.3:
+    resolution: {integrity: sha512-RGwwWnwQvkVfavKVt22FGLw+xYSdzARwm0ru6DhTVA3umU5hZc28V3kO4stgYryrTlLpuvgI9GiijltAjNbcqA==}
+    engines: {node: '>=6.0'}
+    peerDependencies:
+      supports-color: '*'
+    peerDependenciesMeta:
+      supports-color:
+        optional: true
 
   detect-libc@2.1.1:
     resolution: {integrity: sha512-ecqj/sy1jcK1uWrwpR67UhYrIFQ+5WlGxth34WquCbamhFA6hkkwiu37o6J5xCHdo1oixJRfVRw+ywV+Hq/0Aw==}
@@ -515,6 +553,14 @@ packages:
 
   hookable@5.5.3:
     resolution: {integrity: sha512-Yc+BQe8SvoXH1643Qez1zqLRmbA5rCL+sSmk6TVos0LWVfNIB7PGncdlId77WzLGSIB5KaWgTaNTs2lNVEI6VQ==}
+
+  https-proxy-agent@4.0.0:
+    resolution: {integrity: sha512-zoDhWrkR3of1l9QAL8/scJZyLu8j/gBkcwcaQOZh7Gyh/+uJQzGVETdgT30akuwkpL8HTRfssqI3BZuV18teDg==}
+    engines: {node: '>= 6.0.0'}
+
+  is-stream@2.0.1:
+    resolution: {integrity: sha512-hFoiJiTl63nn+kstHGBtewWSKnQLpyb155KHheA1l39uvtO9nWIop1p3udqPcUd/xbF1VLMO4n7OI6p7RbngDg==}
+    engines: {node: '>=8'}
 
   is-what@4.1.16:
     resolution: {integrity: sha512-ZhMwEosbFJkA0YhFnNDgTM4ZxDRsS6HqTo7qsZM08fehyRYIYa0yHu5R6mgo1n/8MgaPBXiPimPD77baVFYg+A==}
@@ -600,8 +646,14 @@ packages:
   make-error@1.3.6:
     resolution: {integrity: sha512-s8UhlNe7vPKomQhC1qFelMokr/Sc3AgNbso3n74mVPA5LTZwkB9NlXf4XPamLxJE8h0gh73rM94xvwRT2CVInw==}
 
+  microsoft-cognitiveservices-speech-sdk@1.47.0:
+    resolution: {integrity: sha512-uLDuFPQ/xRlHeBLtypF5Rh9DgEJW6YMrhwDyd0PaF4I2xLxPKUp6Seq9YQ4B3MUfmQaBdwMd15W+uFBSt/RS2g==}
+
   mitt@3.0.1:
     resolution: {integrity: sha512-vKivATfr97l2/QBCYAkXYDbrIWPM2IIKEl7YPhjCvKlG3kE2gm+uBo6nEXK3M5/Ffh/FLpKExzOQ3JJoJGFKBw==}
+
+  ms@2.1.3:
+    resolution: {integrity: sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==}
 
   muggle-string@0.4.1:
     resolution: {integrity: sha512-VNTrAak/KhO2i8dqqnqnAHOa3cYBwXEZe9h+D5h/1ZqFSTEFHdM65lR7RoIqq3tBBYavsOXV84NoHXZ0AkPyqQ==}
@@ -746,6 +798,14 @@ packages:
   undici-types@7.13.0:
     resolution: {integrity: sha512-Ov2Rr9Sx+fRgagJ5AX0qvItZG/JKKoBRAVITs1zk7IqZGTJUwgUr7qoYBpWwakpWilTZFM98rG/AFRocu10iIQ==}
 
+  uuid@13.0.0:
+    resolution: {integrity: sha512-XQegIaBTVUjSHliKqcnFqYypAd4S+WCYt5NIeRs6w/UAry7z8Y9j5ZwRRL4kzq9U3sD6v+85er9FvkEaBpji2w==}
+    hasBin: true
+
+  uuid@9.0.1:
+    resolution: {integrity: sha512-b+1eJOlsR9K8HJpow9Ok3fiWOWSIcIzXodvv0rQjVoOVNpWMpxf1wZNpt4y9h10odCNrqnYp1OBzRktckBe3sA==}
+    hasBin: true
+
   v8-compile-cache-lib@3.0.1:
     resolution: {integrity: sha512-wa7YjyUGfNZngI/vtK0UHAN+lgDCxBPCylVXGp0zu59Fz5aiGtNXaq3DhIov063MorB+VfufLh3JlF2KdTK3xg==}
 
@@ -769,6 +829,18 @@ packages:
       typescript: '*'
     peerDependenciesMeta:
       typescript:
+        optional: true
+
+  ws@8.18.3:
+    resolution: {integrity: sha512-PEIGCY5tSlUt50cqyMXfCzX+oOPqN0vuGqWzbcJ2xvnkzkq46oOpz7dQaTDBdfICb4N14+GARUDw2XV2N4tvzg==}
+    engines: {node: '>=10.0.0'}
+    peerDependencies:
+      bufferutil: ^4.0.1
+      utf-8-validate: '>=5.0.2'
+    peerDependenciesMeta:
+      bufferutil:
+        optional: true
+      utf-8-validate:
         optional: true
 
   yn@3.1.1:
@@ -973,6 +1045,8 @@ snapshots:
     dependencies:
       undici-types: 7.13.0
 
+  '@types/webrtc@0.0.37': {}
+
   '@vitejs/plugin-vue@6.0.1(rolldown-vite@7.1.14(@types/node@24.6.2)(tsx@4.21.0))(vue@3.5.22(typescript@5.9.3))':
     dependencies:
       '@rolldown/pluginutils': 1.0.0-beta.29
@@ -1088,13 +1162,31 @@ snapshots:
 
   acorn@8.15.0: {}
 
+  agent-base@5.1.1: {}
+
+  agent-base@6.0.2:
+    dependencies:
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
+
   alien-signals@3.0.0: {}
 
   ansis@4.2.0: {}
 
   arg@4.1.3: {}
 
+  bent@7.3.12:
+    dependencies:
+      bytesish: 0.4.4
+      caseless: 0.12.0
+      is-stream: 2.0.1
+
   birpc@2.6.1: {}
+
+  bytesish@0.4.4: {}
+
+  caseless@0.12.0: {}
 
   copy-anything@3.0.5:
     dependencies:
@@ -1103,6 +1195,10 @@ snapshots:
   create-require@1.1.1: {}
 
   csstype@3.1.3: {}
+
+  debug@4.4.3:
+    dependencies:
+      ms: 2.1.3
 
   detect-libc@2.1.1: {}
 
@@ -1153,6 +1249,15 @@ snapshots:
       resolve-pkg-maps: 1.0.0
 
   hookable@5.5.3: {}
+
+  https-proxy-agent@4.0.0:
+    dependencies:
+      agent-base: 5.1.1
+      debug: 4.4.3
+    transitivePeerDependencies:
+      - supports-color
+
+  is-stream@2.0.1: {}
 
   is-what@4.1.16: {}
 
@@ -1211,13 +1316,30 @@ snapshots:
 
   make-error@1.3.6: {}
 
+  microsoft-cognitiveservices-speech-sdk@1.47.0:
+    dependencies:
+      '@types/webrtc': 0.0.37
+      agent-base: 6.0.2
+      bent: 7.3.12
+      https-proxy-agent: 4.0.0
+      uuid: 9.0.1
+      ws: 8.18.3
+    transitivePeerDependencies:
+      - bufferutil
+      - supports-color
+      - utf-8-validate
+
   mitt@3.0.1: {}
+
+  ms@2.1.3: {}
 
   muggle-string@0.4.1: {}
 
   nanoid@3.3.11: {}
 
-  openai@6.10.0: {}
+  openai@6.10.0(ws@8.18.3):
+    optionalDependencies:
+      ws: 8.18.3
 
   path-browserify@1.0.1: {}
 
@@ -1324,6 +1446,10 @@ snapshots:
 
   undici-types@7.13.0: {}
 
+  uuid@13.0.0: {}
+
+  uuid@9.0.1: {}
+
   v8-compile-cache-lib@3.0.1: {}
 
   vscode-uri@3.1.0: {}
@@ -1348,5 +1474,7 @@ snapshots:
       '@vue/shared': 3.5.22
     optionalDependencies:
       typescript: 5.9.3
+
+  ws@8.18.3: {}
 
   yn@3.1.1: {}

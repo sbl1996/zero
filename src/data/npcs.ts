@@ -399,8 +399,7 @@ export const NPC_DEFINITIONS: NpcDefinition[] = [
     title: '青苔原驻防',
     description: '观察野狼的动向与牙齿锋利程度，对路过者直接提出采集请求。',
     portrait: {
-      image: 'npc-guard-zhenxiang.webp',
-      variant: 'silhouette',
+      image: 'npc-guard-thomas.webp',
     },
     mode: 'ai',
     aiProfile: {

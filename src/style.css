@@ -60,7 +60,7 @@ button {
 }
 
 .app-shell {
-  max-width: 1300px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 24px 24px 64px;
 }
@@ -1687,7 +1687,7 @@ button {
   box-shadow: 0 4px 12px rgba(255, 179, 0, 0.3);
 }
 
-@media (max-width: 900px) {
+@media (max-width: 1000px) {
   .app-shell {
     padding: 12px;
   }
@@ -1843,5 +1843,17 @@ button {
   .flex-between {
     flex-wrap: wrap;
     gap: 8px;
+  }
+}
+
+@media (max-width: 1000px), (pointer: coarse) {
+  html, body {
+    min-height: 100dvh;
+    min-height: 100svh;
+    min-height: auto;
+    /* overflow: hidden;
+    position: fixed;
+    inset: 0;
+    width: 100%; */
   }
 }

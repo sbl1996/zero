@@ -275,8 +275,8 @@ async function useItem(itemId: string) {
       </table>
     </div>
 
-    <div class="panel" style="margin-top: 20px; background: rgba(255,255,255,0.04);">
-      <h3 class="section-title" style="font-size: 16px; margin-top: 0;">快捷道具栏</h3>
+    <div class="panel" style="margin-top: 20px; padding: 10px; background: rgba(255,255,255,0.04);">
+      <!-- <h3 class="section-title" style="font-size: 16px; margin-top: 0;">快捷道具栏</h3> -->
       <StatusQuickItemBar
         :items="statusQuickConsumables"
         :locked="statusQuickBarLocked"
