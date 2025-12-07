@@ -286,9 +286,9 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .equipment-shell {
-  padding: 20px;
-  border-radius: 28px;
-  background: rgba(6, 8, 16, 0.92);
+  padding: 0px;
+  border: none;
+  background: transparent;
 }
 
 .equipment-head {
@@ -307,13 +307,13 @@ onBeforeUnmount(() => {
 .equipment-stage {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .equipment-main {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px;
+  gap: 16px;
   align-items: stretch;
 }
 
@@ -343,7 +343,7 @@ onBeforeUnmount(() => {
 
 .quick-slot-panel {
   padding: 16px 20px;
-  border-radius: 20px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: rgba(255, 255, 255, 0.02);
 }
@@ -354,7 +354,7 @@ onBeforeUnmount(() => {
 }
 
 .quick-slot-panel header p {
-  margin: 4px 0 12px;
+  margin: 0 0 12px;
   font-size: 13px;
   color: rgba(255, 255, 255, 0.6);
 }

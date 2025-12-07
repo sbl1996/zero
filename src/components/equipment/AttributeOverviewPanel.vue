@@ -80,9 +80,8 @@ onBeforeUnmount(() => {
 
 <style scoped>
 .equipment-attribute-panel {
-  margin-top: 8px;
   padding: 16px 20px;
-  border-radius: 20px;
+  border-radius: 16px;
   background: linear-gradient(145deg, rgba(18, 24, 44, 0.95), rgba(6, 8, 16, 0.92));
   border: 1px solid rgba(255, 255, 255, 0.08);
   width: 100%;

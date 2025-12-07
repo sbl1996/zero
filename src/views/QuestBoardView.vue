@@ -79,6 +79,12 @@ const selectedProgress = computed(() => {
   return questStore.progressOf(id)
 })
 
+const selectedTracked = computed(() => {
+  const id = selectedQuestId.value
+  if (!id) return false
+  return questStore.isTracked(id)
+})
+
 const feedback = ref<{ message: string; kind: 'success' | 'error' } | null>(null)
 
 function setFeedback(message: string, kind: 'success' | 'error') {
@@ -112,6 +118,17 @@ function submitQuest(id: string) {
     questOverlay.showReward(id, questName, rewards, rewards.notes ?? '奖励已发放。')
   } else {
     setFeedback('尚未满足提交条件。', 'error')
+  }
+}
+
+function toggleTrack(id: string, track: boolean) {
+  const ok = questStore.toggleTrack(id, track)
+  if (ok && track) {
+    setFeedback('已添加到追踪面板，野外界面可见。', 'success')
+  } else if (ok && !track) {
+    setFeedback('已从追踪面板移除。', 'success')
+  } else if (!ok && track) {
+    setFeedback('只能追踪进行中或可提交的任务。', 'error')
   }
 }
 </script>
@@ -206,11 +223,12 @@ function submitQuest(id: string) {
           :quest="selectedQuest"
           :status="selectedStatus"
           :progress="selectedProgress"
+          :is-tracked="selectedTracked"
           :show-accept="selectedStatus === 'available'"
           :show-submit="selectedStatus === 'readyToTurnIn'"
           @accept="acceptQuest(selectedQuest.id)"
           @submit="submitQuest(selectedQuest.id)"
-          @track="setFeedback('已锁定任务，前往/导航功能稍后接入。', 'success')"
+          @track="toggleTrack(selectedQuest.id, $event)"
         />
 
         <div v-else class="quest-board__empty">

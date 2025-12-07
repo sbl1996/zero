@@ -171,10 +171,8 @@ function equipToFirstEmpty(skillId: string) {
 
 <template>
   <section class="panel">
-    <h2 class="section-title">技能配置</h2>
-    <p class="text-muted text-small">在此管理角色掌握的技能，并为战斗界面四个技能槽位进行装备。</p>
-
-  <div class="panel" style="margin-top: 16px; background: rgba(255,255,255,0.04);">
+    <h1 class="section-title">功法</h1>
+    <div class="panel" style="margin-top: 16px; padding: 16px; background: rgba(255,255,255,0.04);">
       <h3 class="section-title" style="font-size: 16px;">斗气功法</h3>
       <div v-if="cultivationMethods.length === 0" class="text-small text-muted">暂未掌握任何斗气功法。</div>
       <div v-else class="method-list">

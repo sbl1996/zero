@@ -81,6 +81,12 @@ const selectedActiveProgress = computed(() => {
   return questStore.progressOf(id)
 })
 
+const selectedActiveTracked = computed(() => {
+  const id = selectedActiveQuestId.value
+  if (!id) return false
+  return questStore.isTracked(id)
+})
+
 const completionLog = computed(() => questStore.completionLogView)
 
 const selectedLogIndex = ref(0)
@@ -135,6 +141,17 @@ function abandonQuest(id: string) {
     setFeedback('任务已放弃，相关任务物品已清理。', 'success')
   } else {
     setFeedback('无法放弃该任务。', 'error')
+  }
+}
+
+function toggleTrack(id: string, track: boolean) {
+  const ok = questStore.toggleTrack(id, track)
+  if (ok && track) {
+    setFeedback('已添加到追踪面板，野外界面可见。', 'success')
+  } else if (ok && !track) {
+    setFeedback('已从追踪面板移除。', 'success')
+  } else if (!ok && track) {
+    setFeedback('只能追踪进行中或可提交的任务。', 'error')
   }
 }
 
@@ -240,9 +257,10 @@ function formatSkillName(skillId: string) {
           :quest="selectedActiveQuest"
           :status="selectedActiveStatus"
           :progress="selectedActiveProgress"
+          :is-tracked="selectedActiveTracked"
           :show-abandon="showAbandonButton(selectedActiveStatus, selectedActiveQuest.allowAbandon)"
           @abandon="abandonQuest(selectedActiveQuest.id)"
-          @track="setFeedback('已锁定任务，前往/导航功能稍后接入。', 'success')"
+          @track="toggleTrack(selectedActiveQuest.id, $event)"
         />
 
         <div v-else class="quest-empty-detail">

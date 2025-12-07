@@ -163,68 +163,104 @@
               <AiNpcPanel />
             </div>
             <aside class="node-sidebar">
-              <div class="node-header">
-                <h4 class="node-title">{{ currentNode?.label ?? '未选择节点' }}</h4>
-                <p v-if="nodeHint" class="node-hint">{{ nodeHint }}</p>
-              </div>
-              <p v-if="currentNode?.description" class="node-description">
-                {{ currentNode.description }}
-              </p>
-              <div class="node-list">
-                <p v-if="!nodeListEntries.length" class="node-list__empty">
-                  这里空荡荡的...
+              <div class="node-section node-section--encounters">
+                <div class="node-header">
+                  <h4 class="node-title">{{ currentNode?.label ?? '未选择节点' }}</h4>
+                  <p v-if="nodeHint" class="node-hint">{{ nodeHint }}</p>
+                </div>
+                <p v-if="currentNode?.description" class="node-description">
+                  {{ currentNode.description }}
                 </p>
-                <ul v-else class="node-entry-list">
-                  <li v-for="entry in nodeListEntries" :key="entry.key">
-                    <button
-                      type="button"
-                      class="node-entry"
-                      :class="[
-                        `node-entry--${entry.kind}`,
-                        {
-                          locked: entry.kind === 'portal' && entry.locked,
-                          boss: entry.kind === 'monster' && entry.monster?.isBoss
-                        }
-                      ]"
-                      :disabled="entry.kind === 'portal' && entry.locked"
-                      @mouseenter="handleEntryHover(entry)"
-                      @mouseleave="handleEntryLeave(entry)"
-                      @focus="handleEntryHover(entry)"
-                      @blur="handleEntryLeave(entry)"
-                      @click="handleEntryClick(entry)"
-                    >
-                      <span
-                        class="node-entry__title"
-                        :class="entry.kind === 'monster' ? getMonsterNameColorClass(entry.monster) : undefined"
+                <div class="node-list">
+                  <p v-if="!nodeListEntries.length" class="node-list__empty">
+                    这里空荡荡的...
+                  </p>
+                  <ul v-else class="node-entry-list">
+                    <li v-for="entry in nodeListEntries" :key="entry.key">
+                      <button
+                        type="button"
+                        class="node-entry"
+                        :class="[
+                          `node-entry--${entry.kind}`,
+                          {
+                            locked: entry.kind === 'portal' && entry.locked,
+                            boss: entry.kind === 'monster' && entry.monster?.isBoss
+                          }
+                        ]"
+                        :disabled="entry.kind === 'portal' && entry.locked"
+                        @mouseenter="handleEntryHover(entry)"
+                        @mouseleave="handleEntryLeave(entry)"
+                        @focus="handleEntryHover(entry)"
+                        @blur="handleEntryLeave(entry)"
+                        @click="handleEntryClick(entry)"
                       >
-                      <template v-if="entry.kind === 'monster'">
-                        {{ entry.monster?.name ?? entry.monsterId }}
-                      </template>
-                      <template v-else-if="entry.kind === 'npc'">
-                        {{ entry.name }}
-                      </template>
-                      <template v-else-if="entry.kind === 'travel'">
-                        {{ entry.label }}
-                      </template>
-                      <template v-else>
-                        {{ entry.label }}
-                      </template>
+                        <span
+                          class="node-entry__title"
+                          :class="entry.kind === 'monster' ? getMonsterNameColorClass(entry.monster) : undefined"
+                        >
+                        <template v-if="entry.kind === 'monster'">
+                          {{ entry.monster?.name ?? entry.monsterId }}
+                        </template>
+                        <template v-else-if="entry.kind === 'npc'">
+                          {{ entry.name }}
+                        </template>
+                        <template v-else-if="entry.kind === 'travel'">
+                          {{ entry.label }}
+                        </template>
+                        <template v-else>
+                          {{ entry.label }}
+                        </template>
+                        </span>
+                        <span class="node-entry__meta">
+                        <template v-if="entry.kind === 'monster'">
+                          {{ entry.monster ? describeMonsterRealm(entry.monster) : '未知等级' }}
+                        </template>
+                        <template v-else-if="entry.kind === 'npc'">
+                          NPC
+                        </template>
+                        <template v-else-if="entry.kind === 'travel'">
+                          传送 · {{ entry.category === 'city' ? '城市' : '野外' }}
+                        </template>
+                        <template v-else>
+                          {{ entry.locked ? '未解锁' : '传送' }}
+                        </template>
                       </span>
-                      <span class="node-entry__meta">
-                      <template v-if="entry.kind === 'monster'">
-                        {{ entry.monster ? describeMonsterRealm(entry.monster) : '未知等级' }}
-                      </template>
-                      <template v-else-if="entry.kind === 'npc'">
-                        NPC
-                      </template>
-                      <template v-else-if="entry.kind === 'travel'">
-                        传送 · {{ entry.category === 'city' ? '城市' : '野外' }}
-                      </template>
-                      <template v-else>
-                        {{ entry.locked ? '未解锁' : '传送' }}
-                      </template>
-                    </span>
-                    </button>
+                      </button>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+
+              <div class="node-section node-section--tracker">
+                <div class="tracker-head">
+                  <div>
+                    <h4 class="node-title">追踪任务</h4>
+                  </div>
+                </div>
+                <p v-if="!trackedQuests.length" class="tracker-empty">
+                  点击任务详情中的“追踪任务”按钮可在此快速查看进度。
+                </p>
+                <ul v-else class="tracker-list">
+                  <li
+                    v-for="quest in trackedQuests"
+                    :key="quest.id"
+                    class="tracker-card"
+                    :data-state="quest.status"
+                  >
+                    <div class="tracker-card__title">
+                      <span class="tracker-name">{{ quest.name }}</span>
+                    </div>
+                    <ul class="tracker-objectives">
+                      <li
+                        v-for="objective in quest.objectives"
+                        :key="objective.id"
+                        class="tracker-objective"
+                        :class="{ completed: objective.completed }"
+                      >
+                        <span class="tracker-dot" />
+                        <span class="tracker-text">{{ objective.label }}</span>
+                      </li>
+                    </ul>
                   </li>
                 </ul>
               </div>
@@ -308,8 +344,12 @@ import { useProgressStore } from '@/stores/progress'
 import { useNodeSpawnStore } from '@/stores/nodeSpawns'
 import { useNpcDialogStore } from '@/stores/npcDialog'
 import { useAiNpcStore } from '@/stores/aiNpc'
+import { useQuestStore } from '@/stores/quests'
+import { ITEMS } from '@/data/items'
+import { QUEST_ITEM_DEFINITIONS } from '@/data/quests'
+import { MONSTER_BLUEPRINTS } from '@/data/monsters'
 import type { GameMap, MapCategory, MapLocation, MapNode } from '@/types/map'
-import type { Monster, MonsterSpecialization } from '@/types/domain'
+import type { Monster, MonsterSpecialization, QuestObjective, QuestProgressEntry, QuestRuntimeStatus } from '@/types/domain'
 
 const route = useRoute()
 const router = useRouter()
@@ -320,6 +360,7 @@ const player = usePlayerStore()
 const nodeSpawns = useNodeSpawnStore()
 const npcDialog = useNpcDialogStore()
 const aiNpc = useAiNpcStore()
+const quests = useQuestStore()
 
 const travelHubId = 'courier-station'
 
@@ -352,6 +393,23 @@ type NodeListEntry =
       label: string
       category: MapCategory
     }
+
+const itemNameMap = new Map(ITEMS.map(item => [item.id, item.name]))
+const questItemNameMap = new Map(QUEST_ITEM_DEFINITIONS.map(item => [item.id, item.name]))
+const monsterNameMap = new Map(MONSTER_BLUEPRINTS.map(monster => [monster.id, monster.name]))
+
+type TrackedObjectiveView = {
+  id: string
+  label: string
+  completed: boolean
+}
+
+type TrackedQuestView = {
+  id: string
+  name: string
+  status: QuestRuntimeStatus
+  objectives: TrackedObjectiveView[]
+}
 
 function getSpecializationLabel(specialization: MonsterSpecialization): string {
   const labels: Record<MonsterSpecialization, string> = {
@@ -395,6 +453,52 @@ function getMonsterNameColorClass(monster?: Monster): string | undefined {
     return 'node-entry__title--calamity'
   }
   return undefined
+}
+
+function resolveObjectiveTargetName(objective: QuestObjective): string {
+  const fallback = objective.description ?? '任务目标'
+  if (objective.type === 'kill') {
+    const names = objective.monsterIds.map(id => monsterNameMap.get(id) ?? id).filter(Boolean)
+    if (names.length) return names.join('、')
+    return fallback
+  }
+  if (objective.type === 'killCollect') {
+    const questItemName = questItemNameMap.get(objective.itemId) ?? itemNameMap.get(objective.itemId)
+    if (questItemName) return questItemName
+    const monsters = objective.monsterIds.map(id => monsterNameMap.get(id) ?? id).filter(Boolean)
+    if (monsters.length) return monsters.join('、')
+    return fallback
+  }
+  if (objective.type === 'collect') {
+    return questItemNameMap.get(objective.itemId) ?? itemNameMap.get(objective.itemId) ?? objective.itemId
+  }
+  return fallback
+}
+
+function formatObjectiveProgressLabel(objective: QuestObjective, progress: QuestProgressEntry | null) {
+  const target = objective.amount
+  const current = progress?.objectives[objective.id]?.current ?? 0
+  const label = resolveObjectiveTargetName(objective)
+  return `${label}（${current}/${target}）`
+}
+
+function buildTrackedQuestView(questId: string): TrackedQuestView | null {
+  const definition = quests.definitionMap[questId]
+  if (!definition) return null
+  const status = quests.getStatus(questId)
+  if (status !== 'active' && status !== 'readyToTurnIn') return null
+  const progress = quests.progressOf(questId)
+  const objectives = definition.objectives.map((objective) => ({
+    id: objective.id,
+    label: formatObjectiveProgressLabel(objective, progress),
+    completed: progress?.objectives[objective.id]?.completed ?? false,
+  }))
+  return {
+    id: questId,
+    name: definition.name,
+    status,
+    objectives,
+  }
 }
 
 const now = ref(Date.now())
@@ -693,6 +797,12 @@ const nodeListEntries = computed<NodeListEntry[]>(() => {
   }
   return entries
 })
+
+const trackedQuests = computed<TrackedQuestView[]>(() =>
+  quests.tracked
+    .map((questId) => buildTrackedQuestView(questId))
+    .filter((entry): entry is TrackedQuestView => !!entry),
+)
 
 const focusedMonster = computed(() => {
   if (!focusedMonsterInstanceId.value) return null
@@ -1246,8 +1356,8 @@ watch(
 
 .wild-layout {
   display: grid;
-  grid-template-columns: minmax(220px, 280px) 1fr;
-  gap: 1.5rem;
+  grid-template-columns: 24% 1fr;
+  gap: 0.75rem;
   height: 100%;
   box-sizing: border-box;
   align-items: stretch;
@@ -1290,7 +1400,7 @@ watch(
 
 .wild-content {
   display: flex;
-  gap: 1.25rem;
+  gap: 0.75rem;
   align-items: stretch;
 }
 
@@ -1377,14 +1487,31 @@ watch(
 }
 
 .node-sidebar {
-  flex: 0 0 200px;
+  flex: 0 0 24%;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.75rem;
+  padding: 0;
+  background: none;
+  border: none;
+  box-sizing: border-box;
+  height: 100%;
+}
+
+.node-section {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 0.8rem;
   display: flex;
   flex-direction: column;
-  gap: 0.9rem;
-  border-radius: 12px;
-  padding: 1rem;
-  background: rgba(8, 12, 18, 0.9);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  gap: 0.6rem;
+  min-height: 0;
+}
+
+.node-section--encounters,
+.node-section--tracker {
+  overflow: hidden;
 }
 
 .node-header {
@@ -1415,12 +1542,127 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.node-section--encounters .node-list {
+  overflow-y: auto;
 }
 
 .node-list__empty {
   margin: 0;
   font-size: 0.85rem;
   color: rgba(255, 255, 255, 0.7);
+}
+
+.tracker-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.35rem;
+}
+
+.tracker-subtitle {
+  margin: 0.1rem 0 0;
+  font-size: 0.8rem;
+  color: rgba(255, 255, 255, 0.6);
+}
+
+.tracker-empty {
+  margin: 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+.tracker-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow-y: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.tracker-card {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.6rem 0.7rem;
+  background: linear-gradient(145deg, rgba(18, 28, 40, 0.75), rgba(12, 18, 28, 0.7));
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tracker-card[data-state='active'] {
+  border-color: rgba(76, 201, 240, 0.25);
+}
+
+.tracker-card[data-state='readyToTurnIn'] {
+  border-color: rgba(246, 211, 101, 0.55);
+  background: linear-gradient(145deg, rgba(40, 32, 12, 0.6), rgba(18, 14, 8, 0.7));
+}
+
+.tracker-card__title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.tracker-name {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #f3f4f6;
+}
+
+.tracker-card[data-state='active'] .tracker-name {
+  color: #ffffff;
+}
+
+.tracker-card[data-state='readyToTurnIn'] .tracker-name {
+  color: #f6d365;
+}
+
+.tracker-objectives {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.tracker-objective {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.tracker-objective.completed {
+  color: #c4f4cf;
+}
+
+.tracker-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.4);
+  flex-shrink: 0;
+}
+
+.tracker-objective.completed .tracker-dot {
+  background: #22c55e;
+  box-shadow: 0 0 0 4px rgba(34, 197, 94, 0.12);
+}
+
+.tracker-text {
+  flex: 1;
 }
 
 .node-footer-hint {
@@ -1642,6 +1884,7 @@ watch(
 
   .node-sidebar {
     flex: 1 1 auto;
+    grid-template-rows: auto auto;
   }
   .wild-layout {
     grid-template-columns: minmax(200px, 240px) 1fr;

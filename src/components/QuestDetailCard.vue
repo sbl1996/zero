@@ -17,13 +17,14 @@ const props = defineProps<{
   showAccept?: boolean
   showSubmit?: boolean
   showAbandon?: boolean
+  isTracked?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'accept'): void
   (e: 'submit'): void
   (e: 'abandon'): void
-  (e: 'track'): void
+  (e: 'track', track: boolean): void
 }>()
 
 const statusTextMap: Record<QuestRuntimeStatus, string> = {
@@ -147,6 +148,8 @@ const difficultyStars = computed(() => {
 
 const questVisual = computed(() => resolveQuestVisual(props.quest))
 const showTrackButton = computed(() => props.status === 'active' || props.status === 'readyToTurnIn')
+const isTracked = computed(() => !!props.isTracked)
+const trackButtonLabel = computed(() => (isTracked.value ? '取消追踪' : '追踪任务'))
 
 type RewardKind = 'gold' | 'item' | 'equipment' | 'skill' | 'note'
 interface RewardEntry {
@@ -395,9 +398,10 @@ const rewardEntries = computed<RewardEntry[]>(() => {
           v-if="showTrackButton"
           type="button"
           class="action-button outline"
-          @click="emit('track')"
+          :class="{ active: isTracked }"
+          @click="emit('track', !isTracked)"
         >
-          追踪任务
+          {{ trackButtonLabel }}
         </button>
       </div>
       <div class="action-hints">
@@ -943,6 +947,12 @@ const rewardEntries = computed<RewardEntry[]>(() => {
   border-color: rgba(255, 255, 255, 0.2);
   color: var(--quest-text);
   box-shadow: 0 10px 18px rgba(0, 0, 0, 0.24);
+}
+
+.action-button.outline.active {
+  border-color: rgba(99, 241, 178, 0.65);
+  color: #b6f7d7;
+  box-shadow: 0 10px 18px rgba(99, 241, 178, 0.22);
 }
 
 .action-button:hover {

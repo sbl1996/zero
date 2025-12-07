@@ -37,12 +37,6 @@ function formatTitle(item: StatusConsumable) {
 
 <template>
   <div class="status-quick-items">
-    <div
-      v-if="props.locked"
-      class="status-quick-items__lock"
-    >
-      冥想中无法使用快捷道具
-    </div>
     <div class="status-quick-items__grid">
       <button
         v-for="item in props.items"
@@ -128,15 +122,6 @@ function formatTitle(item: StatusConsumable) {
   width: 100%;
   height: 100%;
   object-fit: contain;
-}
-
-.status-quick-items__lock {
-  margin-top: 4px;
-  padding: 6px 10px;
-  border-radius: 6px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.75);
-  font-size: 13px;
 }
 
 .status-quick-item__quantity {

@@ -113,7 +113,7 @@ button {
 .app-main {
   background: rgba(0, 0, 0, 0.3);
   border-radius: 20px;
-  padding: 24px;
+  padding: 16px;
   box-shadow: 0 20px 40px rgba(3, 0, 20, 0.4);
 }
 
@@ -132,6 +132,7 @@ button {
 .section-title {
   font-size: 18px;
   font-weight: 600;
+  margin-top: 0px;
   margin-bottom: 12px;
   color: #f5d06f;
 }

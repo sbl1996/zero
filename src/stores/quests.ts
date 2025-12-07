@@ -49,6 +49,7 @@ interface MonsterDefeatContext {
 }
 
 let questEquipmentSequence = 1
+const MAX_TRACKED_QUESTS = 4
 
 function instantiateEquipmentFromTemplate(entry: QuestRewardEquipmentTemplate) {
   const template = BASE_EQUIPMENT_TEMPLATES.find(item => item.id === entry.templateId)
@@ -104,6 +105,7 @@ export const useQuestStore = defineStore('quests', {
     progressById: {} as Record<string, QuestProgressEntry>,
     questItems: {} as Record<string, number>,
     completionLog: [] as QuestSaveState['completionLog'],
+    tracked: [] as string[],
     watchersInitialized: false,
   }),
   getters: {
@@ -144,6 +146,7 @@ export const useQuestStore = defineStore('quests', {
       this.progressById = {}
       this.questItems = {}
       this.completionLog = []
+      this.tracked = []
       if (save) {
         this.active = [...(save.active ?? [])]
         this.readyToTurnIn = [...(save.readyToTurnIn ?? [])]
@@ -177,7 +180,9 @@ export const useQuestStore = defineStore('quests', {
             lastRewards: cloneQuestReward(entry.lastRewards),
           }))
         }
+        this.tracked = [...(save.tracked ?? [])]
       }
+      this.pruneTracked()
       this.refreshAvailability()
     },
     getStatus(questId: string): QuestRuntimeStatus {
@@ -198,6 +203,7 @@ export const useQuestStore = defineStore('quests', {
         active: [...this.active],
         readyToTurnIn: [...this.readyToTurnIn],
         completed: [...this.completed],
+        tracked: [...this.tracked],
         questItems: { ...this.questItems },
         completionLog: this.completionLog.map(entry => ({
           questId: entry.questId,
@@ -225,6 +231,41 @@ export const useQuestStore = defineStore('quests', {
           {} as Record<string, QuestProgressEntry>,
         ),
       }
+    },
+    isTracked(questId: string) {
+      return this.tracked.includes(questId)
+    },
+    canTrack(questId: string) {
+      const status = this.getStatus(questId)
+      return status === 'active' || status === 'readyToTurnIn'
+    },
+    pruneTracked() {
+      const seen = new Set<string>()
+      const filtered = this.tracked.filter((questId) => {
+        if (!this.canTrack(questId)) return false
+        if (seen.has(questId)) return false
+        seen.add(questId)
+        return true
+      })
+      this.tracked = filtered.slice(0, MAX_TRACKED_QUESTS)
+    },
+    track(questId: string) {
+      if (!this.canTrack(questId)) {
+        this.untrack(questId)
+        return false
+      }
+      const next = [questId, ...this.tracked.filter(id => id !== questId)]
+      this.tracked = next.slice(0, MAX_TRACKED_QUESTS)
+      return true
+    },
+    untrack(questId: string) {
+      const before = this.tracked.length
+      this.tracked = this.tracked.filter(id => id !== questId)
+      return this.tracked.length !== before
+    },
+    toggleTrack(questId: string, nextState?: boolean) {
+      const shouldTrack = typeof nextState === 'boolean' ? nextState : !this.isTracked(questId)
+      return shouldTrack ? this.track(questId) : this.untrack(questId)
     },
     initWatchers() {
       if (this.watchersInitialized) return
@@ -273,6 +314,7 @@ export const useQuestStore = defineStore('quests', {
         }
       })
       this.available = nextAvailable
+      this.pruneTracked()
     },
     accept(questId: string) {
       if (this.active.includes(questId) || this.readyToTurnIn.includes(questId)) return false
@@ -319,6 +361,7 @@ export const useQuestStore = defineStore('quests', {
         })
       }
       delete this.progressById[questId]
+      this.untrack(questId)
       this.refreshAvailability()
       return true
     },
@@ -403,6 +446,7 @@ export const useQuestStore = defineStore('quests', {
       if (!this.completed.includes(questId)) {
         this.completed.push(questId)
       }
+      this.untrack(questId)
       progress.status = 'completed'
       progress.completedAt = progress.completedAt ?? timestamp
       const existingIndex = this.completionLog.findIndex(entry => entry.questId === questId)

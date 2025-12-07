@@ -832,6 +832,7 @@ export interface QuestSaveState {
   questItems: Record<string, number>
   completionLog: QuestCompletionLogEntry[]
   progress: Record<string, QuestProgressEntry>
+  tracked: string[]
 }
 
 export interface QuestItemDefinition {

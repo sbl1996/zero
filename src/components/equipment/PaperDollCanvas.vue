@@ -59,7 +59,7 @@ function clearHover() {
   height: 100%;
   min-height: 0;
   padding: 48px 24px 72px;
-  border-radius: 28px;
+  border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.08);
   background: radial-gradient(circle at 50% 25%, rgba(36, 42, 66, 0.4), rgba(8, 10, 18, 0.9));
   overflow: hidden;

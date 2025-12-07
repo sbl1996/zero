@@ -72,9 +72,9 @@ const qiProgressActive = computed(() => !isMeditating.value && warmupPercent.val
 const qiProgressLabel = computed(() => {
   const percentText = `${warmupPercent.value}%`
   if (isMeditating.value) return '冥想中'
-  if (warmupPercent.value === 0) return `点击启动运转 · ${percentText}`
+  if (warmupPercent.value === 0) return `点击启动运转`
   if (isWarmingUp.value) return `预热中 · ${percentText}`
-  return `点击停止运转 · ${percentText}`
+  return `点击停止运转`
 })
 
 function formatRecoveryPerSecond(rate: number | undefined | null) {
@@ -98,6 +98,15 @@ const realmLabel = computed(() => {
   const realmName = REALM_LABELS[realm.tier] ?? realm.tier
   const phase = realm.phase && realm.phase !== 'none' ? `${PHASE_LABELS[realm.phase] ?? realm.phase}` : ''
   return `${realmName}战士 ${phase}`
+})
+
+const bpRangeMax = computed(() => Math.round(cultivation.value.bp.range.max))
+const bpProgressPercent = computed(() => {
+  const bp = cultivation.value.bp
+  const span = Math.max(bp.range.max - bp.range.min, 1)
+  const progress = (bp.current - bp.range.min) / span
+  const clamped = Math.min(Math.max(progress, 0), 1)
+  return Math.round(clamped * 100)
 })
 
 let qiTickTimer: ReturnType<typeof setInterval> | null = null
@@ -214,9 +223,6 @@ async function useItem(itemId: string) {
     <div class="flex flex-between gap-sm">
       <div>
         <div>{{ realmLabel }}</div>
-        <div class="text-muted text-small">
-          本源 {{ bpCurrent }}
-        </div>
       </div>
       <div class="text-right">
         <div>{{ gold }} G</div>
@@ -232,6 +238,11 @@ async function useItem(itemId: string) {
         <span class="resource-qi" :style="{ width: `${Math.floor(qiRate * 100)}%` }" />
       </div>
       <div class="text-small text-muted">斗气 {{ Math.round(res.qi) }} / {{ Math.round(res.qiMax) }} {{ qiRecoveryText }}</div>
+
+      <div class="resource-bar resource-bar--bp" style="margin: 14px 0 10px;">
+        <span class="resource-bp" :style="{ width: `${bpProgressPercent}%` }" />
+      </div>
+      <div class="text-small text-muted">本源 {{ bpCurrent }} / {{ bpRangeMax }} ({{ bpProgressPercent }}%)</div>
     </div>
 
     <div class="attribute-section">
@@ -379,6 +390,10 @@ async function useItem(itemId: string) {
 .attribute-title {
   font-size: 16px;
   margin-bottom: 12px;
+}
+
+.resource-bp {
+  background: linear-gradient(90deg, rgba(80, 180, 255, 0.9), rgba(130, 90, 255, 0.85));
 }
 
 /* 响应式调整 */
