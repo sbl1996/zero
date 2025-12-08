@@ -37,6 +37,19 @@ export interface AiNpcToolResult {
   rewardsSummary?: string
 }
 
+export type AiNpcTtsState = 'idle' | 'loading' | 'playing' | 'error'
+
+export interface AiNpcTtsSettings {
+  enabled: boolean
+  autoPlay: boolean
+  appId: string
+  accessKey: string
+  resourceId: string
+  endpoint: string
+  defaultVoiceId: string
+  sampleRate?: number
+}
+
 export interface AiNpcSettings {
   apiKey: string
   baseUrl: string

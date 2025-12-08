@@ -11,7 +11,7 @@ const aiNpc = useAiNpcStore()
 
 const { showSettings, autoRematchAfterVictory } = storeToRefs(ui)
 const { volume, muted } = storeToRefs(bgm)
-const { settings: aiSettings } = storeToRefs(aiNpc)
+const { settings: aiSettings, ttsSettings } = storeToRefs(aiNpc)
 
 const volumePercent = computed(() => Math.round(volume.value * 100))
 
@@ -75,6 +75,35 @@ function handleRetryCountInput(event: Event) {
   const value = Number(target.value)
   if (!Number.isFinite(value)) return
   aiNpc.setSettings({ maxRetries: Math.max(0, Math.round(value)) })
+}
+
+function handleTtsToggle(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  aiNpc.setTtsSettings({ enabled: target.checked })
+}
+
+function handleTtsAutoPlayToggle(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  aiNpc.setTtsSettings({ autoPlay: target.checked })
+}
+
+function handleTtsTextInput(
+  event: Event,
+  key: 'appId' | 'accessKey' | 'resourceId' | 'endpoint' | 'defaultVoiceId',
+) {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  aiNpc.setTtsSettings({ [key]: target.value.trim() })
+}
+
+function handleTtsSampleRateInput(event: Event) {
+  const target = event.target as HTMLInputElement | null
+  if (!target) return
+  const value = Number(target.value)
+  if (!Number.isFinite(value)) return
+  aiNpc.setTtsSettings({ sampleRate: Math.max(8000, Math.round(value)) })
 }
 </script>
 
@@ -171,6 +200,101 @@ function handleRetryCountInput(event: Event) {
                 placeholder="输入你的API Key"
                 :value="aiSettings.apiKey"
                 @input="(event) => handleAiTextInput(event, 'apiKey')"
+              >
+            </label>
+          </div>
+
+          <div class="settings-section settings-section--wide">
+            <div class="settings-section__head">
+              <div>
+                <h3 class="settings-section__title">AI NPC 语音</h3>
+                <p class="text-small text-muted" style="margin: 4px 0 0;">读取 VITE_TTS_* 默认值，前端直连抖音豆包 TTS，生成卫兵语音。</p>
+              </div>
+              <label class="settings-toggle">
+                <input
+                  class="settings-toggle__checkbox"
+                  type="checkbox"
+                  :checked="ttsSettings.enabled"
+                  @change="handleTtsToggle"
+                >
+                <div>
+                  <p class="settings-section__title" style="margin: 0;">开启</p>
+                  <p class="text-small text-muted" style="margin: 4px 0 0;">关闭后不触发语音合成。</p>
+                </div>
+              </label>
+            </div>
+            <label class="settings-toggle" style="margin-top: 0.35rem;">
+              <input
+                class="settings-toggle__checkbox"
+                type="checkbox"
+                :checked="ttsSettings.autoPlay"
+                @change="handleTtsAutoPlayToggle"
+              >
+              <div>
+                <p class="settings-section__title" style="margin: 0;">自动播放语音</p>
+                <p class="text-small text-muted" style="margin: 4px 0 0;">生成回复后自动朗读（纯工具调用无内容的轮次不会朗读）。</p>
+              </div>
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">App ID</span>
+              <input
+                class="settings-input"
+                type="text"
+                placeholder="VITE_TTS_APP_ID"
+                :value="ttsSettings.appId"
+                @input="(event) => handleTtsTextInput(event, 'appId')"
+              >
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Access Key</span>
+              <input
+                class="settings-input"
+                type="password"
+                placeholder="VITE_TTS_ACCESS_KEY"
+                :value="ttsSettings.accessKey"
+                @input="(event) => handleTtsTextInput(event, 'accessKey')"
+              >
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Resource ID</span>
+              <input
+                class="settings-input"
+                type="text"
+                placeholder="seed-tts-1.0"
+                :value="ttsSettings.resourceId"
+                @input="(event) => handleTtsTextInput(event, 'resourceId')"
+              >
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">Endpoint</span>
+              <input
+                class="settings-input"
+                type="text"
+                placeholder="wss://openspeech.bytedance.com/api/v3/tts/unidirectional/stream"
+                :value="ttsSettings.endpoint"
+                @input="(event) => handleTtsTextInput(event, 'endpoint')"
+              >
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">采样率</span>
+              <input
+                class="settings-input"
+                type="number"
+                min="8000"
+                step="1000"
+                placeholder="24000"
+                :value="ttsSettings.sampleRate ?? 24000"
+                @input="handleTtsSampleRateInput"
+              >
+            </label>
+            <label class="settings-field">
+              <span class="settings-field__label">默认音色</span>
+              <input
+                class="settings-input"
+                type="text"
+                placeholder="ICL_zh_male_zhengzhiqingnian_tob"
+                :value="ttsSettings.defaultVoiceId"
+                @input="(event) => handleTtsTextInput(event, 'defaultVoiceId')"
               >
             </label>
           </div>

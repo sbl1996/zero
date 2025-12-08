@@ -12,6 +12,7 @@ export interface AiNpcProfile {
   questId: string
   systemPrompt: string
   tools: AiNpcToolDefinition[]
+  ttsVoiceId?: string
 }
 
 export interface DialogueLine {

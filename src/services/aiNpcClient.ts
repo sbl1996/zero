@@ -58,7 +58,6 @@ async function streamOnce(params: StreamParams): Promise<StreamResult> {
     },
     { signal },
   )
-  console.log(messages)
 
   const toolCallsBuffer: Record<number, { id?: string; name?: string; arguments: string }> = {}
   let content = ''

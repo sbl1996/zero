@@ -9,6 +9,8 @@ import type {
   AiNpcStatusSnapshot,
   AiNpcToolCall,
   AiNpcToolResult,
+  AiNpcTtsSettings,
+  AiNpcTtsState,
   AiQuestStatus,
 } from '@/types/ai-npc'
 import { ITEMS } from '@/data/items'
@@ -18,6 +20,8 @@ import { useQuestStore } from './quests'
 import { usePlayerStore } from './player'
 import { useQuestOverlayStore } from './questOverlay'
 import type { NpcDefinition } from '@/types/npc'
+import { AiNpcTtsPlayer } from '@/services/aiNpcTtsPlayer'
+import { DEFAULT_TTS_ENDPOINT, DEFAULT_RESOURCE_ID, streamOnce as streamAiNpcTts } from '@/services/aiNpcTtsClient'
 
 interface AiNpcSessionState {
   npcId: string
@@ -26,9 +30,20 @@ interface AiNpcSessionState {
   loading: boolean
   error: string | null
   streamAbort?: AbortController | null
+  ttsState: AiNpcTtsState
+  ttsText: string | null
+  ttsVoiceId: string | null
+  ttsError: string | null
+  ttsAbort?: AbortController | null
+  ttsCacheKey?: string | null
+  ttsMessageId?: string | null
+  ttsNowPlayingMessageId?: string | null
+  ttsLastPlayedMessageId?: string | null
+  ttsQueue: { messageId: string; text: string }[]
 }
 
 const SETTINGS_STORAGE_KEY = 'ai-npc-settings'
+const TTS_SETTINGS_STORAGE_KEY = 'ai-npc-tts-settings'
 
 function numberOr<T extends number>(value: unknown, fallback: T): T {
   const parsed = typeof value === 'string' ? Number(value) : value
@@ -87,6 +102,71 @@ function nextMessageId(prefix = 'm'): string {
   return `${prefix}-${Date.now()}-${messageSequence}`
 }
 
+function normalizeTtsSettings(partial: Partial<AiNpcTtsSettings>, fallback: AiNpcTtsSettings): AiNpcTtsSettings {
+  return {
+    enabled: partial.enabled ?? fallback.enabled,
+    autoPlay: partial.autoPlay ?? fallback.autoPlay,
+    appId: partial.appId?.trim() ?? fallback.appId,
+    accessKey: partial.accessKey?.trim() ?? fallback.accessKey,
+    resourceId: partial.resourceId?.trim() ?? fallback.resourceId,
+    endpoint: partial.endpoint?.trim() ?? fallback.endpoint,
+    defaultVoiceId: partial.defaultVoiceId?.trim() ?? fallback.defaultVoiceId,
+    sampleRate: numberOr(partial.sampleRate, fallback.sampleRate ?? 24000),
+  }
+}
+
+function loadDefaultTtsSettings(): AiNpcTtsSettings {
+  const env = import.meta.env
+  const defaults: AiNpcTtsSettings = {
+    enabled: false,
+    autoPlay: false,
+    appId: env.VITE_TTS_APP_ID || '',
+    accessKey: env.VITE_TTS_ACCESS_KEY || '',
+    resourceId: env.VITE_TTS_RESOURCE_ID || DEFAULT_RESOURCE_ID,
+    endpoint: env.VITE_TTS_ENDPOINT || DEFAULT_TTS_ENDPOINT,
+    defaultVoiceId: env.VITE_TTS_DEFAULT_VOICE_ID || '',
+    sampleRate: numberOr(env.VITE_TTS_SAMPLE_RATE, 24000),
+  }
+
+  if (defaults.appId || defaults.accessKey || defaults.resourceId) {
+    defaults.enabled = true
+  }
+
+  if (typeof window === 'undefined') return defaults
+  try {
+    const stored = localStorage.getItem(TTS_SETTINGS_STORAGE_KEY)
+    if (!stored) return defaults
+    const parsed = JSON.parse(stored) as Partial<AiNpcTtsSettings>
+    return normalizeTtsSettings(parsed, defaults)
+  } catch (err) {
+    console.warn('[ai-npc] Failed to parse TTS settings', err)
+    return defaults
+  }
+}
+
+function persistTtsSettings(settings: AiNpcTtsSettings) {
+  if (typeof window === 'undefined') return
+  try {
+    localStorage.setItem(TTS_SETTINGS_STORAGE_KEY, JSON.stringify(settings))
+  } catch (err) {
+    console.warn('[ai-npc] Failed to persist TTS settings', err)
+  }
+}
+
+function buildTtsCacheKey(text: string, voiceId: string | null): string {
+  return `${voiceId ?? 'default'}::${text}`
+}
+
+function sanitizeTtsText(text: string | null | undefined): string | null {
+  if (!text) return null
+  // Strip stage directions or meta info in parentheses before TTS playback.
+  const cleaned = text
+    .replace(/[（(][^）)]*[）)]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return cleaned.length ? cleaned : null
+}
+
 const QUEST_ITEM_NAME_MAP = QUEST_ITEM_DEFINITIONS.reduce(
   (acc, item) => {
     acc[item.id] = item.name
@@ -94,6 +174,8 @@ const QUEST_ITEM_NAME_MAP = QUEST_ITEM_DEFINITIONS.reduce(
   },
   {} as Record<string, string>,
 )
+
+const ttsPlayer = new AiNpcTtsPlayer()
 
 function resolveItemName(itemId: string): string {
   const found = ITEMS.find(item => item.id === itemId)
@@ -225,12 +307,20 @@ function trimHistory(
   return messages.slice(messages.length - limit)
 }
 
+function resolveTtsVoiceId(npcId: string, settings: AiNpcTtsSettings): string | null {
+  const npcVoice = NPC_MAP[npcId]?.aiProfile?.ttsVoiceId?.trim()
+  if (npcVoice) return npcVoice
+  const defaultVoice = settings.defaultVoiceId?.trim()
+  return defaultVoice || null
+}
+
 export const useAiNpcStore = defineStore('ai-npc', {
   state: () => ({
     isOpen: false,
     activeNpcId: null as string | null,
     sessions: {} as Record<string, AiNpcSessionState>,
     settings: loadDefaultSettings(),
+    ttsSettings: loadDefaultTtsSettings(),
     playerName: '',
   }),
   getters: {
@@ -248,11 +338,17 @@ export const useAiNpcStore = defineStore('ai-npc', {
       this.playerName = name
     },
     open(npcId: string) {
+      if (this.activeNpcId && this.activeNpcId !== npcId) {
+        this.stopTtsPlayback(this.activeNpcId)
+      } else {
+        this.stopTtsPlayback()
+      }
       this.activeNpcId = npcId
       this.isOpen = true
       this.ensureSession(npcId)
     },
     close() {
+      this.stopTtsPlayback()
       this.isOpen = false
       this.activeNpcId = null
     },
@@ -265,6 +361,16 @@ export const useAiNpcStore = defineStore('ai-npc', {
           loading: false,
           error: null,
           streamAbort: null,
+          ttsState: 'idle',
+          ttsText: null,
+          ttsVoiceId: resolveTtsVoiceId(npcId, this.ttsSettings),
+          ttsError: null,
+          ttsAbort: null,
+          ttsCacheKey: null,
+          ttsMessageId: null,
+          ttsNowPlayingMessageId: null,
+          ttsLastPlayedMessageId: null,
+          ttsQueue: [],
         }
       }
       return this.sessions[npcId]
@@ -274,6 +380,19 @@ export const useAiNpcStore = defineStore('ai-npc', {
       this.settings = merged
       persistSettings(merged)
     },
+    setTtsSettings(next: Partial<AiNpcTtsSettings>) {
+      const merged = normalizeTtsSettings({ ...this.ttsSettings, ...next }, this.ttsSettings)
+      this.ttsSettings = merged
+      Object.values(this.sessions).forEach((session) => {
+        session.ttsVoiceId = resolveTtsVoiceId(session.npcId, merged)
+        session.ttsCacheKey = session.ttsText ? buildTtsCacheKey(session.ttsText, session.ttsVoiceId) : null
+        if (!merged.autoPlay) {
+          session.ttsQueue = []
+        }
+      })
+      this.sessions = { ...this.sessions }
+      persistTtsSettings(merged)
+    },
     resetSession(npcId: string) {
       this.sessions[npcId] = {
         npcId,
@@ -282,7 +401,34 @@ export const useAiNpcStore = defineStore('ai-npc', {
         loading: false,
         error: null,
         streamAbort: null,
+        ttsState: 'idle',
+        ttsText: null,
+        ttsVoiceId: resolveTtsVoiceId(npcId, this.ttsSettings),
+        ttsError: null,
+        ttsAbort: null,
+        ttsCacheKey: null,
+        ttsMessageId: null,
+        ttsNowPlayingMessageId: null,
+        ttsLastPlayedMessageId: null,
+        ttsQueue: [],
       }
+    },
+    stopTtsPlayback(npcId?: string, options: { clearQueue?: boolean } = {}) {
+      ttsPlayer.stop()
+      const targetNpcId = npcId ?? this.activeNpcId
+      if (!targetNpcId) return
+      const session = this.sessions[targetNpcId]
+      if (!session) return
+      if (session.ttsAbort) {
+        session.ttsAbort.abort()
+        session.ttsAbort = null
+      }
+      session.ttsState = 'idle'
+      session.ttsError = null
+      if (options.clearQueue ?? true) {
+        session.ttsQueue = []
+      }
+      this.sessions = { ...this.sessions }
     },
     buildStatusSnapshot(npcId: string, questId: string): AiNpcStatusSnapshot {
       const quests = useQuestStore()
@@ -369,6 +515,62 @@ export const useAiNpcStore = defineStore('ai-npc', {
       this.sessions = { ...this.sessions, [session.npcId]: nextSession }
       return nextSession
     },
+    updateTtsCandidate(
+      session: AiNpcSessionState,
+      messageId: string | null,
+      text: string | null,
+      options: { enqueue?: boolean; clearQueue?: boolean } = {},
+    ) {
+      const isActive = session.ttsState === 'playing' || session.ttsState === 'loading'
+      const voiceId = resolveTtsVoiceId(session.npcId, this.ttsSettings)
+      const normalized = sanitizeTtsText(text)
+      session.ttsVoiceId = voiceId
+      session.ttsText = normalized
+      session.ttsCacheKey = normalized ? buildTtsCacheKey(normalized, voiceId) : null
+      session.ttsMessageId = normalized ? messageId : null
+      if (!isActive) {
+        // Do not reset state while an earlier TTS is still loading/playing; that would
+        // incorrectly look idle and auto-play would interrupt the current audio.
+        session.ttsState = 'idle'
+        session.ttsError = null
+      }
+      if (options.clearQueue) {
+        session.ttsQueue = []
+      }
+      if (options.enqueue && normalized && messageId && this.ttsSettings.autoPlay) {
+        this.enqueueAutoPlay(session, messageId, normalized)
+        return
+      }
+      this.sessions = { ...this.sessions }
+    },
+    enqueueAutoPlay(session: AiNpcSessionState, messageId: string, text: string) {
+      if (!text.trim()) return
+      if (session.ttsNowPlayingMessageId && session.ttsNowPlayingMessageId === messageId) return
+      const queue = session.ttsQueue ?? []
+      const existingIndex = queue.findIndex(item => item.messageId === messageId)
+      if (existingIndex === -1) {
+        queue.push({ messageId, text: text.trim() })
+      }
+      session.ttsQueue = queue
+      this.sessions = { ...this.sessions }
+      this.maybeStartQueuedTts(session.npcId)
+    },
+    maybeStartQueuedTts(npcId: string) {
+      if (!this.ttsSettings.autoPlay) return
+      const session = this.sessions[npcId]
+      if (!session) return
+      if (session.ttsState === 'playing' || session.ttsState === 'loading') return
+      const nextItem = session.ttsQueue[0]
+      if (!nextItem) return
+      this.playLatestTts(npcId, {
+        text: nextItem.text,
+        messageId: nextItem.messageId,
+        fromQueue: true,
+      })
+      // Remove the item once playback has been kicked off to avoid duplicates.
+      session.ttsQueue = session.ttsQueue.slice(1)
+      this.sessions = { ...this.sessions }
+    },
     appendMessage(session: AiNpcSessionState, message: AiNpcMessage) {
       session.messages.push(message)
       const maxStored = Math.max(this.settings.historyLimit + 6, 24)
@@ -427,6 +629,8 @@ export const useAiNpcStore = defineStore('ai-npc', {
       if (!npc || npc.mode !== 'ai' || !npc.aiProfile) return
 
       let session = this.ensureSession(npcId)
+      this.stopTtsPlayback(npcId)
+      this.updateTtsCandidate(session, null, null, { clearQueue: true })
       if (session.loading) return
       if (!this.settings.apiKey) {
         session.error = '（系统暂时不可用：缺少 API Key）'
@@ -449,11 +653,15 @@ export const useAiNpcStore = defineStore('ai-npc', {
     },
     async runAssistantTurn(
       npcId: string,
-      options: { toolChoice?: 'auto' | 'none' } = {},
+      options: { toolChoice?: 'auto' | 'none'; preserveTts?: boolean } = {},
     ) {
       const npc = NPC_MAP[npcId]
       if (!npc?.aiProfile) return
       let session = this.ensureSession(npcId)
+      if (!options.preserveTts) {
+        this.stopTtsPlayback(npcId)
+        this.updateTtsCandidate(session, null, null, { clearQueue: true })
+      }
       const status = this.buildStatusSnapshot(npcId, npc.aiProfile.questId)
       session.statusSnapshot = status
 
@@ -511,7 +719,9 @@ export const useAiNpcStore = defineStore('ai-npc', {
             onToolCallDelta: (delta) => {
               sawToolCall = true
               streamingMessage.toolCallPending = true
-              streamingMessage.displayContent = '…'
+              if (!streamingMessage.displayContent?.trim()) {
+                streamingMessage.displayContent = '…'
+              }
               const existing = streamingMessage.toolCalls ?? []
               const nextCalls = [...existing]
               nextCalls[delta.index] = {
@@ -543,6 +753,12 @@ export const useAiNpcStore = defineStore('ai-npc', {
           }))
         streamingMessage.toolCallPending = sawToolCall
         session = this.touchMessages(session)
+        const playbackText = result.content?.trim()
+        if (playbackText && playbackText.length > 0) {
+          this.updateTtsCandidate(session, streamingMessage.id, result.content, {
+            enqueue: this.ttsSettings.autoPlay,
+          })
+        }
 
         if (result.toolCalls.length > 0) {
           await this.handleToolCalls(npcId, streamingMessage, result.toolCalls)
@@ -560,6 +776,7 @@ export const useAiNpcStore = defineStore('ai-npc', {
         streamingMessage.error = true
         session.error = '（系统暂时不可用）'
         session.loading = false
+        this.updateTtsCandidate(session, streamingMessage.id, null, { clearQueue: true })
         session = this.touchMessages(session)
       } finally {
         if (timeout !== null) {
@@ -603,7 +820,164 @@ export const useAiNpcStore = defineStore('ai-npc', {
       assistantMessage.toolCallPending = false
 
       // Follow-up response to let the model explain the result.
-      await this.runAssistantTurn(npcId, { toolChoice: 'none' })
+      await this.runAssistantTurn(npcId, { toolChoice: 'none', preserveTts: true })
+    },
+    async playLatestTts(
+      npcId?: string,
+      override?: { text?: string; cacheKey?: string | null; messageId?: string | null; fromQueue?: boolean },
+    ) {
+      const targetId = npcId ?? this.activeNpcId
+      if (!targetId) return
+      const npc = NPC_MAP[targetId]
+      if (!npc || npc.mode !== 'ai' || !npc.aiProfile) return
+      const session = this.ensureSession(targetId)
+      const getSession = () => this.sessions[targetId] ?? session
+      const patchSession = (mutator: (s: AiNpcSessionState) => void) => {
+        const current = getSession()
+        if (!current) return
+        mutator(current)
+        this.sessions = { ...this.sessions, [targetId]: current }
+      }
+      this.stopTtsPlayback(targetId, { clearQueue: false })
+      const currentSession = getSession()
+      const text = sanitizeTtsText(override?.text ?? currentSession?.ttsText)
+      if (!text) {
+        patchSession((s) => {
+          s.ttsState = 'error'
+          s.ttsError = '暂无可朗读的内容'
+        })
+        return
+      }
+      if (!this.ttsSettings.enabled) {
+        patchSession((s) => {
+          s.ttsState = 'error'
+          s.ttsError = 'AI NPC 语音未开启'
+        })
+        return
+      }
+      if (!this.ttsSettings.appId || !this.ttsSettings.accessKey) {
+        patchSession((s) => {
+          s.ttsState = 'error'
+          s.ttsError = '请在设置面板填写 TTS App ID 与 Access Key'
+        })
+        return
+      }
+
+      const voiceId = resolveTtsVoiceId(targetId, this.ttsSettings)
+      if (!voiceId) {
+        patchSession((s) => {
+          s.ttsState = 'error'
+          s.ttsError = '缺少音色配置'
+        })
+        return
+      }
+
+      const targetMessageId = override?.messageId ?? currentSession?.ttsMessageId ?? null
+      const playingMessageId = targetMessageId ?? currentSession?.ttsMessageId ?? null
+      if (!override?.fromQueue && targetMessageId && currentSession?.ttsQueue?.length) {
+        const filtered = currentSession.ttsQueue.filter(item => item.messageId !== targetMessageId)
+        if (filtered.length !== currentSession.ttsQueue.length) {
+          patchSession((s) => {
+            s.ttsQueue = filtered
+          })
+        }
+      }
+
+      const cacheKey = override?.cacheKey ?? buildTtsCacheKey(text, voiceId)
+
+      patchSession((s) => {
+        s.ttsVoiceId = voiceId
+        s.ttsText = text
+        s.ttsMessageId = targetMessageId ?? s.ttsMessageId
+        s.ttsCacheKey = cacheKey
+        s.ttsNowPlayingMessageId = null
+      })
+
+      const controller = new AbortController()
+      patchSession((s) => {
+        s.ttsAbort = controller
+        s.ttsState = 'loading'
+        s.ttsError = null
+        s.ttsNowPlayingMessageId = playingMessageId
+      })
+
+      const onStart = () => {
+        patchSession((s) => {
+          s.ttsState = 'playing'
+          s.ttsError = null
+        })
+      }
+      const onStop = () => {
+        patchSession((s) => {
+          s.ttsNowPlayingMessageId = null
+          s.ttsLastPlayedMessageId = playingMessageId
+          s.ttsState = 'idle'
+          s.ttsError = null
+          s.ttsCacheKey = cacheKey
+          s.ttsAbort = null
+        })
+        if (this.ttsSettings.autoPlay) {
+          this.maybeStartQueuedTts(targetId)
+        }
+      }
+      const onError = (err: unknown) => {
+        patchSession((s) => {
+          s.ttsState = controller.signal.aborted ? 'idle' : 'error'
+          s.ttsError = err instanceof Error ? err.message : 'TTS 播放失败'
+          s.ttsNowPlayingMessageId = null
+          s.ttsAbort = null
+        })
+        console.error('[ai-npc][tts] playback error', err)
+        if (this.ttsSettings.autoPlay) {
+          this.maybeStartQueuedTts(targetId)
+        }
+      }
+
+      try {
+        const reused = await ttsPlayer.playCached(targetId, cacheKey, {
+          signal: controller.signal,
+          onStart,
+          onStop,
+          onError,
+        })
+        if (reused) return
+        const stream = streamAiNpcTts({
+          text,
+          voiceId,
+          settings: this.ttsSettings,
+          signal: controller.signal,
+        })
+        await ttsPlayer.playPcmStream({
+          npcId: targetId,
+          cacheKey,
+          stream,
+          sampleRate: this.ttsSettings.sampleRate,
+          signal: controller.signal,
+          onStart,
+          onStop,
+          onError,
+        })
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          console.error('[ai-npc] TTS failed', err)
+          patchSession((s) => {
+            s.ttsState = 'error'
+            s.ttsError = err instanceof Error ? err.message : 'TTS 播放失败'
+          })
+        } else {
+          patchSession((s) => {
+            s.ttsState = 'idle'
+            s.ttsError = null
+          })
+        }
+        if (this.ttsSettings.autoPlay) {
+          this.maybeStartQueuedTts(targetId)
+        }
+      } finally {
+        patchSession((s) => {
+          s.ttsAbort = null
+        })
+      }
     },
     async retryLastMessage() {
       if (!this.activeNpcId) return

@@ -76,7 +76,7 @@ const guardThomasSystemPrompt = `
 - **引导**
   - 如果玩家提到“钱”、“工作”、“帮忙”，引导玩家接取任务。
   - 如果玩家还没接任务却装作接了任务或者要交任务，用合适的方式回应他，例如“我怎么不记得你领过任务？”
-- **行动**：只有当玩家明确说“接受”、“好的”、“愿意”时，**调用 \`accept_quest\`**。
+- **行动**：只有当玩家明确表示接受任务时，**调用 \`accept_quest\`**。
 
 ## 2. 当 status == "active" (进行中)
 - **逻辑**：你知道他任务没做完（看 \`progress\` 字段）。
@@ -415,6 +415,7 @@ export const NPC_DEFINITIONS: NpcDefinition[] = [
           description: '仅在状态可提交且玩家要求上交样本、领取奖励时调用。',
         },
       ],
+      ttsVoiceId: 'ICL_zh_male_zhengzhiqingnian_tob',
     },
   },
 ]

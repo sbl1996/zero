@@ -26,7 +26,7 @@
           <div ref="messageListEl" class="ai-single">
             <template v-if="displayMessages.length">
               <div
-                v-for="message in displayMessages"
+                v-for="(message, idx) in displayMessages"
                 :key="message.id"
                 class="ai-single__block"
               >
@@ -37,7 +37,7 @@
                     error: message.error
                   }"
                 >
-                  {{ displayText(message) }}
+                  {{ displayText(message, idx > 0 && displayMessages.length > 1) }}
                   <span v-if="message.error" class="ai-single__hint ai-single__hint--error">调用失败，可重试</span>
                 </p>
               </div>
@@ -48,6 +48,38 @@
           </div>
 
           <div class="ai-input">
+            <div class="tts-button-wrapper">
+              <button
+                type="button"
+                class="tts-icon-button"
+                :class="{
+                  'tts-icon-button--active': ttsState === 'playing',
+                  'tts-icon-button--error': ttsState === 'error',
+                }"
+                :disabled="!canPlayTts"
+                aria-label="朗读最新回复"
+                @click="handlePlayTts"
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true" width="18" height="18">
+                  <path
+                    d="M5 9v6h4l5 4V5L9 9H5z"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M16 9a5 5 0 0 1 0 6"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+              </button>
+            </div>
             <div class="ai-input__row">
               <button
                 type="button"
@@ -172,7 +204,7 @@ import type { AiNpcMessage } from '@/types/ai-npc'
 
 const aiNpc = useAiNpcStore()
 
-const { isOpen, settings } = storeToRefs(aiNpc)
+const { isOpen, settings, ttsSettings } = storeToRefs(aiNpc)
 
 const npc = computed(() => aiNpc.activeNpc)
 const session = computed(() => aiNpc.activeSession)
@@ -209,20 +241,64 @@ const canSend = computed(() => {
 
 const showRetry = computed(() => Boolean(session.value?.error || messages.value.some(msg => msg.error)))
 const initialDescription = computed(() => '（托马斯握着长矛，在青苔原哨点百无聊赖地打着哈欠。）')
-const latestMessage = computed<AiNpcMessage | null>(() => {
-  const streaming = messages.value.find(msg => msg?.isStreaming)
-  if (streaming) return streaming
-  for (let i = messages.value.length - 1; i >= 0; i -= 1) {
-    const msg = messages.value[i]
+const latestMessageInfo = computed(() => {
+  const list = messages.value
+  let streamingIndex = -1
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    if (list[i]?.isStreaming) {
+      streamingIndex = i
+      break
+    }
+  }
+  if (streamingIndex >= 0) {
+    const message = list[streamingIndex]
+    return message ? { message, index: streamingIndex } : null
+  }
+  for (let i = list.length - 1; i >= 0; i -= 1) {
+    const msg = list[i]
     if (!msg) continue
-    if (msg.role !== 'user') return msg
+    if (msg.role !== 'user') return { message: msg, index: i }
   }
   return null
 })
-const displayMessages = computed(() => (latestMessage.value ? [latestMessage.value] : []))
+const displayMessages = computed(() => {
+  const info = latestMessageInfo.value
+  if (!info) return []
+  const list = messages.value
+  const linked = findLinkedToolCallMessage(list, info.index)
+  return linked ? [linked, info.message] : [info.message]
+})
+function findLinkedToolCallMessage(list: AiNpcMessage[], startIndex: number): AiNpcMessage | null {
+  for (let i = startIndex - 1; i >= 0; i -= 1) {
+    const msg = list[i]
+    if (!msg) continue
+    if (msg.role === 'assistant') {
+      const hasToolCall = msg.toolCallPending || (msg.toolCalls && msg.toolCalls.length > 0)
+      const display = msg.displayContent?.trim()
+      const isPlaceholder = display === '…' || display === '...'
+      const hasText = Boolean(
+        msg.content?.trim() ||
+        (display && (!isPlaceholder || msg.toolCallPending)),
+      )
+      if (hasToolCall && hasText) {
+        return msg
+      }
+      return null
+    }
+    if (msg.role === 'user') return null
+  }
+  return null
+}
 const animatedEllipsis = ref('…')
 const streamingPlaceholderActive = computed(() =>
   messages.value.some(msg => msg.isStreaming && !msg.displayContent?.trim() && !msg.content?.trim()),
+)
+const ttsState = computed(() => session.value?.ttsState ?? 'idle')
+const ttsText = computed(() => session.value?.ttsText ?? '')
+const canPlayTts = computed(() =>
+  Boolean(ttsText.value?.trim()) &&
+  ttsSettings.value.enabled &&
+  !isUnavailable.value,
 )
 
 let ellipsisTimer: number | null = null
@@ -276,6 +352,10 @@ function handleSend() {
   focusInput()
 }
 
+function handlePlayTts() {
+  aiNpc.playLatestTts()
+}
+
 function handleRetry() {
   aiNpc.retryLastMessage()
 }
@@ -300,11 +380,14 @@ function bubbleLabel(message: AiNpcMessage) {
   return '系统'
 }
 
-function displayText(message: AiNpcMessage) {
+function displayText(message: AiNpcMessage, prependGap = false) {
   const text = message.displayContent || message.content
-  if (text && text.trim().length) return text
-  if (message.isStreaming) return animatedEllipsis.value
-  return '…'
+  const normalized = (() => {
+    if (text && text.trim().length) return text
+    if (message.isStreaming) return animatedEllipsis.value
+    return '…'
+  })()
+  return prependGap ? `\n${normalized}` : normalized
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -533,6 +616,8 @@ onBeforeUnmount(() => {
   flex-direction: column;
   gap: 0.5rem;
   flex-shrink: 0;
+  position: relative;
+  padding-top: 2.6rem;
 }
 .ai-input__row {
   display: flex;
@@ -605,6 +690,46 @@ onBeforeUnmount(() => {
   padding: 0.45rem 0.8rem;
   white-space: nowrap;
 }
+.tts-button-wrapper {
+  position: absolute;
+  top: -0.2rem;
+  right: 0rem;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.15rem;
+  z-index: 1;
+}
+.tts-icon-button {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.06);
+  color: #e2e8f0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease, opacity 0.18s ease;
+}
+.tts-icon-button:hover:enabled {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.25);
+}
+.tts-icon-button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.tts-icon-button--active {
+  background: rgba(34, 211, 238, 0.12);
+  border-color: rgba(165, 243, 252, 0.6);
+  color: #a5f3fc;
+}
+.tts-icon-button--error {
+  border-color: rgba(239, 68, 68, 0.7);
+  color: #fecdd3;
+}
 .ai-unavailable {
   min-height: 220px;
   display: grid;
@@ -644,7 +769,7 @@ onBeforeUnmount(() => {
 .history-panel {
   height: min(600px, 80vh);
   width: min(720px, 95vw);
-  max-height: 80vh;
+  max-height: 100vh;
   background: rgba(6, 10, 18, 0.95);
   border: 1px solid rgba(255, 255, 255, 0.2);
   border-radius: 14px;
