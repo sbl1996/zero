@@ -37,8 +37,6 @@ interface AiNpcSessionState {
   ttsAbort?: AbortController | null
   ttsCacheKey?: string | null
   ttsMessageId?: string | null
-  ttsNowPlayingMessageId?: string | null
-  ttsLastPlayedMessageId?: string | null
   ttsQueue: { messageId: string; text: string }[]
 }
 
@@ -368,8 +366,6 @@ export const useAiNpcStore = defineStore('ai-npc', {
           ttsAbort: null,
           ttsCacheKey: null,
           ttsMessageId: null,
-          ttsNowPlayingMessageId: null,
-          ttsLastPlayedMessageId: null,
           ttsQueue: [],
         }
       }
@@ -408,8 +404,6 @@ export const useAiNpcStore = defineStore('ai-npc', {
         ttsAbort: null,
         ttsCacheKey: null,
         ttsMessageId: null,
-        ttsNowPlayingMessageId: null,
-        ttsLastPlayedMessageId: null,
         ttsQueue: [],
       }
     },
@@ -545,7 +539,6 @@ export const useAiNpcStore = defineStore('ai-npc', {
     },
     enqueueAutoPlay(session: AiNpcSessionState, messageId: string, text: string) {
       if (!text.trim()) return
-      if (session.ttsNowPlayingMessageId && session.ttsNowPlayingMessageId === messageId) return
       const queue = session.ttsQueue ?? []
       const existingIndex = queue.findIndex(item => item.messageId === messageId)
       if (existingIndex === -1) {
@@ -890,7 +883,6 @@ export const useAiNpcStore = defineStore('ai-npc', {
         s.ttsText = text
         s.ttsMessageId = targetMessageId ?? s.ttsMessageId
         s.ttsCacheKey = cacheKey
-        s.ttsNowPlayingMessageId = null
       })
 
       const controller = new AbortController()
@@ -898,7 +890,6 @@ export const useAiNpcStore = defineStore('ai-npc', {
         s.ttsAbort = controller
         s.ttsState = 'loading'
         s.ttsError = null
-        s.ttsNowPlayingMessageId = playingMessageId
       })
 
       const onStart = () => {
@@ -909,8 +900,6 @@ export const useAiNpcStore = defineStore('ai-npc', {
       }
       const onStop = () => {
         patchSession((s) => {
-          s.ttsNowPlayingMessageId = null
-          s.ttsLastPlayedMessageId = playingMessageId
           s.ttsState = 'idle'
           s.ttsError = null
           s.ttsCacheKey = cacheKey
@@ -924,10 +913,8 @@ export const useAiNpcStore = defineStore('ai-npc', {
         patchSession((s) => {
           s.ttsState = controller.signal.aborted ? 'idle' : 'error'
           s.ttsError = err instanceof Error ? err.message : 'TTS 播放失败'
-          s.ttsNowPlayingMessageId = null
           s.ttsAbort = null
         })
-        console.error('[ai-npc][tts] playback error', err)
         if (this.ttsSettings.autoPlay) {
           this.maybeStartQueuedTts(targetId)
         }
