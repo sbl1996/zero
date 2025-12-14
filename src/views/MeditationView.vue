@@ -789,7 +789,8 @@ onBeforeUnmount(() => {
 .meditation-stat-grid {
   margin-top: 18px;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  grid-template-columns: repeat(2, 1fr);
+  grid-template-rows: repeat(2, 1fr);
   gap: 14px;
 }
 

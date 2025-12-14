@@ -125,7 +125,7 @@ function handleMethodChange(methodId: CultivationMethodId) {
                   </div>
                   <p class="method-description">{{ method.description }}</p>
                   <ul class="method-effects">
-                    <li v-for="effect in method.effects" :key="effect">{{ effect }}</li>
+                    <li v-for="effect in method.effects" :key="effect.id">{{ "【" + effect.title + "】：" + effect.body }}</li>
                   </ul>
                 </div>
               </div>

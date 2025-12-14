@@ -268,7 +268,7 @@ function createMonsterSkillCooldownMap(profile: MonsterSkillProfile): Record<str
 }
 
 function isDodgeSkill(definition: SkillDefinition | null | undefined): definition is SkillDefinition {
-  return Boolean(definition?.tags?.includes('dodge'))
+  return Boolean(definition?.dodgeConfig)
 }
 
 function resolveDodgeConfig(definition: SkillDefinition | null | undefined) {
@@ -1886,13 +1886,16 @@ export const useBattleStore = defineStore('battle', {
       const rng = makeRng(this.rngSeed)
       this.rngSeed = (this.rngSeed + 0x9e3779b9) >>> 0
 
+      const progress = player.skills.progress[skillId] ?? undefined
+      const skillLevel = Math.max(progress?.level ?? 1, 1)
+
       const result = skill.execute({
         stats,
         monster: this.monster,
         rng,
         resources: player.res,
         cultivation: player.cultivation,
-        progress: player.skills.progress[skillId] ?? undefined,
+        progress,
         battle: {
           tigerFuryStacks: this.playerTigerFury?.stacks ?? 0,
         },
@@ -2075,7 +2078,7 @@ export const useBattleStore = defineStore('battle', {
 
       const usage = player.recordSkillUsage(skill, {
         rng,
-        baseCooldown: skill.cooldown ?? FALLBACK_SKILL_COOLDOWN,
+        baseCooldown: skill.getCooldown(skillLevel),
         hit,
         streak,
         timestamp: nowMs,

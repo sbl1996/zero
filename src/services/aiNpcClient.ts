@@ -47,6 +47,7 @@ async function streamOnce(params: StreamParams): Promise<StreamResult> {
     maxRetries: 0,
   })
 
+  console.log(messages)
   const resp = await client.chat.completions.create(
     {
       model: settings.model,

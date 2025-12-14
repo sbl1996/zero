@@ -130,14 +130,11 @@ export function applySkillUsage(options: SkillUsageOptions): SkillUsageResult {
 }
 
 export function resolveSkillCooldown(definition: SkillDefinition, level: number, fallback: number): number {
-  const base = Number.isFinite(definition.cooldown) ? Math.max(definition.cooldown ?? fallback, 0) : Math.max(fallback, 0)
-  if (typeof definition.getCooldown === 'function') {
-    const resolved = definition.getCooldown(level)
-    if (Number.isFinite(resolved)) {
-      return Math.max(resolved, 0)
-    }
+  const resolved = definition.getCooldown(level)
+  if (Number.isFinite(resolved)) {
+    return Math.max(resolved, 0)
   }
-  return base
+  return Math.max(fallback, 0)
 }
 
 export function resolveSkillChargeTime(definition: SkillDefinition, level: number): number {

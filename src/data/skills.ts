@@ -76,46 +76,32 @@ function resolveDamageMultiplier(base: number, perLevelIncrease: number, level: 
   return base + perLevelIncrease * lvl
 }
 
-function formatMultiplier(multiplier: number): string {
-  const percent = multiplier * 100
-  const rounded = Math.round(percent * 10) / 10
-  return Number.isInteger(rounded) ? `${Math.round(rounded)}%` : `${rounded.toFixed(1)}%`
-}
-
 function describeDragonBreath(level: number): string {
-  const multiplier = formatMultiplier(resolveDamageMultiplier(DRAGON_BREATH_BASE_MULTIPLIER, DRAGON_BREATH_PER_LEVEL, level))
-  const segments = [`基础单体斩击（倍率 ${multiplier}），包含 0.2s 后摇。`]
+  const segments = [`基础单体斩击。`]
   if (level >= 3) {
     segments.push('弱点击破时额外造成 5% 总伤害。')
   }
   if (level >= 10) {
-    segments.push('Lv.10：命中后使《陨龙击》冷却缩短 25%，持续 2 秒。')
+    segments.push('命中后使【陨龙击】冷却缩短 25%，持续 2 秒。')
   }
   return segments.join(' ')
 }
 
 function describeFallenDragon(level: number): string {
-  const multiplier = formatMultiplier(resolveDamageMultiplier(FALLEN_DRAGON_BASE_MULTIPLIER, FALLEN_DRAGON_PER_LEVEL, level))
-  const segments = [`蓄力 0.2s 后施放的重击（倍率 ${multiplier}），包含 0.2s 后摇。`]
+  const segments = [`蓄力施放重击。`]
   if (level >= 3) {
     segments.push('弱点击破时额外造成 10% 总伤害。')
   }
   return segments.join(' ')
 }
 
-function describeStarRealm(level: number): string {
-  const multiplier = formatMultiplier(resolveDamageMultiplier(STAR_REALM_BASE_MULTIPLIER, STAR_REALM_PER_LEVEL, level))
-  const segments = [`蓄力0.5s的终极爆发斩击（倍率 ${multiplier}），包含0.2s后摇。`]
-  segments.push('施放时获得0.5s霸体（免疫伤害）。')
-  segments.push('命中时使目标受到10%易伤，持续8秒。')
+function describeStarRealm(_level: number): string {
+  const segments = [`蓄力爆发斩击。施放后获得霸体。命中目标施加 8s 易伤。`]
   return segments.join(' ')
 }
 
 function describeRendingVoidClaw(level: number): string {
-  const multiplier = formatMultiplier(
-    resolveDamageMultiplier(RENDING_VOID_BASE_MULTIPLIER, RENDING_VOID_PER_LEVEL, level),
-  )
-  const segments = [`迅捷撕裂攻击（倍率 ${multiplier}），包含0.15s后摇。`]
+  const segments = [`迅捷撕裂攻击。`]
   if (level >= 3) {
     segments.push('弱点击破时返还 0.5% 斗气上限。')
   }
@@ -128,20 +114,14 @@ function describeRendingVoidClaw(level: number): string {
   return segments.join(' ')
 }
 
-function describePhantomInstantKill(level: number): string {
-  const multiplier = formatMultiplier(
-    resolveDamageMultiplier(PHANTOM_KILL_BASE_MULTIPLIER, PHANTOM_KILL_PER_LEVEL, level),
-  )
-  const segments = [`瞬息突进刺杀（倍率 ${multiplier}），施放后 0.2s 内处于【绝影】状态（不可被选中，免疫所有伤害），结束后再对敌方造成伤害，包含0.4s后摇。`]
+function describePhantomInstantKill(_level: number): string {
+  const segments = [`瞬息突进刺杀。施放后获得霸体，结束后再对敌方造成伤害。`]
   return segments.join(' ')
 }
 
-function describeWhiteTigerMassacre(level: number): string {
-  const multiplier = formatMultiplier(
-    resolveDamageMultiplier(WHITE_TIGER_MASSACRE_BASE_MULTIPLIER, WHITE_TIGER_MASSACRE_PER_LEVEL, level),
-  )
-  const segments = [`蓄力0.8s的终极爆发斩击（倍率 ${multiplier}），包含0.5s后摇。`]
-  segments.push('若施放时【虎煞】层数为 0，则直接获得 3 层【虎煞】。若已有【虎煞】，本次伤害每层额外提升 3%。')
+function describeWhiteTigerMassacre(_level: number): string {
+  const segments = [`引动白虎杀意的一击。`]
+  segments.push('若施放时【虎煞】层数为0，则直接获得 3 层【虎煞】。若已有【虎煞】，本次伤害每层额外提升 3%。')
   return segments.join(' ')
 }
 
@@ -149,27 +129,28 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_DRAGON_SHADOW_DASH.id,
     name: META_DRAGON_SHADOW_DASH.name,
-    description: META_DRAGON_SHADOW_DASH.description,
-    cooldown: 0.7,
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'attack',
     aftercastTime: 0.3,
     icon: resolveSkillIcon(META_DRAGON_SHADOW_DASH.id),
-    tags: ['utility', 'dodge'],
+    mechanics: [
+      { id: 'dodge', label: '闪避', kind: 'defense' },
+      { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.3s' },
+    ],
     maxLevel: 1,
     dodgeConfig: {
       windowMs: DODGE_WINDOW_MS,
       refundPercentOfQiMax: 0.04,
       successText: '龙影闪!',
     },
+    getDamageMultiplier: () => 0,
     getCooldown: () => 0.7,
+    getDescription: () => META_DRAGON_SHADOW_DASH.description,
     execute: () => ({ hit: false }),
   },
   {
     id: META_DRAGON_BREATH.id,
     name: META_DRAGON_BREATH.name,
-    description: describeDragonBreath(1),
-    cooldown: 2,
     cost: { type: 'qi', percentOfQiMax: 0.02 },
     flash: 'attack',
     aftercastTime: 0.2,
@@ -222,8 +203,6 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_FALLEN_DRAGON.id,
     name: META_FALLEN_DRAGON.name,
-    description: describeFallenDragon(1),
-    cooldown: 5,
     cost: { type: 'qi', percentOfQiMax: 0.04 },
     flash: 'attack',
     chargeTime: 0.2,
@@ -231,7 +210,6 @@ export const SKILLS: SkillDefinition[] = [
     icon: resolveSkillIcon(META_FALLEN_DRAGON.id),
     maxLevel: 10,
     getCooldown: (level) => resolvePerLevelCooldown(5, level, 1),
-    getCostMultiplier: (_level) => 1.0,
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(FALLEN_DRAGON_BASE_MULTIPLIER, FALLEN_DRAGON_PER_LEVEL, level),
     getDescription: describeFallenDragon,
@@ -270,16 +248,19 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_STAR_REALM.id,
     name: META_STAR_REALM.name,
-    description: describeStarRealm(1),
-    cooldown: 16,
     cost: { type: 'qi', percentOfQiMax: 0.1 },
     flash: 'attack',
     chargeTime: 0.5,
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_STAR_REALM.id),
     maxLevel: 10,
+    mechanics: [
+      { id: 'charge', label: '蓄力', kind: 'timing', value: '0.5s' },
+      { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.2s' },
+      { id: 'super-armor', label: '霸体', kind: 'defense', value: '0.5s' },
+      { id: 'vulnerability', label: '易伤', kind: 'debuff', value: '10%' },
+    ],
     getCooldown: (level) => resolvePerLevelCooldown(16, level, 5),
-    getCostMultiplier: (_level) => 1.0,
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(STAR_REALM_BASE_MULTIPLIER, STAR_REALM_PER_LEVEL, level),
     getDescription: describeStarRealm,
@@ -326,27 +307,28 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_TIGER_SHADOW_STEP.id,
     name: META_TIGER_SHADOW_STEP.name,
-    description: META_TIGER_SHADOW_STEP.description,
-    cooldown: 0.6,
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
     aftercastTime: 0.2,
     icon: resolveSkillIcon(META_TIGER_SHADOW_STEP.id),
-    tags: ['utility', 'dodge'],
+    mechanics: [
+      { id: 'dodge', label: '闪避', kind: 'defense' },
+      { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.2s' },
+    ],
     maxLevel: 1,
     dodgeConfig: {
       windowMs: DODGE_WINDOW_MS,
       refundPercentOfQiMax: 0.04,
       successText: '虎影步!',
     },
+    getDamageMultiplier: () => 0,
     getCooldown: () => 0.6,
+    getDescription: () => META_TIGER_SHADOW_STEP.description,
     execute: () => ({ hit: false }),
   },
   {
     id: META_RENDING_VOID_CLAW.id,
     name: META_RENDING_VOID_CLAW.name,
-    description: describeRendingVoidClaw(1),
-    cooldown: 1.2,
     cost: { type: 'qi', percentOfQiMax: 0.015 },
     flash: 'attack',
     aftercastTime: 0.15,
@@ -417,13 +399,15 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_PHANTOM_INSTANT_KILL.id,
     name: META_PHANTOM_INSTANT_KILL.name,
-    description: describePhantomInstantKill(1),
-    cooldown: 6,
     cost: { type: 'qi', percentOfQiMax: 0.05 },
     flash: 'attack',
     aftercastTime: 0.4,
     icon: resolveSkillIcon(META_PHANTOM_INSTANT_KILL.id),
     maxLevel: 10,
+    mechanics: [
+      { id: 'super-armor', label: '霸体', kind: 'defense', value: '0.2s' },
+      { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.4s' },
+    ],
     getCooldown: (level) => resolvePerLevelCooldown(6, level, 1.5),
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(PHANTOM_KILL_BASE_MULTIPLIER, PHANTOM_KILL_PER_LEVEL, level),
@@ -469,8 +453,6 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_WHITE_TIGER_MASSACRE.id,
     name: META_WHITE_TIGER_MASSACRE.name,
-    description: describeWhiteTigerMassacre(1),
-    cooldown: 20,
     cost: { type: 'qi', percentOfQiMax: 0.12 },
     flash: 'ult',
     chargeTime: 0.8,
@@ -519,20 +501,23 @@ export const SKILLS: SkillDefinition[] = [
   {
     id: META_QI_DODGE.id,
     name: META_QI_DODGE.name,
-    description: META_QI_DODGE.description,
-    cooldown: 0.7,
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
     aftercastTime: 0.3,
     icon: resolveSkillIcon(META_QI_DODGE.id),
-    tags: ['utility', 'dodge'],
+    mechanics: [
+      { id: 'dodge', label: '闪避', kind: 'defense' },
+      { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.3s' },
+    ],
     maxLevel: 1,
     dodgeConfig: {
       windowMs: DODGE_WINDOW_MS,
       refundPercentOfQiMax: 0.04,
       successText: '闪避!',
     },
+    getDamageMultiplier: () => 0,
     getCooldown: () => 0.7,
+    getDescription: () => META_QI_DODGE.description,
     execute: () => ({ hit: false }),
   },
 ]
@@ -546,8 +531,5 @@ export function getSkillDefinition(skillId: string | null | undefined) {
 }
 
 export function getSkillDescription(definition: SkillDefinition, level = 1): string {
-  if (typeof definition.getDescription === 'function') {
-    return definition.getDescription(level)
-  }
-  return definition.description
+  return definition.getDescription(level)
 }

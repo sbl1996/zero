@@ -866,7 +866,6 @@ export const useAiNpcStore = defineStore('ai-npc', {
       }
 
       const targetMessageId = override?.messageId ?? currentSession?.ttsMessageId ?? null
-      const playingMessageId = targetMessageId ?? currentSession?.ttsMessageId ?? null
       if (!override?.fromQueue && targetMessageId && currentSession?.ttsQueue?.length) {
         const filtered = currentSession.ttsQueue.filter(item => item.messageId !== targetMessageId)
         if (filtered.length !== currentSession.ttsQueue.length) {

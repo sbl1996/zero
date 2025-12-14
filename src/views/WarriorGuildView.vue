@@ -57,7 +57,7 @@ const guildCourses = computed<GuildCourseViewModel[]>(() => {
   return courses.map((course) => {
     const skillId = course.skillId
     const skillDefinition = getSkillDefinition(skillId)
-    const cooldown = skillDefinition?.cooldown
+    const cooldown = skillDefinition?.getCooldown(1)
     const cooldownText = typeof cooldown === 'number' ? `${cooldown.toFixed(1)} s` : '无冷却'
     const description = skillDefinition ? getSkillDescription(skillDefinition, 1) : null
     const alreadyKnown = knownSkills.value.includes(skillId)

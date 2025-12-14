@@ -499,25 +499,32 @@ export interface DodgeSkillConfig {
   successText?: string
 }
 
+export type MechanicKind = 'timing' | 'defense' | 'debuff' | 'resource' | 'utility'
+
+export interface MechanicTag {
+  id: string
+  label: string
+  kind: MechanicKind
+  value?: string
+}
+
 export interface SkillDefinition {
   id: string
   name: string
-  description: string
   cost: SkillCost
   flash: FlashEffectKind
-  cooldown?: number
   chargeTime?: number
   aftercastTime?: number
-  tags?: string[]
+  mechanics?: MechanicTag[]
   icon?: string
   maxLevel?: number
   dodgeConfig?: DodgeSkillConfig
-  getCooldown?: (level: number) => number
+  getCooldown: (level: number) => number
   getChargeTime?: (level: number) => number
   getAftercastTime?: (level: number) => number
   getCostMultiplier?: (level: number) => number
-  getDamageMultiplier?: (level: number) => number
-  getDescription?: (level: number) => string
+  getDamageMultiplier: (level: number) => number
+  getDescription: (level: number) => string
   execute: (context: SkillContext) => SkillResult
 }
 
