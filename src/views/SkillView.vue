@@ -18,7 +18,13 @@ function formatXpValue(value: number): string {
 }
 
 type SkillStatBlock = { label: string; value: string; tone: 'cost' | 'cooldown' | 'multiplier' }
-type SkillTag = { id: string; label: string; kind: 'timing' | 'defense' | 'debuff' | 'resource' | 'utility'; value?: string }
+type SkillTag = {
+  id: string
+  label: string
+  kind: 'timing' | 'defense' | 'debuff' | 'resource' | 'utility'
+  value?: string
+  tooltip?: string
+}
 
 const cultivationMethods = computed(() => {
   const current = player.cultivation.method
@@ -175,6 +181,7 @@ function buildSkillTags(definition: SkillDefinition, level: number): SkillTag[] 
       label: mechanic.label,
       kind: mechanic.kind,
       value: mechanic.value,
+      tooltip: mechanic.tooltip,
     })
   })
 

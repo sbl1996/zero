@@ -12,6 +12,7 @@ const WarriorGuildView = () => import('@/views/WarriorGuildView.vue')
 const QuestBoardView = () => import('@/views/QuestBoardView.vue')
 const QuestView = () => import('@/views/QuestView.vue')
 const CharacterCreationView = () => import('@/views/CharacterCreationView.vue')
+const MagicRhythmPracticeView = () => import('@/views/MagicRhythmPracticeView.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -29,5 +30,6 @@ export const router = createRouter({
     { path: '/warrior-guild', name: 'warrior-guild', component: WarriorGuildView },
     { path: '/quest-board', name: 'quest-board', component: QuestBoardView },
     { path: '/quests', name: 'quests', component: QuestView },
+    { path: '/magic-rhythm', name: 'magic-rhythm', component: MagicRhythmPracticeView },
   ],
 })

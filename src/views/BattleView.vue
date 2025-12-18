@@ -30,6 +30,7 @@ import PlayerStatusPanel from '@/components/PlayerStatusPanel.vue'
 import BattleQuickItemBar from '@/components/BattleQuickItemBar.vue'
 import MonsterAttackTimeline from '@/components/MonsterAttackTimeline.vue'
 import { formatMonsterRewards, getMonsterRankLabel } from '@/utils/monsterUtils'
+import { getGameMap } from '@/data/maps'
 
 const router = useRouter()
 const battle = useBattleStore()
@@ -38,6 +39,8 @@ const uiStore = useUiStore()
 const inventory = useInventoryStore()
 const progress = useProgressStore()
 const questStore = useQuestStore()
+
+const DEFAULT_BATTLE_BACKGROUND = resolveAssetUrl('map-fringe-battle.webp')
 
 const { res } = storeToRefs(playerStore)
 const { autoRematchAfterVictory } = storeToRefs(uiStore)
@@ -124,6 +127,19 @@ const preparedQuestNames = computed(() => {
   return questIds.map((id) => questStore.definitionMap[id]?.name ?? id)
 })
 
+const battleBackground = computed(() => {
+  const mapId = progress.currentMapId
+  const map = mapId ? getGameMap(mapId) : null
+  const candidate = typeof map?.battleBackground === 'string'
+    ? map.battleBackground.trim()
+    : ''
+  return candidate || DEFAULT_BATTLE_BACKGROUND
+})
+
+const battleBackgroundStyle = computed(() => ({
+  '--battle-background-image': `url('${battleBackground.value}')`,
+}))
+
 const buffTickTrigger = computed(() => battle.lastTickAt)
 
 type BuffDisplayInfo = {
@@ -178,12 +194,20 @@ const playerBuffInfo = computed<BuffDisplayInfo[]>(() => {
         ? Math.max(0, Math.min(1, remainingMs / tigerFury.durationMs))
         : 0
       const stacks = Math.min(tigerFury.stacks, 10)
-      const bonusPercent = stacks * 5
+      const bonusPercent = Math.round(battle.resolveTigerFuryBonus(now) * 100)
       buffs.push({
         text: `虎煞 x${stacks} (+${bonusPercent}%)`,
         ratio,
       })
     }
+  }
+
+  const shroud = battle.playerVioletShroud
+  if (shroud?.active) {
+    buffs.push({
+      text: '神火罩',
+      ratio: 1,
+    })
   }
 
   return buffs
@@ -220,6 +244,17 @@ const enemyBuffInfo = computed<BuffDisplayInfo[]>(() => {
         ratio,
       })
     }
+  }
+
+  const calamityLayers = battle.monsterCalamityAsh?.layers ?? []
+  if (calamityLayers.length > 0) {
+    const now = getNow()
+    const maxRemaining = Math.max(...calamityLayers.map(layer => Math.max(0, layer.expiresAt - now)))
+    const ratio = Math.max(0, Math.min(1, maxRemaining / 8000))
+    buffs.push({
+      text: `劫灰 x${calamityLayers.length}`,
+      ratio,
+    })
   }
   
   return buffs
@@ -560,6 +595,7 @@ const skillSlots = computed(() => {
       '--cooldown-angle': `${cooldownAngle}deg`,
       '--cooldown-progress': `${cooldownPercent}`,
     } : undefined
+    const isToggleActive = skillId ? battle.isToggleSkillActive(skillId) : false
 
     let disabled = false
     let reason = ''
@@ -622,6 +658,7 @@ const skillSlots = computed(() => {
       isRewinding,
       chargeActive: chargeProgress > 0,
       isActionLocked,
+      isToggleActive,
     }
   })
 })
@@ -1043,6 +1080,43 @@ onBeforeUnmount(() => {
   border-color: rgba(128, 138, 152, 0.6);
 }
 
+.battle-actions button.toggle-active {
+  border-color: rgba(230, 200, 255, 0.95);
+  box-shadow:
+    0 0 18px rgba(200, 140, 255, 0.65),
+    0 0 34px rgba(120, 70, 200, 0.45),
+    inset 0 0 14px rgba(200, 140, 255, 0.45);
+}
+
+.battle-actions button.toggle-active::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 50% 50%, rgba(240, 220, 255, 0.35), rgba(140, 90, 220, 0)),
+    radial-gradient(circle at 50% 50%, rgba(180, 110, 255, 0.25), rgba(90, 50, 160, 0));
+  opacity: 1;
+  z-index: 1;
+  pointer-events: none;
+  animation: toggle-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes toggle-pulse {
+  0% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.04);
+  }
+  100% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+}
+
 .battle-actions button > * {
   position: relative;
   z-index: 2;
@@ -1321,7 +1395,7 @@ onBeforeUnmount(() => {
   bottom: clamp(6px, 1.5vw, 18px);
   width: calc(var(--enemy-portrait-width) + clamp(18px, 4vw, 40px));
   aspect-ratio: 1 / 1;
-  transform: translate(-50%, 12%);
+  transform: translate(-50%, 0%);
   transform-origin: center;
   border-radius: 50%;
   background: radial-gradient(circle at center, rgba(74, 222, 128, 0.35) 0%, transparent 70%);
@@ -1361,22 +1435,22 @@ onBeforeUnmount(() => {
 
 @keyframes aura-warning-pulse {
   from {
-    transform: translate(-50%, 12%) scale(1);
+    transform: translate(-50%, 0%) scale(1);
     opacity: 0.7;
   }
   to {
-    transform: translate(-50%, 12%) scale(1.1);
+    transform: translate(-50%, 0%) scale(1.1);
     opacity: 1;
   }
 }
 
 @keyframes aura-danger-pulse {
   from {
-    transform: translate(-50%, 12%) scale(1);
+    transform: translate(-50%, 0%) scale(1);
     opacity: 0.8;
   }
   to {
-    transform: translate(-50%, 12%) scale(1.15);
+    transform: translate(-50%, 0%) scale(1.15);
     opacity: 1;
   }
 }
@@ -1712,7 +1786,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
       </header>
-      <div class="float-area">
+      <div class="float-area" :style="battleBackgroundStyle">
         <div
           v-for="(buff, index) in playerBuffInfo"
           :key="index"
@@ -1735,7 +1809,9 @@ onBeforeUnmount(() => {
             'battle-portraits--interactive': canClickRematch
           }"
         >
-          <img class="battle-portrait player" :src="playerPortraitSrc" alt="主角立绘" />
+          <div class="player-portrait-container">
+            <img class="battle-portrait player" :src="playerPortraitSrc" alt="主角立绘" />
+          </div>
         <div
           class="enemy-portrait-container"
           :class="{
@@ -1761,8 +1837,6 @@ onBeforeUnmount(() => {
               :class="{
                 'boss-portrait': monster.isBoss,
                 'victory-state': canClickRematch,
-                'portrait-warning': monsterAttackProgress <= 0.6 && monsterAttackProgress > 0.3,
-                'portrait-danger': monsterAttackProgress <= 0.3
               }"
               :src="monsterPortraitSrc"
               :alt="monster.name"
@@ -1876,7 +1950,8 @@ onBeforeUnmount(() => {
                   'is-charging': slot.isCharging,
                   'is-charge-ready': slot.isChargeReady,
                   'is-charge-rewinding': slot.isRewinding,
-                  'action-locked': slot.isActionLocked
+                  'action-locked': slot.isActionLocked,
+                  'toggle-active': slot.isToggleActive
                 }"
                 :title="slot.reason || undefined"
                 :style="slot.cooldownStyle"

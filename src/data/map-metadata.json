@@ -98,6 +98,7 @@
       "id": "fringe",
       "name": "青苔原",
       "image": "map-fringe.webp",
+      "battleBackground": "map-fringe-battle.webp",
       "description": "这片荒凉的废地遍布断垣与枯树，风声空荡，据说被神祝福的生物在某处静静守候。",
       "category": "wild",
       "bgm": {
@@ -637,6 +638,7 @@
       "id": "spine-of-frostfire",
       "name": "熔冰之脊",
       "image": "map-spine-of-frostfire.webp",
+      "battleBackground": "map-spine-of-frostfire-battle.webp",
       "description": "横贯极北的断裂山脉与永燃火山交织成霜与火的伤痕。上古霜炎古龙的遗骸暴露在冰原之上。",
       "category": "wild",
       "bgm": {
@@ -1200,6 +1202,7 @@
       "id": "thunderveil-keep",
       "name": "雷隐堡垒",
       "image": "map-thunderveil-keep.webp",
+      "battleBackground": "map-thunderveil-keep-battle.webp",
       "description": "",
       "category": "wild",
       "bgm": {

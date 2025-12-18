@@ -82,7 +82,8 @@ export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
       {
         id: 'purple_flame_core',
         title: '不灭紫焰',
-        body: '斗气恢复速度大幅加快，重创后亦能迅速回复战斗力。',
+        body: '斗气生生不息，恢复速度大幅加快。',
+        icon: resolveAssetUrl('cult-effect-purple-flame-core.webp'),
       },
     ],
   },

@@ -72,7 +72,7 @@ const qiProgressActive = computed(() => !isMeditating.value && warmupPercent.val
 const qiProgressLabel = computed(() => {
   const percentText = `${warmupPercent.value}%`
   if (isMeditating.value) return '冥想中'
-  if (warmupPercent.value === 0) return `点击启动运转`
+  if (warmupPercent.value === 0) return `点击运转斗气`
   if (isWarmingUp.value) return `预热中 · ${percentText}`
   return `点击停止运转`
 })

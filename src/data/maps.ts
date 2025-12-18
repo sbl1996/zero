@@ -10,6 +10,7 @@ type MapBgmMetadata = {
 type MapMetadata = Omit<GameMap, 'image' | 'bgm'> & {
   image: string
   bgm?: MapBgmMetadata
+  battleBackground?: string | null
 }
 
 interface MapMetadataFile {
@@ -22,16 +23,18 @@ const MAP_METADATA = mapMetadataRaw as MapMetadataFile
 export const defaultMapId = MAP_METADATA.defaultMapId
 
 export const maps: GameMap[] = MAP_METADATA.maps.map((map) => {
-  const { image, bgm, ...rest } = map
+  const { image, bgm, battleBackground, ...rest } = map
   const resolvedBgm = bgm
     ? {
         ambient: bgm.ambient ? resolveAssetUrl(bgm.ambient) : undefined,
         battle: bgm.battle ? resolveAssetUrl(bgm.battle) : undefined,
       }
     : undefined
+  const resolvedBattleBackground = battleBackground ? resolveAssetUrl(battleBackground) : undefined
   return {
     ...rest,
     image: resolveAssetUrl(image),
+    battleBackground: resolvedBattleBackground,
     bgm: resolvedBgm,
   }
 })

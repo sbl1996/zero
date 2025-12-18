@@ -61,6 +61,7 @@ export interface GameMap {
   name: string
   image: string
   description: string
+  battleBackground?: string | null
   locations: MapLocation[]
   category: MapCategory
   defaultNodeId?: string | null

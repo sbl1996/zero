@@ -18,7 +18,7 @@ def png_to_webp(png_path: Path, output_dir: Path):
                 new_h = max_size
                 new_w = int(w * max_size / h)
             img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
-        img.save(webp_path, "WEBP", quality=80)
+        img.save(webp_path, "WEBP", quality=80, lossless=True)
         print(f"Saved {webp_path}")
 
 

@@ -89,6 +89,12 @@ const DRAGON_BLOOD_STACK_QI_RATIO = 0.1
 const DRAGON_BLOOD_MAX_STACKS = 20
 const DRAGON_BLOOD_STACK_ATK_DEF_BONUS = 0.01
 const DRAGON_BLOOD_STACK_RECOVERY_BONUS = 0.02
+const CALAMITY_ASH_MAX_STACKS = 8
+const CALAMITY_ASH_DURATION_MS = 8000
+const CALAMITY_ASH_TICK_MS = 1000
+const VIOLET_SHROUD_REFLECT_MULTIPLIER = 0.5
+const VIOLET_SHROUD_QI_DRAIN_PER_SEC = 0.02
+const VIOLET_SHROUD_SHIELD_CAP = 0.9
 
 const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
   iron: 1,
@@ -462,9 +468,11 @@ function initialState(): BattleState {
     playerSuperArmor: null,
     playerBloodRage: null,
     playerTigerFury: null,
+    playerVioletShroud: null,
     playerAgiBuff: null,
     monsterVulnerability: null,
     monsterChargingDebuff: null,
+    monsterCalamityAsh: { layers: [] },
     originNodeId: null,
     originNodeInstanceId: null,
     pendingQuestCompletions: [],
@@ -474,6 +482,7 @@ function initialState(): BattleState {
 let floatId = 1
 let flashId = 1
 let skillEffectId = 1
+let calamityLayerId = 1
 
 function randomInRange(min: number, max: number) {
   return Math.random() * (max - min) + min
@@ -502,6 +511,12 @@ export const useBattleStore = defineStore('battle', {
     },
   },
   actions: {
+    isToggleSkillActive(skillId: string): boolean {
+      if (skillId === 'violet_shroud') {
+        return Boolean(this.playerVioletShroud?.active)
+      }
+      return false
+    },
     reset() {
       this.stopLoop()
       this.clearRematchTimer()
@@ -565,9 +580,11 @@ export const useBattleStore = defineStore('battle', {
       this.skillCooldownBonuses = {}
       this.playerBloodRage = null
       this.playerTigerFury = null
+      this.playerVioletShroud = null
       this.playerAgiBuff = null
       this.monsterVulnerability = null
       this.monsterChargingDebuff = null
+      this.monsterCalamityAsh = { layers: [] }
       this.playerSuperArmor = null
       this.monsterStunUntil = null
       this.monsterSkillPlan = []
@@ -633,9 +650,11 @@ export const useBattleStore = defineStore('battle', {
       this.skillCooldownBonuses = {}
       this.playerBloodRage = null
       this.playerTigerFury = null
+      this.playerVioletShroud = null
       this.playerAgiBuff = null
       this.monsterVulnerability = null
       this.monsterChargingDebuff = null
+      this.monsterCalamityAsh = { layers: [] }
       this.playerSuperArmor = null
       this.monsterStunUntil = null
       const initialDelay = resolveInitialMonsterDelay(monster, profile)
@@ -899,6 +918,155 @@ export const useBattleStore = defineStore('battle', {
       const current = this.cultivationFrame.actions[action] ?? 0
       this.cultivationFrame.actions[action] = current + value
     },
+    applyPlayerTrueDamage(
+      amount: number,
+      flash: FlashEffectKind = 'skill',
+      options?: { showVisuals?: boolean },
+    ) {
+      if (!this.monster || this.concluded !== 'idle') return
+      let finalDamage = Math.max(0, Math.round(amount))
+      if (finalDamage <= 0) return
+      const nowMs = getNow()
+      const vuln = this.monsterVulnerability
+      if (vuln) {
+        if (nowMs > vuln.expiresAt) {
+          this.monsterVulnerability = null
+        } else if (vuln.percent > 0) {
+          const mult = 1 + Math.max(vuln.percent, 0)
+          finalDamage = Math.round(finalDamage * mult)
+        }
+      }
+      const tigerBonus = this.resolveTigerFuryBonus(nowMs)
+      if (tigerBonus > 0) {
+        finalDamage = Math.round(finalDamage * (1 + tigerBonus))
+      }
+      if (finalDamage <= 0) return
+      const showVisuals = options?.showVisuals !== false
+      if (showVisuals) {
+        this.applyPlayerDamage(finalDamage, flash, { weakness: false })
+      } else {
+        this.monsterHp = Math.max(0, this.monsterHp - finalDamage)
+        this.pushFloat(`-${finalDamage}`, 'hitE')
+      }
+      this.recordCultivationAction('attackHit', 1)
+      if (this.concluded !== 'idle') return
+      if (this.monsterHp <= 0 && this.monster) {
+        const player = usePlayerStore()
+        this.handleMonsterDefeat(player)
+      }
+    },
+    addCalamityAshStacks(count: number, perSecondDamage: number, nowMs = getNow()) {
+      if (!this.monster || this.concluded !== 'idle') return
+      if (!Number.isFinite(count) || count <= 0) return
+      const stacks = Math.min(CALAMITY_ASH_MAX_STACKS, Math.max(0, Math.floor(count)))
+      const dmgPerSec = Math.max(0, perSecondDamage)
+      const layers = Array.isArray(this.monsterCalamityAsh?.layers) ? [...this.monsterCalamityAsh.layers] : []
+      for (let i = 0; i < stacks; i += 1) {
+        layers.push({
+          id: calamityLayerId++,
+          appliedAt: nowMs,
+          expiresAt: nowMs + CALAMITY_ASH_DURATION_MS,
+          nextTickAt: nowMs + CALAMITY_ASH_TICK_MS,
+          perSecondDamage: dmgPerSec,
+        })
+        if (layers.length > CALAMITY_ASH_MAX_STACKS) {
+          layers.shift()
+        }
+      }
+      this.monsterCalamityAsh = { layers }
+    },
+    tickCalamityAsh(nowMs: number) {
+      if (!this.monster || this.concluded !== 'idle') {
+        this.monsterCalamityAsh = { layers: [] }
+        return
+      }
+      const layers = Array.isArray(this.monsterCalamityAsh?.layers) ? this.monsterCalamityAsh.layers : []
+      if (layers.length === 0) return
+      const remaining: typeof layers = []
+      for (const layer of layers) {
+        if (nowMs >= layer.expiresAt) continue
+        let nextTickAt = layer.nextTickAt
+        while (nowMs >= nextTickAt && nextTickAt <= layer.expiresAt) {
+          this.applyPlayerTrueDamage(layer.perSecondDamage, 'skill', { showVisuals: false })
+          if (this.concluded !== 'idle' || !this.monster) return
+          nextTickAt += CALAMITY_ASH_TICK_MS
+        }
+        remaining.push({
+          ...layer,
+          nextTickAt,
+        })
+      }
+      this.monsterCalamityAsh = { layers: remaining }
+    },
+  explodeCalamityAsh(multiplier: number, nowMs = getNow()) {
+    if (!this.monster || this.concluded !== 'idle') {
+      this.monsterCalamityAsh = { layers: [] }
+      return
+    }
+      this.tickCalamityAsh(nowMs)
+      const layers = Array.isArray(this.monsterCalamityAsh?.layers) ? this.monsterCalamityAsh.layers : []
+      if (layers.length === 0) return
+      const mult = Math.max(0, multiplier)
+      let total = 0
+      for (const layer of layers) {
+        const remainingSeconds = Math.max(0, (layer.expiresAt - nowMs) / 1000)
+        const ticksRemaining = Math.ceil(remainingSeconds)
+        total += Math.max(0, layer.perSecondDamage) * ticksRemaining
+      }
+      this.monsterCalamityAsh = { layers: [] }
+      if (total <= 0 || mult <= 0) return
+      this.applyPlayerTrueDamage(total * mult, 'ult', { showVisuals: false })
+    },
+  toggleVioletShroudState(desiredOn: boolean, nowMs: number) {
+    if (!this.monster || this.concluded !== 'idle') return
+    if (desiredOn) {
+      this.playerVioletShroud = { active: true, lastDrainAt: nowMs, drainCarryMs: 0 }
+      this.pushFloat('神火罩', 'miss', 'playerBuff')
+    } else if (this.playerVioletShroud) {
+      this.playerVioletShroud = null
+      this.pushFloat('神火罩结束', 'miss')
+    }
+  },
+    tickVioletShroud(nowMs: number) {
+      const state = this.playerVioletShroud
+      if (!state || !state.active) return
+      const player = usePlayerStore()
+      const qiMax = Math.max(player.res.qiMax, 0)
+      const drainPerTick = qiMax * VIOLET_SHROUD_QI_DRAIN_PER_SEC
+      let carry = Math.max(0, nowMs - state.lastDrainAt) + Math.max(0, state.drainCarryMs)
+      let lastDrainAt = state.lastDrainAt
+      while (carry >= 1000) {
+        if (drainPerTick <= 0) break
+        if (player.spendQi(drainPerTick)) {
+          this.recordQiSpent(drainPerTick)
+          carry -= 1000
+          lastDrainAt += 1000
+        } else {
+          this.playerVioletShroud = null
+          this.pushFloat('神火罩结束', 'miss')
+          this.playerQi = player.res.qi
+          this.playerQiMax = player.res.qiMax
+          this.qiOperation = cloneQiOperationState(player.res.operation)
+          return
+        }
+      }
+      this.playerVioletShroud = {
+        active: true,
+        lastDrainAt,
+        drainCarryMs: carry,
+      }
+      this.playerQi = player.res.qi
+      this.playerQiMax = player.res.qiMax
+      this.qiOperation = cloneQiOperationState(player.res.operation)
+    },
+    handleVioletShroudOnHit(stats: Stats) {
+      const shroud = this.playerVioletShroud
+      if (!shroud || !shroud.active) return
+      const atk = Math.max(stats.totals.ATK ?? 0, 0)
+      const dmg = atk * VIOLET_SHROUD_REFLECT_MULTIPLIER
+      if (dmg <= 0) return
+      this.applyPlayerTrueDamage(dmg, 'skill')
+    },
     cleanupSkillCooldownBonuses(nowMs: number) {
       Object.keys(this.skillCooldownBonuses).forEach((skillId) => {
         const bonus = this.skillCooldownBonuses[skillId]
@@ -962,6 +1130,12 @@ export const useBattleStore = defineStore('battle', {
       }
       if (this.monsterChargingDebuff && now > this.monsterChargingDebuff.expiresAt) {
         this.monsterChargingDebuff = null
+      }
+      this.tickVioletShroud(now)
+      this.tickCalamityAsh(now)
+      if (!this.monster || this.concluded !== 'idle') {
+        this.stopLoop()
+        return
       }
       let monsterStunned = false
       if (this.monsterStunUntil !== null) {
@@ -1463,6 +1637,8 @@ export const useBattleStore = defineStore('battle', {
       this.skillCharges = Array(slotCount).fill(null)
       this.activeSkillChargeSlot = null
       this.monsterSkillPlan = []
+      this.playerVioletShroud = null
+      this.monsterCalamityAsh = { layers: [] }
       this.syncMonsterSkillPlanPreview()
       player.setRecoveryMode('idle')
       if (result === 'victory') {
@@ -1888,6 +2064,8 @@ export const useBattleStore = defineStore('battle', {
 
       const progress = player.skills.progress[skillId] ?? undefined
       const skillLevel = Math.max(progress?.level ?? 1, 1)
+      const calamityPerSecondDamage = Math.max(stats.totals.ATK * 0.1, 0)
+      const wasToggleActive = this.isToggleSkillActive(skillId)
 
       const result = skill.execute({
         stats,
@@ -1898,6 +2076,8 @@ export const useBattleStore = defineStore('battle', {
         progress,
         battle: {
           tigerFuryStacks: this.playerTigerFury?.stacks ?? 0,
+          calamityAshStacks: this.monsterCalamityAsh?.layers?.length ?? 0,
+          violetShroudActive: Boolean(this.playerVioletShroud?.active),
         },
       })
 
@@ -2023,6 +2203,25 @@ export const useBattleStore = defineStore('battle', {
 
       if (result.message) {
         this.pushFloat(result.message, 'miss')
+      }
+
+      if (result.applyCalamityAshStacks && result.applyCalamityAshStacks > 0) {
+        this.addCalamityAshStacks(result.applyCalamityAshStacks, calamityPerSecondDamage, nowMs)
+      }
+
+      if (result.triggerCalamityExplosion && result.triggerCalamityExplosion.multiplier > 0 && hit) {
+        this.explodeCalamityAsh(result.triggerCalamityExplosion.multiplier, nowMs)
+      }
+
+      if (typeof result.toggleVioletShroud === 'boolean') {
+        this.toggleVioletShroudState(result.toggleVioletShroud, nowMs)
+        const toggledOn = result.toggleVioletShroud && !wasToggleActive
+        if (toggledOn) {
+          if (this.actionLockUntil !== null && this.actionLockUntil > nowMs) {
+            this.actionLockUntil = nowMs
+          }
+          this.setSkillCooldownForLoadout(player.skills.loadout, skillId, 0)
+        }
       }
 
       if (typeof result.setTigerFuryStacks === 'number') {
@@ -2354,6 +2553,12 @@ export const useBattleStore = defineStore('battle', {
       if (dodged) {
         this.dodgeSuccesses += 1
         this.gainTigerFuryStack(now)
+        if (dodgeAttempt?.skillId === 'fire_feather_flash') {
+          const perSecondDamage = Math.max(stats.totals.ATK * 0.1, 0)
+          if (perSecondDamage > 0) {
+            this.addCalamityAshStacks(1, perSecondDamage, now)
+          }
+        }
         this.playerQi = player.res.qi
         this.playerQiMax = player.res.qiMax
         this.qiOperation = cloneQiOperationState(player.res.operation)
@@ -2388,9 +2593,11 @@ export const useBattleStore = defineStore('battle', {
       }
       // Qi Shielding (BATTLE.md §4.3)
       const f = Math.max(0, Math.min(1, player.res.operation.fValue || 0))
+      const shroudActive = Boolean(this.playerVioletShroud?.active)
       if ((player.res.operation.mode !== 'idle') && f > 0 && incoming > 0) {
         const ratioEff = 0.90 * f
-        const absorbedCap = 0.60 * incoming
+        const absorbedCapBase = shroudActive ? VIOLET_SHROUD_SHIELD_CAP : 0.60
+        const absorbedCap = Math.max(0, Math.min(absorbedCapBase * incoming, incoming))
         const desiredAbsorb = incoming * ratioEff
         const canAbsorb = Math.min(desiredAbsorb, absorbedCap)
         const w = 1.1
@@ -2413,6 +2620,9 @@ export const useBattleStore = defineStore('battle', {
       this.pushFloat(`-${dealt}`, 'hitP')
       if (dealt > 0) {
         this.clearTigerFury()
+      }
+      if (shroudActive && dealt > 0) {
+        this.handleVioletShroudOnHit(stats)
       }
       this.recordCultivationAction('damageTaken', 1)
       this.playerQi = player.res.qi

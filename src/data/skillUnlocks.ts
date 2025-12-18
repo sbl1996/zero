@@ -74,6 +74,29 @@ const UNLOCKS: SkillUnlockDefinition[] = [
     skillId: 'white_tiger_massacre',
   },
   {
+    kind: 'initial',
+    methodId: 'purple_flame',
+    skillId: 'vermilion_seal',
+  },
+  {
+    kind: 'realm',
+    tier: 2,
+    methodId: 'purple_flame',
+    skillId: 'fire_feather_flash',
+  },
+  {
+    kind: 'realm',
+    tier: 3,
+    methodId: 'purple_flame',
+    skillId: 'violet_shroud',
+  },
+  {
+    kind: 'realm',
+    tier: 4,
+    methodId: 'purple_flame',
+    skillId: 'nirvana_end_of_calamity',
+  },
+  {
     kind: 'purchase',
     courseId: 'guild_dodge',
     resolveSkillId: ({ methodId }) => resolveMethodDodgeSkillId(methodId),

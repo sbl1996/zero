@@ -2,7 +2,7 @@ import { dmgAttack, dmgSkill, dmgUlt, getDefRefForRealm, resolveWeaknessDamage }
 import { randRange } from '@/composables/useRng'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
-import type { Monster, SkillDefinition, SkillResult } from '@/types/domain'
+import type { MechanicTag, Monster, SkillDefinition, SkillResult } from '@/types/domain'
 import skillMetadata from './skill-metadata.json'
 
 type SkillMetadata = {
@@ -56,6 +56,10 @@ const META_QI_DODGE = getSkillMeta('qi_dodge')
 const META_RENDING_VOID_CLAW = getSkillMeta('rending_void_claw')
 const META_PHANTOM_INSTANT_KILL = getSkillMeta('phantom_instant_kill')
 const META_WHITE_TIGER_MASSACRE = getSkillMeta('white_tiger_massacre')
+const META_FIRE_FEATHER_FLASH = getSkillMeta('fire_feather_flash')
+const META_VERMILION_SEAL = getSkillMeta('vermilion_seal')
+const META_VIOLET_SHROUD = getSkillMeta('violet_shroud')
+const META_NIRVANA_END_OF_CALAMITY = getSkillMeta('nirvana_end_of_calamity')
 
 const DRAGON_BREATH_BASE_MULTIPLIER = 1
 const DRAGON_BREATH_PER_LEVEL = 0.02
@@ -70,6 +74,18 @@ const PHANTOM_KILL_PER_LEVEL = 0.05
 const WHITE_TIGER_MASSACRE_BASE_MULTIPLIER = 5.2
 const WHITE_TIGER_MASSACRE_PER_LEVEL = 0.18
 const WHITE_TIGER_STACK_SKILL_BONUS = 0.03
+const VERMILION_SEAL_BASE_MULTIPLIER = 0.6
+const VERMILION_SEAL_PER_LEVEL = 0.03
+const NIRVANA_BASE_MULTIPLIER = 2.0
+const NIRVANA_PER_LEVEL = 0.10
+
+const CALAMITY_ASH_MECHANIC: MechanicTag = {
+  id: 'calamity_ash',
+  label: '劫灰',
+  kind: 'debuff',
+  value: '',
+  tooltip: '每秒造成 10% 倍率的真实伤害（无视防御，不触发破绽），持续 8s，最高叠加 8 层。',
+}
 
 function resolveDamageMultiplier(base: number, perLevelIncrease: number, level: number): number {
   const lvl = Math.max(level, 1)
@@ -123,6 +139,21 @@ function describeWhiteTigerMassacre(_level: number): string {
   const segments = [`引动白虎杀意的一击。`]
   segments.push('若施放时【虎煞】层数为0，则直接获得 3 层【虎煞】。若已有【虎煞】，本次伤害每层额外提升 3%。')
   return segments.join(' ')
+}
+
+function describeVermilionSeal(_level: number): string {
+  const segments = [
+    `以朱雀印记镇压敌人，命中后附加 1 层【劫灰】。`,
+  ]
+  return segments.join(' ')
+}
+
+function describeVioletShroud(_level: number): string {
+  return '开启后提升斗气防御比例至 90%，消耗 2% 斗气/s，每次被命中时对敌方造成伤害。'
+}
+
+function describeNirvanaEndOfCalamity(_level: number): string {
+  return `天劫降世，清算罪恶。若目标有【劫灰】，引爆全部剩余伤害并额外造成 1.2x 引爆伤害，清除层数。`
 }
 
 export const SKILLS: SkillDefinition[] = [
@@ -495,6 +526,143 @@ export const SKILLS: SkillDefinition[] = [
         weaknessTriggered: weakness.triggered,
         hit: totalDamage > 0,
         setTigerFuryStacks,
+      }
+    },
+  },
+  {
+    id: META_FIRE_FEATHER_FLASH.id,
+    name: META_FIRE_FEATHER_FLASH.name,
+    cost: { type: 'qi', percentOfQiMax: 0.06 },
+    flash: 'skill',
+    aftercastTime: 0.2,
+    icon: resolveSkillIcon(META_FIRE_FEATHER_FLASH.id),
+    mechanics: [
+      { id: 'dodge', label: '闪避', kind: 'defense' },
+      CALAMITY_ASH_MECHANIC,
+      { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.2s' },
+    ],
+    maxLevel: 1,
+    dodgeConfig: {
+      windowMs: DODGE_WINDOW_MS,
+      refundPercentOfQiMax: 0.03,
+      successText: '火羽闪!',
+    },
+    getDamageMultiplier: () => 0,
+    getCooldown: () => 0.6,
+    getDescription: () => META_FIRE_FEATHER_FLASH.description,
+    execute: () => ({ hit: false }),
+  },
+  {
+    id: META_VERMILION_SEAL.id,
+    name: META_VERMILION_SEAL.name,
+    cost: { type: 'qi', percentOfQiMax: 0.04 },
+    flash: 'attack',
+    aftercastTime: 0.3,
+    icon: resolveSkillIcon(META_VERMILION_SEAL.id),
+    maxLevel: 10,
+    mechanics: [
+      CALAMITY_ASH_MECHANIC,
+    ],
+    getCooldown: (level) => resolvePerLevelCooldown(3.0, level, 0.7),
+    getDamageMultiplier: (level) =>
+      resolveDamageMultiplier(VERMILION_SEAL_BASE_MULTIPLIER, VERMILION_SEAL_PER_LEVEL, level),
+    getDescription: describeVermilionSeal,
+    execute: ({ stats, monster, rng, progress }) => {
+      const level = Math.max(progress?.level ?? 1, 1)
+      const damageMultiplier = resolveDamageMultiplier(
+        VERMILION_SEAL_BASE_MULTIPLIER,
+        VERMILION_SEAL_PER_LEVEL,
+        level,
+      )
+      const damageScale = damageMultiplier / VERMILION_SEAL_BASE_MULTIPLIER
+      const atk = stats.totals.ATK
+      const def = resolveMonsterDef(monster)
+      const defRef = resolveMonsterDefRef(monster)
+      const result = dmgAttack(atk, def, randRange(rng, 0, 1), {
+        defRef,
+        defenderTough: resolveMonsterTough(monster),
+      })
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+      const baseDamage = Math.max(result.damage * damageScale, 0)
+      const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
+      const coreBase = Math.max(result.coreDamage * damageScale, 0)
+      const coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
+      const totalDamage = Math.round(weakness.damage)
+      const hit = totalDamage > 0
+      return {
+        damage: totalDamage,
+        coreDamage,
+        weaknessTriggered: weakness.triggered,
+        hit,
+        applyCalamityAshStacks: hit ? 1 : undefined,
+      }
+    },
+  },
+  {
+    id: META_VIOLET_SHROUD.id,
+    name: META_VIOLET_SHROUD.name,
+    cost: { type: 'qi', percentOfQiMax: 0.05 },
+    flash: 'skill',
+    aftercastTime: 0.2,
+    icon: resolveSkillIcon(META_VIOLET_SHROUD.id),
+    mechanics: [{ id: 'debuff', label: '开关', kind: 'timing', value: '' }],
+    maxLevel: 10,
+    getCooldown: () => 3,
+    getDamageMultiplier: () => 0.5,
+    getDescription: describeVioletShroud,
+    execute: ({ battle }) => {
+      const active = battle?.violetShroudActive ?? false
+      return {
+        hit: false,
+        toggleVioletShroud: !active,
+      }
+    },
+  },
+  {
+    id: META_NIRVANA_END_OF_CALAMITY.id,
+    name: META_NIRVANA_END_OF_CALAMITY.name,
+    cost: { type: 'qi', percentOfQiMax: 0.15 },
+    flash: 'ult',
+    chargeTime: 0.6,
+    aftercastTime: 0.4,
+    icon: resolveSkillIcon(META_NIRVANA_END_OF_CALAMITY.id),
+    mechanics: [],
+    maxLevel: 10,
+    getCooldown: (level) => resolvePerLevelCooldown(20, level, 5),
+    getDamageMultiplier: (level) =>
+      resolveDamageMultiplier(NIRVANA_BASE_MULTIPLIER, NIRVANA_PER_LEVEL, level),
+    getDescription: describeNirvanaEndOfCalamity,
+    execute: ({ stats, monster, rng, progress, battle }) => {
+      const level = Math.max(progress?.level ?? 1, 1)
+      const damageMultiplier = resolveDamageMultiplier(
+        NIRVANA_BASE_MULTIPLIER,
+        NIRVANA_PER_LEVEL,
+        level,
+      )
+      const damageScale = damageMultiplier / NIRVANA_BASE_MULTIPLIER
+      const atk = stats.totals.ATK
+      const def = resolveMonsterDef(monster)
+      const defRef = resolveMonsterDefRef(monster)
+      const result = dmgUlt(atk, def, randRange(rng, 0, 1), {
+        defRef,
+        defenderTough: resolveMonsterTough(monster),
+      })
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+      const baseDamage = Math.max(result.damage * damageScale, 0)
+      const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
+      const coreBase = Math.max(result.coreDamage * damageScale, 0)
+      const coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
+      const totalDamage = Math.round(weakness.damage)
+      const hit = totalDamage > 0
+      const stacks = Math.max(battle?.calamityAshStacks ?? 0, 0)
+      return {
+        damage: totalDamage,
+        coreDamage,
+        weaknessTriggered: weakness.triggered,
+        hit,
+        triggerCalamityExplosion: stacks > 0 ? { multiplier: 1.2 } : undefined,
       }
     },
   },

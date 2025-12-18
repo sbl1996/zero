@@ -9,6 +9,7 @@
         <RouterLink to="/equipment" class="nav-link" active-class="active">装备</RouterLink>
         <RouterLink to="/backpack" class="nav-link" active-class="active">背包</RouterLink>
         <RouterLink to="/quests" class="nav-link" active-class="active">任务</RouterLink>
+        <RouterLink to="/magic-rhythm" class="nav-link" active-class="active">演奏</RouterLink>
         <button
           v-if="hasCharacter"
           type="button"

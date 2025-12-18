@@ -469,6 +469,11 @@ export interface SkillResult {
     percent: number
     durationMs: number
   }
+  applyCalamityAshStacks?: number
+  triggerCalamityExplosion?: {
+    multiplier: number
+  }
+  toggleVioletShroud?: boolean
   delayedDamage?: {
     delayMs: number
     damage: number
@@ -488,6 +493,8 @@ export interface SkillContext {
   progress?: SkillProgress
   battle?: {
     tigerFuryStacks?: number
+    calamityAshStacks?: number
+    violetShroudActive?: boolean
   }
 }
 
@@ -506,6 +513,7 @@ export interface MechanicTag {
   label: string
   kind: MechanicKind
   value?: string
+  tooltip?: string
 }
 
 export interface SkillDefinition {
@@ -665,9 +673,11 @@ export interface BattleState {
   playerSuperArmor: { expiresAt: number; durationMs: number; label?: string } | null
   playerBloodRage: { stacks: number; progressQi: number } | null
   playerTigerFury: { stacks: number; expiresAt: number; durationMs: number } | null
+  playerVioletShroud: { active: boolean; lastDrainAt: number; drainCarryMs: number } | null
   playerAgiBuff: { percent: number; expiresAt: number; durationMs: number } | null
   monsterVulnerability: { percent: number; expiresAt: number; durationMs: number } | null
   monsterChargingDebuff: { expiresAt: number; durationMs: number } | null
+  monsterCalamityAsh: { layers: Array<{ id: number; appliedAt: number; expiresAt: number; nextTickAt: number; perSecondDamage: number }> }
   originNodeId?: string | null
   originNodeInstanceId?: string | null
   pendingQuestCompletions: string[]

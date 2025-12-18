@@ -1,3 +1,0 @@
-"""
-Admin portal backend package.
-"""

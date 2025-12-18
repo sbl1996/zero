@@ -12,7 +12,7 @@ const props = defineProps<{
   allowedMax: number
   description: string
   stats: Array<{ label: string; value: string; tone: StatTone }>
-  tags: Array<{ label: string; kind: TagKind; value?: string }>
+  tags: Array<{ label: string; kind: TagKind; value?: string; tooltip?: string }>
   xpPercent: number
   xpLabel: string
   xpCapLabel: string
@@ -152,6 +152,7 @@ watch(isEquipped, (equipped) => {
             :key="`${id}-${tag.label}`"
             class="skill-tag"
             :class="`skill-tag-${tag.kind}`"
+            :title="tag.tooltip || undefined"
           >
             <span>{{ tag.label }}</span>
             <span v-if="tag.value" class="skill-tag-value">{{ tag.value }}</span>

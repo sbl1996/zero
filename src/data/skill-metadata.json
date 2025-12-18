@@ -41,5 +41,25 @@
     "id": "qi_dodge",
     "name": "斗气闪避",
     "description": "进入斗气闪避姿态，成功闪避则返还4%斗气上限。"
+  },
+  {
+    "id": "fire_feather_flash",
+    "name": "火羽闪",
+    "description": "灼热的羽翎闪身，成功躲避时为敌附加【劫灰】。"
+  },
+  {
+    "id": "vermilion_seal",
+    "name": "朱雀印",
+    "description": "以朱雀印记镇压，对目标造成伤害并附加【劫灰】。"
+  },
+  {
+    "id": "violet_shroud",
+    "name": "神火罩",
+    "description": "开关型防御，提升斗气防御上限并反弹伤害。"
+  },
+  {
+    "id": "nirvana_end_of_calamity",
+    "name": "涅槃·劫尽",
+    "description": "终极燃烧，若有【劫灰】则引爆并追加伤害。"
   }
 ]

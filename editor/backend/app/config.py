@@ -66,7 +66,7 @@ class Settings(BaseModel):
     conversion_script: Path = Field(
         default_factory=lambda: _path_from_env(
             "MONSTER_CONVERSION_SCRIPT",
-            _default_repo_root() / "scripts/portrait_to_webp.py",
+            _default_repo_root() / "scripts/optimize_assets.py",
         )
     )
 

@@ -3,8 +3,9 @@ src/assets/*.webp
 src/assets/*.mp3
 src/assets/*.ogg
 src/assets/raw/
+src/assets/acoustic_grand_piano/
 deploy.sh
-
+examples/
 
 # Dependencies
 node_modules/

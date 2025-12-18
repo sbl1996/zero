@@ -5,6 +5,7 @@ export const DEFAULT_DODGE_SKILL_ID = 'qi_dodge'
 const METHOD_DODGE_SKILL: Partial<Record<CultivationMethodId, string>> = {
   dragon_blood: 'dragon_shadow_dash',
   tiger_stripe: 'tiger_shadow_step',
+  purple_flame: 'fire_feather_flash',
 }
 
 export function resolveMethodDodgeSkillId(methodId: CultivationMethodId | null | undefined): string {
