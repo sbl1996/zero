@@ -118,11 +118,6 @@ watch(() => props.timeToAttack, (currentSeconds) => {
   previousTimer.value = currentSeconds
 }, { immediate: true })
 
-const formattedCountdown = computed(() => {
-  if (!props.active || props.timeToAttack === null) return '—'
-  const remaining = Math.max(0, props.timeToAttack)
-  return `${remaining.toFixed(2)}s`
-})
 
 function clampToSpan(seconds: number) {
   if (seconds > HALF_SPAN_SECONDS) return HALF_SPAN_SECONDS
@@ -336,10 +331,6 @@ const timelineClasses = computed(() => ({
 
 <template>
   <div class="monster-attack-timeline" :class="timelineClasses">
-    <div class="timeline-header">
-      <span class="timeline-title">怪物攻击</span>
-      <span class="timeline-countdown">{{ formattedCountdown }}</span>
-    </div>
     <div class="timeline-rail">
       <div class="timeline-rail__fill" />
       <div class="timeline-rail__ticks" />
@@ -403,23 +394,6 @@ const timelineClasses = computed(() => ({
   filter: grayscale(25%);
 }
 
-.timeline-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.75);
-}
-
-.timeline-title {
-  letter-spacing: 0.06em;
-}
-
-.timeline-countdown {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: rgba(250, 250, 250, 0.9);
-}
 
 .timeline-rail {
   position: relative;
