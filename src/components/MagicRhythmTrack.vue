@@ -363,18 +363,17 @@ const props = defineProps<{
 }
 
 @keyframes shake {
-
   0%,
   100% {
-    transform: translate(-50%, -50%);
+    transform: translateX(0);
   }
 
   25% {
-    transform: translate(calc(-50% - 4px), -50%);
+    transform: translateX(-4px);
   }
 
   75% {
-    transform: translate(calc(-50% + 4px), -50%);
+    transform: translateX(4px);
   }
 }
 </style>

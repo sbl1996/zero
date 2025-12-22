@@ -8,11 +8,6 @@ export interface DamageOptions {
   defRef?: number
 }
 
-export interface DamageResult {
-  damage: number
-  coreDamage: number
-}
-
 export interface WeaknessResolution {
   damage: number
   triggered: boolean
@@ -26,7 +21,7 @@ function clamp01(value: number) {
   return value
 }
 
-function toRollMultiplier(input: number) {
+export function toRollMultiplier(input: number) {
   return 0.8 + 0.4 * input
 }
 
@@ -90,13 +85,13 @@ export function getDefRefForRealm(realm?: RealmStage | RealmTier): number {
   return 0
 }
 
-function computeDamage(
+export function computeDamage(
   atk: number,
   def: number,
   mult: number,
   rollMultiplier: number,
   options: DamageOptions = {},
-): DamageResult {
+): number {
   const {
     penFlat = 0,
     penPct = 0,
@@ -122,29 +117,7 @@ function computeDamage(
   const core = raw * mitigation
   const damage = Math.round(Math.max(0, core))
 
-  return { damage, coreDamage: Math.round(core) }
-}
-
-export function dmgAttack(ATK: number, DEF: number, roll: number, options?: DamageOptions): DamageResult {
-  return computeDamage(ATK, DEF, 1.0, toRollMultiplier(roll), options)
-}
-
-export function dmgSkill(ATK: number, DEF: number, roll: number, options?: DamageOptions): DamageResult {
-  return computeDamage(ATK, DEF, 1.6, toRollMultiplier(roll), options)
-}
-
-export function dmgUlt(ATK: number, DEF: number, roll: number, options?: DamageOptions): DamageResult {
-  return computeDamage(ATK, DEF, 3.5, toRollMultiplier(roll), options)
-}
-
-export function dmgCustom(
-  ATK: number,
-  DEF: number,
-  multiplier: number,
-  roll: number,
-  options?: DamageOptions,
-): DamageResult {
-  return computeDamage(ATK, DEF, multiplier, toRollMultiplier(roll), options)
+  return damage
 }
 
 export function resolveWeaknessDamage(

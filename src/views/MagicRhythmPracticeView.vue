@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { RHYTHM_PHRASES } from '@/data/rhythmPhrases'
 import type { RhythmKey, RhythmNote } from '@/types/rhythm'
-import { beatMs, buildNoteTimings, normalizeScore, resolveNoteDurationBeats, scoreOffset } from '@/utils/rhythm'
+import { beatMs, buildNoteTimings, computeRhythmDamageMultiplier, normalizeScore, resolveNoteDurationBeats, scoreOffset } from '@/utils/rhythm'
 import { clamp } from '@/utils/math'
 import MagicRhythmTrack, { type TrackNote, type TrackDivider, type TrackLeadTick } from '@/components/MagicRhythmTrack.vue'
 import * as Tone from 'tone'
@@ -204,13 +204,7 @@ const totalRawScore = computed(() =>
 const normalizedScore = computed(() => normalizeScore(totalRawScore.value, maxPossibleScore.value))
 
 const damageMultiplier = computed(() => {
-  const s = normalizedScore.value
-  if (s <= 90) {
-    return s / 90
-  } else {
-    // 90分后使用二次方增长公式：1.0 + 0.015 * (s - 90)^2 -> 满分250%
-    return 1.0 + 0.015 * Math.pow(s - 90, 2)
-  }
+  return computeRhythmDamageMultiplier(normalizedScore.value)
 })
 
 const success = computed(() => {
@@ -393,7 +387,7 @@ async function handleKeydown(event: KeyboardEvent) {
     if (event.repeat) return
     if (event.key.toLowerCase() === 'z') {
       if (!session.playing) {
-        void startPractice()
+        startPractice()
       } else {
         resetSession()
       }
@@ -498,11 +492,12 @@ function flowPositionPercent(centerTimeMs: number) {
 
 const visibleNotes = computed<TrackNote[]>(() =>
   noteStates.value
-    .map((state) => {
+    .map((state): TrackNote | null => {
       const timing = noteTimings.value[state.index]
       if (!timing) return null
       const left = flowPositionPercent(timing.startMs)
       if (left === null) return null
+      // Explicitly construct object matching TrackNote
       return {
         key: state.index,
         left,
@@ -514,7 +509,7 @@ const visibleNotes = computed<TrackNote[]>(() =>
         pitch: state.note.pitch,
       }
     })
-    .filter((item): item is TrackNote => Boolean(item)),
+    .filter((item): item is TrackNote => item !== null),
 )
 
 const visibleLeadTicks = computed<TrackLeadTick[]>(() =>
@@ -781,7 +776,7 @@ watch(volumeDb, (val) => {
   <div class="practice-layout">
     <div class="panel practice-top">
       <div class="practice-meta">
-        <div class="meta-head">
+         <div class="meta-head">
           <div>
             <h2 class="section-title">魔法节奏练习</h2>
             <p class="text-muted">

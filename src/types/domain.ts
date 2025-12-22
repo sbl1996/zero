@@ -162,7 +162,7 @@ export interface BasePowerState {
   lastUpdatedAt: number | null
 }
 
-export type CultivationMethodId = 'dragon_blood' | 'vajra' | 'tiger_stripe' | 'purple_flame'
+export type CultivationMethodId = 'dragon_blood' | 'vajra' | 'tiger_stripe' | 'purple_flame' | 'demonic_resonance'
 
 export interface QiFocusProfile {
   atk: number
@@ -445,7 +445,6 @@ export interface SkillCost {
 
 export interface SkillResult {
   damage?: number
-  coreDamage?: number
   healSelf?: number
   gainQi?: number
   spendQi?: number
@@ -477,11 +476,14 @@ export interface SkillResult {
   delayedDamage?: {
     delayMs: number
     damage: number
-    coreDamage?: number
     weaknessTriggered?: boolean
     flash?: FlashEffectKind
   }
   setTigerFuryStacks?: number
+  rhythmResult?: {
+    score: number
+    combo: number
+  }
 }
 
 export interface SkillContext {
@@ -491,6 +493,10 @@ export interface SkillContext {
   resources: Resources
   cultivation: PlayerCultivationState
   progress?: SkillProgress
+  rhythmResult?: {
+    score: number
+    combo: number
+  }
   battle?: {
     tigerFuryStacks?: number
     calamityAshStacks?: number
@@ -534,6 +540,10 @@ export interface SkillDefinition {
   getDamageMultiplier: (level: number) => number
   getDescription: (level: number) => string
   execute: (context: SkillContext) => SkillResult
+  rhythmConfig?: {
+    phraseId: string
+    baseDamageMultiplier: number
+  }
 }
 
 export interface FloatText {

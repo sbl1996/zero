@@ -29,7 +29,7 @@ export const RHYTHM_PHRASES: RhythmPhrase[] = [
   },
   {
     id: 'wind_blade',
-    name: '疾风刃',
+    name: '风刃',
     description: '初级风系：快速切分音，瞬发伤害',
     bpm: 140,
     timeSignature: { numerator: 2, denominator: 4 },
@@ -39,14 +39,7 @@ export const RHYTHM_PHRASES: RhythmPhrase[] = [
       { pitch: "C'", durationBeats: 0.5 },
       { pitch: "D'", durationBeats: 0.5 },
       { pitch: "C'", durationBeats: 0.5 },
-      { pitch: "E'", durationBeats: 1 }, // 第一发风刃
-      { pitch: null, required: false, durationBeats: 1 },
-      { pitch: "B", durationBeats: 0.5 },
-      { pitch: "C'", durationBeats: 0.5 },
-      { pitch: "D'", durationBeats: 0.5 },
-      { pitch: "C'", durationBeats: 0.5 },
-      { pitch: "E'", durationBeats: 1.0 }, // 第二发重击
-      { pitch: null, required: false, durationBeats: 1 },
+      { pitch: "E'", durationBeats: 1 },
     ],
   },
   {

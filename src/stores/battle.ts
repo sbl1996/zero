@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { dmgAttack, getDefRefForRealm, resolveWeaknessDamage } from '@/composables/useDamage'
+import { computeDamage, getDefRefForRealm, resolveWeaknessDamage, toRollMultiplier } from '@/composables/useDamage'
 import { CULTIVATION_ACTION_WEIGHTS, DEFAULT_WARMUP_SECONDS } from '@/composables/useLeveling'
 import { resolveSkillAftercast, resolveSkillChargeTime, resolveSkillCooldown, resolveQiCost } from '@/composables/useSkills'
 import { makeRng, randRange, randBool } from '@/composables/useRng'
@@ -421,14 +421,14 @@ function initialState(): BattleState {
     monsterHp: 0,
     monsterQi: 0,
     monsterRngSeed: Date.now() >>> 0,
-  rngSeed: Date.now() >>> 0,
-  floatTexts: [],
-  flashEffects: [],
-  skillEffects: [],
-  concluded: 'idle',
-  lastOutcome: null,
-  rematchTimer: null,
-  lastAutoRematchAt: null,
+    rngSeed: Date.now() >>> 0,
+    floatTexts: [],
+    flashEffects: [],
+    skillEffects: [],
+    concluded: 'idle',
+    lastOutcome: null,
+    rematchTimer: null,
+    lastAutoRematchAt: null,
     loot: [],
     loopHandle: null,
     lastTickAt: 0,
@@ -998,11 +998,11 @@ export const useBattleStore = defineStore('battle', {
       }
       this.monsterCalamityAsh = { layers: remaining }
     },
-  explodeCalamityAsh(multiplier: number, nowMs = getNow()) {
-    if (!this.monster || this.concluded !== 'idle') {
-      this.monsterCalamityAsh = { layers: [] }
-      return
-    }
+    explodeCalamityAsh(multiplier: number, nowMs = getNow()) {
+      if (!this.monster || this.concluded !== 'idle') {
+        this.monsterCalamityAsh = { layers: [] }
+        return
+      }
       this.tickCalamityAsh(nowMs)
       const layers = Array.isArray(this.monsterCalamityAsh?.layers) ? this.monsterCalamityAsh.layers : []
       if (layers.length === 0) return
@@ -1017,16 +1017,16 @@ export const useBattleStore = defineStore('battle', {
       if (total <= 0 || mult <= 0) return
       this.applyPlayerTrueDamage(total * mult, 'ult', { showVisuals: false })
     },
-  toggleVioletShroudState(desiredOn: boolean, nowMs: number) {
-    if (!this.monster || this.concluded !== 'idle') return
-    if (desiredOn) {
-      this.playerVioletShroud = { active: true, lastDrainAt: nowMs, drainCarryMs: 0 }
-      this.pushFloat('神火罩', 'miss', 'playerBuff')
-    } else if (this.playerVioletShroud) {
-      this.playerVioletShroud = null
-      this.pushFloat('神火罩结束', 'miss')
-    }
-  },
+    toggleVioletShroudState(desiredOn: boolean, nowMs: number) {
+      if (!this.monster || this.concluded !== 'idle') return
+      if (desiredOn) {
+        this.playerVioletShroud = { active: true, lastDrainAt: nowMs, drainCarryMs: 0 }
+        this.pushFloat('神火罩', 'miss', 'playerBuff')
+      } else if (this.playerVioletShroud) {
+        this.playerVioletShroud = null
+        this.pushFloat('神火罩结束', 'miss')
+      }
+    },
     tickVioletShroud(nowMs: number) {
       const state = this.playerVioletShroud
       if (!state || !state.active) return
@@ -1657,7 +1657,7 @@ export const useBattleStore = defineStore('battle', {
         this.monsterHp = 0
       }
     },
-    playerUseSkill(slotIndex: number, options?: { silent?: boolean }): boolean {
+    playerUseSkill(slotIndex: number, options?: { silent?: boolean; rhythmResult?: { score: number; combo: number } }): boolean {
       if (!this.monster || this.concluded !== 'idle') return false
 
       const player = usePlayerStore()
@@ -1744,7 +1744,7 @@ export const useBattleStore = defineStore('battle', {
       const skillCooldown = this.resolveEffectiveSkillCooldown(skillId, skill, level, nowReal)
       this.setSkillCooldownForLoadout(loadout, skillId, skillCooldown)
 
-      return this.executeSkillEffect(skill, skillId, qiCost, silent)
+      return this.executeSkillEffect(skill, skillId, qiCost, silent, options?.rhythmResult)
     },
     startSkillCharge(
       slotIndex: number,
@@ -2043,7 +2043,13 @@ export const useBattleStore = defineStore('battle', {
         travelToMap(result.teleportToMapId)
       }
     },
-    executeSkillEffect(skill: SkillDefinition, skillId: string, qiCost: number, silent: boolean): boolean {
+    executeSkillEffect(
+      skill: SkillDefinition,
+      skillId: string,
+      qiCost: number,
+      silent: boolean,
+      rhythmResult?: { score: number, combo: number }
+    ): boolean {
       if (!this.monster || this.concluded !== 'idle') return false
 
       const player = usePlayerStore()
@@ -2079,6 +2085,7 @@ export const useBattleStore = defineStore('battle', {
           calamityAshStacks: this.monsterCalamityAsh?.layers?.length ?? 0,
           violetShroudActive: Boolean(this.playerVioletShroud?.active),
         },
+        rhythmResult,
       })
 
       const nowMs = getNow()
@@ -2094,9 +2101,6 @@ export const useBattleStore = defineStore('battle', {
           } else if (dmg > 0 && activeVulnerability.percent > 0) {
             const multiplier = 1 + Math.max(activeVulnerability.percent, 0)
             dmg = Math.round(dmg * multiplier)
-            if (typeof result.coreDamage === 'number') {
-              result.coreDamage = Math.round(Math.max(result.coreDamage, 0) * multiplier)
-            }
           }
         }
 
@@ -2104,9 +2108,6 @@ export const useBattleStore = defineStore('battle', {
         if (tigerBonus > 0 && dmg > 0) {
           const multiplier = 1 + tigerBonus
           dmg = Math.round(dmg * multiplier)
-          if (typeof result.coreDamage === 'number') {
-            result.coreDamage = Math.round(Math.max(result.coreDamage, 0) * multiplier)
-          }
         }
       } else {
         dmg = 0
@@ -2134,14 +2135,12 @@ export const useBattleStore = defineStore('battle', {
       if (hasDelayedDamage) {
         const delayMs = Math.max(delayedSpec?.delayMs ?? 0, 0)
         const pendingDamage = Math.max(0, Math.round(delayedSpec?.damage ?? result.damage ?? 0))
-        const pendingCore = delayedSpec?.coreDamage ?? result.coreDamage
         const pendingWeakness = delayedSpec?.weaknessTriggered ?? weaknessTriggered
         const pendingFlash = delayedSpec?.flash ?? skill.flash
         setTimeout(() => {
           if (!this.monster || this.concluded !== 'idle') return
           const applyAt = getNow()
           let finalDamage = pendingDamage
-          let finalCore = pendingCore
           const vuln = this.monsterVulnerability
           if (vuln) {
             if (applyAt > vuln.expiresAt) {
@@ -2149,18 +2148,12 @@ export const useBattleStore = defineStore('battle', {
             } else if (finalDamage > 0 && vuln.percent > 0) {
               const mult = 1 + Math.max(vuln.percent, 0)
               finalDamage = Math.round(finalDamage * mult)
-              if (typeof finalCore === 'number') {
-                finalCore = Math.round(Math.max(finalCore, 0) * mult)
-              }
             }
           }
           const tigerBonusNow = this.resolveTigerFuryBonus(applyAt)
           if (tigerBonusNow > 0 && finalDamage > 0) {
             const mult = 1 + tigerBonusNow
             finalDamage = Math.round(finalDamage * mult)
-            if (typeof finalCore === 'number') {
-              finalCore = Math.round(Math.max(finalCore, 0) * mult)
-            }
           }
           if (finalDamage > 0) {
             this.applyPlayerDamage(finalDamage, pendingFlash, { weakness: pendingWeakness })
@@ -2567,7 +2560,6 @@ export const useBattleStore = defineStore('battle', {
 
       // Check for super armor (invincibility)
       if (this.playerSuperArmor && now <= this.playerSuperArmor.expiresAt) {
-        // this.pushFloat('霸体!', 'miss')
         this.playerQi = player.res.qi
         this.playerQiMax = player.res.qiMax
         this.qiOperation = cloneQiOperationState(player.res.operation)
@@ -2578,13 +2570,13 @@ export const useBattleStore = defineStore('battle', {
 
       const penetration = resolveMonsterPenetration(this.monster)
       const defRef = getDefRefForRealm(player.cultivation.realm)
-      const damageResult = dmgAttack(resolveMonsterAtk(this.monster), stats.totals.DEF, randRange(rng, 0, 1), {
+      const damageResult = computeDamage(resolveMonsterAtk(this.monster), stats.totals.DEF, 1.0, toRollMultiplier(randRange(rng, 0, 1)), {
         penPct: penetration.pct,
         penFlat: penetration.flat,
         defRef,
         defenderTough: 1,
       })
-      const weakness = resolveWeaknessDamage(damageResult.damage, agiAttacker, agiDefender, randRange(rng, 0, 1))
+      const weakness = resolveWeaknessDamage(damageResult, agiAttacker, agiDefender, randRange(rng, 0, 1))
 
       const multiplier = Math.max(damageMultiplier, 0)
       let incoming = Math.max(0, weakness.damage)

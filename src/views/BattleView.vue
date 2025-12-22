@@ -31,6 +31,9 @@ import BattleQuickItemBar from '@/components/BattleQuickItemBar.vue'
 import MonsterAttackTimeline from '@/components/MonsterAttackTimeline.vue'
 import { formatMonsterRewards, getMonsterRankLabel } from '@/utils/monsterUtils'
 import { getGameMap } from '@/data/maps'
+import MagicRhythmTrack from '@/components/MagicRhythmTrack.vue'
+import { useMagicRhythm } from '@/composables/useMagicRhythm'
+
 
 const router = useRouter()
 const battle = useBattleStore()
@@ -44,6 +47,26 @@ const DEFAULT_BATTLE_BACKGROUND = resolveAssetUrl('map-fringe-battle.webp')
 
 const { res } = storeToRefs(playerStore)
 const { autoRematchAfterVictory } = storeToRefs(uiStore)
+
+// Magic Skill State
+const isCastingMagicSkill = ref(false)
+const castingSkillId = ref<string | null>(null)
+const castingSkillSlotIndex = ref<number>(-1)
+
+const rhythmEngine = useMagicRhythm()
+
+function handleMagicSkillFinish(result: { score: number, combo: number }) {
+  // Delay slightly to show "Success" or just close?
+  // User said "弹奏完成后MagicRhythmTrack 消失"
+  isCastingMagicSkill.value = false
+  if (castingSkillSlotIndex.value !== -1) {
+    battle.playerUseSkill(castingSkillSlotIndex.value, { rhythmResult: result })
+  }
+  castingSkillId.value = null
+  castingSkillSlotIndex.value = -1
+  rhythmEngine.stop()
+}
+
 
 const monster = computed(() => battle.monster)
 const lastOutcome = computed(() => battle.lastOutcome)
@@ -881,6 +904,40 @@ function resetSkillPressState() {
   activePressSlots.value.clear()
 }
 
+/**
+ * 尝试触发魔法音游技能
+ * @returns 是否成功触发或处理了输入（即不再继续后续普通技能逻辑）
+ */
+function tryTriggerMagicSkill(slotIndex: number): boolean {
+  const loadout = playerStore.skills.loadout
+  if (slotIndex < 0 || slotIndex >= loadout.length) return false
+  const skillId = loadout[slotIndex]
+  if (!skillId) return false
+  const skill = getSkillDefinition(skillId)
+  if (!skill?.rhythmConfig) return false
+
+  const cooldown = battle.getSkillCooldown(slotIndex)
+  if (cooldown > 0) {
+    battle.pushFloat(`冷却中 ${cooldown.toFixed(1)}s`, 'miss')
+    return true
+  }
+  // 检查消耗
+  const qiCost = skill.cost.type === 'qi'
+    ? (typeof skill.cost.amount === 'number' ? skill.cost.amount : (skill.cost.percentOfQiMax ?? 0) * playerStore.res.qiMax)
+    : 0
+  if (qiCost > playerStore.res.qi) {
+    battle.pushFloat(`斗气不足`, 'miss')
+    return true
+  }
+
+  castingSkillId.value = skillId
+  castingSkillSlotIndex.value = slotIndex
+  isCastingMagicSkill.value = true
+  rhythmEngine.start(skill.rhythmConfig.phraseId, handleMagicSkillFinish)
+  return true
+}
+
+
 function handleSkillPress(slotIndex: number, event?: MouseEvent | TouchEvent) {
   if (event instanceof MouseEvent && event.button !== 0) {
     return
@@ -888,6 +945,34 @@ function handleSkillPress(slotIndex: number, event?: MouseEvent | TouchEvent) {
 
   const slot = skillSlots.value[slotIndex]
   if (!slot) return
+
+  if (isCastingMagicSkill.value) {
+    if (slotIndex === castingSkillSlotIndex.value) {
+      isCastingMagicSkill.value = false
+      castingSkillId.value = null
+      castingSkillSlotIndex.value = -1
+      rhythmEngine.stop()
+      battle.pushFloat('施法失败', 'miss')
+      return
+    }
+
+    const skillId = playerStore.skills.loadout[slotIndex]
+    const skill = getSkillDefinition(skillId)
+    if (skill?.dodgeConfig) {
+      // 闪避技能：正常判定闪避，施法继续
+      battle.playerUseSkill(slotIndex)
+      return
+    } else {
+      // 其他技能：打断当前施法，准备释放新技能
+      isCastingMagicSkill.value = false
+      castingSkillId.value = null
+      castingSkillSlotIndex.value = -1
+      rhythmEngine.stop()
+      // 继续向下执行
+    }
+  }
+
+  if (tryTriggerMagicSkill(slotIndex)) return
 
   if (slot.requiresCharge) {
     const started = battle.playerUseSkill(slotIndex)
@@ -971,11 +1056,56 @@ async function handleKeyDown(event: KeyboardEvent) {
   // Only handle keydown events during active battle
   if (!battle.inBattle || battle.concluded !== 'idle') return
 
+
+
   const key = event.key.toLowerCase()
   const hotkeyIndex = SKILL_HOTKEYS.indexOf(key as typeof SKILL_HOTKEYS[number])
 
+  if (isCastingMagicSkill.value) {
+    if (hotkeyIndex !== -1) {
+      // 如果按的是当前正在施法的技能快捷键
+      if (hotkeyIndex === castingSkillSlotIndex.value) {
+        isCastingMagicSkill.value = false
+        castingSkillId.value = null
+        castingSkillSlotIndex.value = -1
+        rhythmEngine.stop()
+        battle.pushFloat('施法失败', 'miss')
+        event.preventDefault()
+        return
+      }
+
+      // 检查是否为闪避技能
+      const skillId = playerStore.skills.loadout[hotkeyIndex]
+      const skill = getSkillDefinition(skillId)
+      if (skill?.dodgeConfig) {
+        // 闪避技能：正常判定闪避，施法继续
+        battle.playerUseSkill(hotkeyIndex)
+        event.preventDefault()
+        return
+      } else {
+        // 其他技能：打断当前施法，准备释放新技能
+        isCastingMagicSkill.value = false
+        castingSkillId.value = null
+        castingSkillSlotIndex.value = -1
+        rhythmEngine.stop()
+        // 继续向下执行，触发新技能 logic
+      }
+    } else {
+      // 非技能快捷键，交给音游引擎处理
+      rhythmEngine.handleInput(event)
+      // Prevent default to stop scrolling etc
+      if (['space', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
+        event.preventDefault()
+      }
+      return
+    }
+  }
+
+
   if (hotkeyIndex !== -1) {
     event.preventDefault()
+    if (tryTriggerMagicSkill(hotkeyIndex)) return
+
     const slot = skillSlots.value[hotkeyIndex]
     if (slot?.requiresCharge && event.repeat) return
     const started = battle.playerUseSkill(hotkeyIndex)
@@ -1735,6 +1865,7 @@ onBeforeUnmount(() => {
     <button class="btn" @click="backToSelect">返回怪物列表</button>
   </section>
   <div v-else class="battle-layout">
+
     <PlayerStatusPanel :auto-tick="false" />
 
     <section class="panel" style="display: flex; flex-direction: column; gap: 20px;">
@@ -1795,11 +1926,11 @@ onBeforeUnmount(() => {
         >
           {{ buff.text }}
         </div>
-    <div
-      v-for="(buff, index) in enemyBuffInfo"
-      :key="index"
-      class="buff-overlay buff-overlay--enemy"
-      :style="{ '--buff-progress': buff.ratio, '--buff-index': index }"
+        <div
+          v-for="(buff, index) in enemyBuffInfo"
+          :key="index"
+          class="buff-overlay buff-overlay--enemy"
+          :style="{ '--buff-progress': buff.ratio, '--buff-index': index }"
         >
           {{ buff.text }}
         </div>
@@ -1832,11 +1963,11 @@ onBeforeUnmount(() => {
               'aura-danger': monsterAuraProgress <= 0.3
             }"
           />
-            <img
-              class="battle-portrait enemy"
-              :class="{
-                'boss-portrait': monster.isBoss,
-                'victory-state': canClickRematch,
+          <img
+            class="battle-portrait enemy"
+            :class="{
+              'boss-portrait': monster.isBoss,
+              'victory-state': canClickRematch,
               }"
               :src="monsterPortraitSrc"
               :alt="monster.name"
@@ -1922,6 +2053,11 @@ onBeforeUnmount(() => {
           本次战斗用时：
           <span class="battle-duration-value">{{ battleDurationText }}</span>
         </div>
+        <MagicRhythmTrack
+          v-if="isCastingMagicSkill"
+          v-bind="rhythmEngine.trackProps"
+          style="position: absolute; bottom: 0; left: 0; right: 0; z-index: 100;"
+        />
       </div>
 
       <div class="timeline-action-stack">

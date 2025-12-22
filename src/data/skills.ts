@@ -1,4 +1,5 @@
-import { dmgAttack, dmgSkill, dmgUlt, getDefRefForRealm, resolveWeaknessDamage } from '@/composables/useDamage'
+import { computeDamage, getDefRefForRealm, resolveWeaknessDamage, toRollMultiplier } from '@/composables/useDamage'
+import { computeRhythmDamageMultiplier } from '@/utils/rhythm'
 import { randRange } from '@/composables/useRng'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
@@ -59,7 +60,12 @@ const META_WHITE_TIGER_MASSACRE = getSkillMeta('white_tiger_massacre')
 const META_FIRE_FEATHER_FLASH = getSkillMeta('fire_feather_flash')
 const META_VERMILION_SEAL = getSkillMeta('vermilion_seal')
 const META_VIOLET_SHROUD = getSkillMeta('violet_shroud')
+
 const META_NIRVANA_END_OF_CALAMITY = getSkillMeta('nirvana_end_of_calamity')
+
+// Magic Skills (Manually defined for now, later can be in metadata)
+const GALE_BLADE_ID = 'gale_blade'
+
 
 const DRAGON_BREATH_BASE_MULTIPLIER = 1
 const DRAGON_BREATH_PER_LEVEL = 0.02
@@ -78,6 +84,8 @@ const VERMILION_SEAL_BASE_MULTIPLIER = 0.6
 const VERMILION_SEAL_PER_LEVEL = 0.03
 const NIRVANA_BASE_MULTIPLIER = 2.0
 const NIRVANA_PER_LEVEL = 0.10
+const GALE_BLADE_BASE_MULTIPLIER = 3.0
+const GALE_BLADE_PER_LEVEL = 0.10
 
 const CALAMITY_ASH_MECHANIC: MechanicTag = {
   id: 'calamity_ash',
@@ -156,6 +164,11 @@ function describeNirvanaEndOfCalamity(_level: number): string {
   return `天劫降世，清算罪恶。若目标有【劫灰】，引爆全部剩余伤害并额外造成 1.2x 引爆伤害，清除层数。`
 }
 
+function describeGaleBlade(_level: number): string {
+  return '通过旋律施放风刃。根据演奏评分造成伤害。'
+}
+
+
 export const SKILLS: SkillDefinition[] = [
   {
     id: META_DRAGON_SHADOW_DASH.id,
@@ -199,36 +212,32 @@ export const SKILLS: SkillDefinition[] = [
         DRAGON_BREATH_PER_LEVEL,
         level,
       )
-      const damageScale = damageMultiplier / DRAGON_BREATH_BASE_MULTIPLIER
       const weaknessBonus = level >= 3 ? 0.05 : 0
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgAttack(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const coreBase = Math.max(result.coreDamage * damageScale, 0)
-      let coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       let totalDamage = Math.round(weakness.damage)
       if (weakness.triggered && weaknessBonus > 0) {
         const mult = 1 + weaknessBonus
         totalDamage = Math.round(totalDamage * mult)
-        coreDamage = Math.round(coreDamage * mult)
       }
       const hit = totalDamage > 0
       const cooldownBonus = level >= 10 && hit
         ? {
-            targetSkillId: 'fallen_dragon_smash',
-            reductionPercent: 0.25,
-            durationMs: 2000,
-          }
+          targetSkillId: 'fallen_dragon_smash',
+          reductionPercent: 0.25,
+          durationMs: 2000,
+        }
         : undefined
-      return { damage: totalDamage, coreDamage, weaknessTriggered: weakness.triggered, hit, cooldownBonus }
+      return { damage: totalDamage, weaknessTriggered: weakness.triggered, hit, cooldownBonus }
     },
   },
   {
@@ -251,25 +260,21 @@ export const SKILLS: SkillDefinition[] = [
         FALLEN_DRAGON_PER_LEVEL,
         level,
       )
-      const damageScale = damageMultiplier / FALLEN_DRAGON_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgSkill(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const coreBase = Math.max(result.coreDamage * damageScale, 0)
-      let coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       let totalDamage = Math.round(weakness.damage)
       const hit = totalDamage > 0
       return {
         damage: totalDamage,
-        coreDamage,
         weaknessTriggered: weakness.triggered,
         hit,
         monsterStunMs: 100,
@@ -302,20 +307,17 @@ export const SKILLS: SkillDefinition[] = [
         STAR_REALM_PER_LEVEL,
         level,
       )
-      const damageScale = damageMultiplier / STAR_REALM_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgUlt(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const coreBase = Math.max(result.coreDamage * damageScale, 0)
-      let coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       const totalDamage = Math.round(weakness.damage)
       const hit = totalDamage > 0
       let applyVulnerability: SkillResult['applyVulnerability'] = undefined
@@ -327,7 +329,6 @@ export const SKILLS: SkillDefinition[] = [
       }
       return {
         damage: totalDamage,
-        coreDamage,
         weaknessTriggered: weakness.triggered,
         hit,
         superArmorMs: 500,
@@ -376,20 +377,17 @@ export const SKILLS: SkillDefinition[] = [
         RENDING_VOID_PER_LEVEL,
         level,
       )
-      const damageScale = damageMultiplier / RENDING_VOID_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgAttack(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const baseCore = Math.max(result.coreDamage * damageScale, 0)
-      let coreDamage = Math.round(weakness.triggered ? baseCore * 1.5 : baseCore)
       let totalDamage = Math.round(weakness.damage)
       let weaknessTriggered = weakness.triggered
       let bonusGainQi = 0
@@ -399,13 +397,14 @@ export const SKILLS: SkillDefinition[] = [
 
       const tigerFuryStacks = battle?.tigerFuryStacks ?? 0
       if (level >= 10 && tigerFuryStacks >= 8 && totalDamage > 0) {
-        const extraBaseDamage = Math.max(result.damage * damageScale * 0.5, 0)
+        const extraDamageMultiplier = damageMultiplier * 0.5
+        const extraBaseDamage = computeDamage(atk, def, extraDamageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
+          defRef,
+          defenderTough: resolveMonsterTough(monster),
+        })
         const extraWeakness = resolveWeaknessDamage(extraBaseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-        const extraCoreBase = Math.max(result.coreDamage * damageScale * 0.5, 0)
-        const extraCoreDamage = Math.round(extraWeakness.triggered ? extraCoreBase * 1.5 : extraCoreBase)
         const extraDamage = Math.round(extraWeakness.damage)
         totalDamage += extraDamage
-        coreDamage += extraCoreDamage
         weaknessTriggered = weaknessTriggered || extraWeakness.triggered
         if (level >= 3 && bonusGainQi <= 0 && extraWeakness.triggered) {
           bonusGainQi = Math.max(resources.qiMax * 0.005, 0)
@@ -419,7 +418,6 @@ export const SKILLS: SkillDefinition[] = [
 
       return {
         damage: totalDamage,
-        coreDamage,
         weaknessTriggered,
         hit: totalDamage > 0,
         gainQi: bonusGainQi > 0 ? bonusGainQi : undefined,
@@ -450,24 +448,20 @@ export const SKILLS: SkillDefinition[] = [
         PHANTOM_KILL_PER_LEVEL,
         level,
       )
-      const damageScale = damageMultiplier / PHANTOM_KILL_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgSkill(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const coreBase = Math.max(result.coreDamage * damageScale, 0)
-      const coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       const totalDamage = Math.round(weakness.damage)
       return {
         damage: totalDamage,
-        coreDamage,
         weaknessTriggered: weakness.triggered,
         hit: totalDamage > 0,
         superArmorMs: 200,
@@ -475,7 +469,6 @@ export const SKILLS: SkillDefinition[] = [
         delayedDamage: {
           delayMs: 200,
           damage: totalDamage,
-          coreDamage,
           weaknessTriggered: weakness.triggered,
         },
       }
@@ -504,25 +497,21 @@ export const SKILLS: SkillDefinition[] = [
       const tigerFuryStacks = Math.max(battle?.tigerFuryStacks ?? 0, 0)
       const stackBonusMultiplier = tigerFuryStacks > 0 ? 1 + tigerFuryStacks * WHITE_TIGER_STACK_SKILL_BONUS : 1
       const damageMultiplier = baseMultiplier * stackBonusMultiplier
-      const damageScale = damageMultiplier / WHITE_TIGER_MASSACRE_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgUlt(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const coreBase = Math.max(result.coreDamage * damageScale, 0)
-      const coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       const totalDamage = Math.round(weakness.damage)
       const setTigerFuryStacks = tigerFuryStacks <= 0 ? 3 : undefined
       return {
         damage: totalDamage,
-        coreDamage,
         weaknessTriggered: weakness.triggered,
         hit: totalDamage > 0,
         setTigerFuryStacks,
@@ -574,25 +563,21 @@ export const SKILLS: SkillDefinition[] = [
         VERMILION_SEAL_PER_LEVEL,
         level,
       )
-      const damageScale = damageMultiplier / VERMILION_SEAL_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgAttack(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const coreBase = Math.max(result.coreDamage * damageScale, 0)
-      const coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       const totalDamage = Math.round(weakness.damage)
       const hit = totalDamage > 0
       return {
         damage: totalDamage,
-        coreDamage,
         weaknessTriggered: weakness.triggered,
         hit,
         applyCalamityAshStacks: hit ? 1 : undefined,
@@ -640,26 +625,22 @@ export const SKILLS: SkillDefinition[] = [
         NIRVANA_PER_LEVEL,
         level,
       )
-      const damageScale = damageMultiplier / NIRVANA_BASE_MULTIPLIER
       const atk = stats.totals.ATK
       const def = resolveMonsterDef(monster)
       const defRef = resolveMonsterDefRef(monster)
-      const result = dmgUlt(atk, def, randRange(rng, 0, 1), {
+      const agiAtt = stats.totals.AGI ?? 0
+      const agiDef = resolveMonsterAgi(monster)
+
+      const baseDamage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
         defRef,
         defenderTough: resolveMonsterTough(monster),
       })
-      const agiAtt = stats.totals.AGI ?? 0
-      const agiDef = resolveMonsterAgi(monster)
-      const baseDamage = Math.max(result.damage * damageScale, 0)
       const weakness = resolveWeaknessDamage(baseDamage, agiAtt, agiDef, randRange(rng, 0, 1))
-      const coreBase = Math.max(result.coreDamage * damageScale, 0)
-      const coreDamage = Math.round(weakness.triggered ? coreBase * 1.5 : coreBase)
       const totalDamage = Math.round(weakness.damage)
       const hit = totalDamage > 0
       const stacks = Math.max(battle?.calamityAshStacks ?? 0, 0)
       return {
         damage: totalDamage,
-        coreDamage,
         weaknessTriggered: weakness.triggered,
         hit,
         triggerCalamityExplosion: stacks > 0 ? { multiplier: 1.2 } : undefined,
@@ -688,6 +669,44 @@ export const SKILLS: SkillDefinition[] = [
     getDescription: () => META_QI_DODGE.description,
     execute: () => ({ hit: false }),
   },
+  {
+    id: GALE_BLADE_ID,
+    name: '风刃',
+    cost: { type: 'qi', percentOfQiMax: 0.04 },
+    flash: 'skill',
+    aftercastTime: 0,
+    icon: resolveSkillIcon(GALE_BLADE_ID),
+    maxLevel: 10,
+    mechanics: [
+      { id: 'magic', label: '魔法', kind: 'utility' },
+    ],
+    rhythmConfig: {
+      phraseId: 'wind_blade',
+      baseDamageMultiplier: 0.5,
+    },
+    getCooldown: () => 0.1,
+    getDamageMultiplier: (level) => resolveDamageMultiplier(GALE_BLADE_BASE_MULTIPLIER, GALE_BLADE_PER_LEVEL, level),
+    getDescription: describeGaleBlade,
+    execute: ({ stats, monster, rng, rhythmResult, progress }) => {
+      const level = Math.max(progress?.level ?? 1, 1)
+      const score = rhythmResult?.score ?? 0
+      const damageMultiplier = computeRhythmDamageMultiplier(score) * resolveDamageMultiplier(GALE_BLADE_BASE_MULTIPLIER, GALE_BLADE_PER_LEVEL, level)
+
+      const atk = stats.totals.ATK
+      const def = resolveMonsterDef(monster)
+      const defRef = resolveMonsterDefRef(monster)
+      const damage = computeDamage(atk, def, damageMultiplier, toRollMultiplier(randRange(rng, 0, 1)), {
+        defRef,
+        defenderTough: resolveMonsterTough(monster)
+      })
+
+      return {
+        damage,
+        weaknessTriggered: false,
+        hit: damageMultiplier > 0
+      }
+    }
+  }
 ]
 
 

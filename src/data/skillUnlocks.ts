@@ -97,6 +97,11 @@ const UNLOCKS: SkillUnlockDefinition[] = [
     skillId: 'nirvana_end_of_calamity',
   },
   {
+    kind: 'initial',
+    methodId: 'demonic_resonance',
+    skillId: 'gale_blade',
+  },
+  {
     kind: 'purchase',
     courseId: 'guild_dodge',
     resolveSkillId: ({ methodId }) => resolveMethodDodgeSkillId(methodId),

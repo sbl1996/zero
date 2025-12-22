@@ -35,6 +35,21 @@ export function normalizeScore(totalRaw: number, maxPossible: number): number {
   return clamp((totalRaw / maxPossible) * 100, 0, 100)
 }
 
+/**
+ * 将节奏得分（0-100）转换为伤害倍率。
+ * 规则：
+ * - 0-90分：线性增长 (score / 90) -> 90分达 1.0x
+ * - 90-100分：二次方增长 1.0 + 0.015 * (score - 90)^2 -> 满分达 2.5x
+ */
+export function computeRhythmDamageMultiplier(score: number): number {
+  const s = clamp(score, 0, 100)
+  if (s <= 90) {
+    return s / 90
+  } else {
+    return 1.0 + 0.015 * Math.pow(s - 90, 2)
+  }
+}
+
 export function resolveNoteDurationBeats(durationBeats?: number): number {
   if (!durationBeats || durationBeats <= 0) return 1
   return durationBeats

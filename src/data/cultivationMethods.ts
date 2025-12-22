@@ -87,6 +87,21 @@ export const CULTIVATION_METHODS: CultivationMethodDefinition[] = [
       },
     ],
   },
+  {
+    id: 'demonic_resonance',
+    name: '魔音斗气',
+    icon: resolveAssetUrl('cult-demonic-resonance.webp'),
+    focus: toFocus({ atk: 0.3, def: 0.3, agi: 0.15, recovery: 0.25 }),
+    description: '源自古老禁忌的“共鸣修行法”，修炼者以自身经脉为乐器、以斗气为震源，引导蕴含魔性的声律在体内回荡。斗气运转时，低沉而扭曲的音波在血肉与精神之间共振，不仅侵蚀敌人的感知与意志，也不断重塑修炼者自身的神经与灵魂。',
+    effects: [
+      {
+        id: 'demonic_resonance_core',
+        title: '魔力源泉',
+        body: '斗气恢复速度大幅加快。',
+        icon: resolveAssetUrl('cult-effect-demonic-resonance-core.webp'),
+      }
+    ]
+  },
 ]
 
 export const CULTIVATION_METHOD_MAP = new Map(CULTIVATION_METHODS.map(method => [method.id, method]))
