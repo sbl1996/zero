@@ -94,7 +94,7 @@ const CALAMITY_ASH_DURATION_MS = 8000
 const CALAMITY_ASH_TICK_MS = 1000
 const VIOLET_SHROUD_REFLECT_MULTIPLIER = 0.5
 const VIOLET_SHROUD_QI_DRAIN_PER_SEC = 0.02
-const VIOLET_SHROUD_SHIELD_CAP = 0.9
+const VIOLET_SHROUD_SHIELD_CAP = 0.8
 
 const EQUIPMENT_TIER_REALM: Record<EquipmentTier, NumericRealmTier> = {
   iron: 1,
@@ -2547,9 +2547,11 @@ export const useBattleStore = defineStore('battle', {
         this.dodgeSuccesses += 1
         this.gainTigerFuryStack(now)
         if (dodgeAttempt?.skillId === 'fire_feather_flash') {
-          const perSecondDamage = Math.max(stats.totals.ATK * 0.1, 0)
-          if (perSecondDamage > 0) {
-            this.addCalamityAshStacks(1, perSecondDamage, now)
+          if (randBool(rng, 0.5)) {
+            const perSecondDamage = Math.max(stats.totals.ATK * 0.1, 0)
+            if (perSecondDamage > 0) {
+              this.addCalamityAshStacks(1, perSecondDamage, now)
+            }
           }
         }
         this.playerQi = player.res.qi
@@ -2592,7 +2594,7 @@ export const useBattleStore = defineStore('battle', {
         const absorbedCap = Math.max(0, Math.min(absorbedCapBase * incoming, incoming))
         const desiredAbsorb = incoming * ratioEff
         const canAbsorb = Math.min(desiredAbsorb, absorbedCap)
-        const w = 1.1
+        const w = shroudActive ? (1 / 1.5) : 1.0
         const qiNeed = canAbsorb * w
         const qiHave = Math.max(player.res.qi, 0)
         if (qiHave >= qiNeed) {

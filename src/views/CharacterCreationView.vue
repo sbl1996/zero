@@ -1,12 +1,13 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRouter, useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { CULTIVATION_METHODS } from '@/data/cultivationMethods'
 import type { CultivationMethodId, QiFocusProfile } from '@/types/domain'
 import { usePlayerStore } from '@/stores/player'
 
 const router = useRouter()
+const route = useRoute()
 const player = usePlayerStore()
 const { hasCharacter } = storeToRefs(player)
 
@@ -15,6 +16,8 @@ const selectedMethod = ref<CultivationMethodId>(player.cultivation.method.id)
 
 if (hasCharacter.value) {
   router.replace({ name: 'map' })
+} else if (!route.query.fromStory) {
+  router.replace({ name: 'story' })
 }
 
 const NAME_MAX_LENGTH = 12
@@ -66,7 +69,7 @@ function handleSubmit() {
     name: trimmedName.value,
     methodId: selectedMethod.value,
   })
-  router.replace({ name: 'map' })
+  router.replace({ name: 'story', query: { phase: 'post-creation' } })
 }
 
 function handleMethodChange(methodId: CultivationMethodId) {
@@ -78,7 +81,6 @@ function handleMethodChange(methodId: CultivationMethodId) {
   <section class="creation-wrapper">
     <div class="panel creation-panel">
       <header>
-        <p class="lead">纪元 0 · 新的旅程即将开始</p>
         <h2>创建角色</h2>
         <p class="text-muted">先写下你的名讳，再从下面的斗气功法中选择一脉。</p>
       </header>
@@ -133,7 +135,7 @@ function handleMethodChange(methodId: CultivationMethodId) {
           </div>
         </div>
 
-        <button class="btn create-btn" type="submit" :disabled="!canSubmit">踏上旅程</button>
+        <button class="btn create-btn" type="submit" :disabled="!canSubmit">继续游戏</button>
       </form>
     </div>
   </section>

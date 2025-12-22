@@ -2,7 +2,7 @@ import { watch } from 'vue'
 import { setActivePinia } from 'pinia'
 import type { Pinia } from 'pinia'
 import type { Equipment, EquipSlotKey, Player, SaveData } from '@/types/domain'
-import { load, save } from '@/utils/persist'
+import { load, save, clear as clearStorage } from '@/utils/persist'
 import { useInventoryStore } from './inventory'
 import { usePlayerStore } from './player'
 import { useProgressStore } from './progress'
@@ -30,6 +30,14 @@ class SaveScheduler {
   private timer: ReturnType<typeof setTimeout> | null = null
   private pending: SaveData | null = null
 
+  cancel() {
+    if (this.timer) {
+      clearTimeout(this.timer)
+      this.timer = null
+    }
+    this.pending = null
+  }
+
   queue(next: SaveData) {
     this.pending = next
     if (this.timer) return
@@ -52,12 +60,21 @@ class SaveScheduler {
   }
 }
 
+export let scheduler: SaveScheduler
+
+export function clear(): void {
+  scheduler?.cancel()
+  clearStorage()
+}
+
 export function setupPersistence(pinia: Pinia) {
   setActivePinia(pinia)
   const player = usePlayerStore()
   const inventory = useInventoryStore()
   const progress = useProgressStore()
   const quests = useQuestStore()
+
+  scheduler = new SaveScheduler()
 
   const saved = load<SaveData | null>(null)
 
@@ -74,7 +91,6 @@ export function setupPersistence(pinia: Pinia) {
   quests.initWatchers()
   quests.refreshAvailability()
 
-  const scheduler = new SaveScheduler()
 
   const collectSaveData = (): SaveData => ({
     version: SAVE_VERSION,
@@ -86,11 +102,11 @@ export function setupPersistence(pinia: Pinia) {
   })
 
   const queueSave = (payload: SaveData) => {
-    scheduler.queue(payload)
+    scheduler?.queue(payload)
   }
 
   const flushSave = () => {
-    scheduler.flush(collectSaveData())
+    scheduler?.flush(collectSaveData())
   }
 
   watch(

@@ -1,4 +1,4 @@
-import { computed, reactive, ref, shallowRef, watch } from 'vue'
+import { computed, reactive, ref, shallowRef } from 'vue'
 import * as Tone from 'tone'
 import { RHYTHM_PHRASES } from '@/data/rhythmPhrases'
 import type { RhythmKey, RhythmNote } from '@/types/rhythm'
@@ -50,11 +50,11 @@ export function useMagicRhythm() {
     const leadInBeats = ref(1)
     const trailInBeats = ref(1)
     const inputOffsetMs = ref(0)
-    const volumePercent = ref(100)
+    // const volumePercent = ref(100)
 
     // Scoring Params
     const judgeWindowRatio = ref(0.3)
-    const perfectWindowRatio = ref(0.2)
+    // const perfectWindowRatio = ref(0.2)
 
     const session = reactive({
         playing: false,
@@ -74,7 +74,7 @@ export function useMagicRhythm() {
     const toneReverb = shallowRef<Tone.Reverb | null>(null)
     const tonePlayers = shallowRef<Tone.Players | null>(null)
     let rafId: number | null = null
-    let demoTimers: number[] = []
+    // let demoTimers: number[] = []
 
     // --- Computed ---
     const beatDurationMs = computed(() => beatMs(bpm.value))
@@ -121,11 +121,11 @@ export function useMagicRhythm() {
             if (!timing) return null
 
             const ms = timing.startMs
-            const duration = trackDurationMs.value
+            // const duration = trackDurationMs.value
 
-            const timeUntilHit = ms - session.elapsed
+            // const timeUntilHit = ms - session.elapsed
             const flowInMs = Math.max(beatDurationMs.value * FLOW_IN_BEATS, 30)
-            const judgeLine = JUDGE_LINE_PERCENT
+            // const judgeLine = JUDGE_LINE_PERCENT
 
             const flowOutMs = Math.max((flowInMs / (100 - JUDGE_LINE_PERCENT)) * JUDGE_LINE_PERCENT, 30)
 

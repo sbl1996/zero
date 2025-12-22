@@ -13,11 +13,13 @@ const QuestBoardView = () => import('@/views/QuestBoardView.vue')
 const QuestView = () => import('@/views/QuestView.vue')
 const CharacterCreationView = () => import('@/views/CharacterCreationView.vue')
 const MagicRhythmPracticeView = () => import('@/views/MagicRhythmPracticeView.vue')
+const StoryView = () => import('@/views/StoryView.vue')
 
 export const router = createRouter({
   history: createWebHashHistory(),
   routes: [
-    { path: '/', redirect: '/map/florence' },
+    { path: '/', redirect: '/story' },
+    { path: '/story', name: 'story', component: StoryView },
     { path: '/character/create', name: 'character-create', component: CharacterCreationView },
     { path: '/map/:mapId?', name: 'map', component: MapView },
     { path: '/battle', name: 'battle', component: BattleView },

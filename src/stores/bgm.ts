@@ -4,7 +4,7 @@ import type { MapBgmConfig } from '@/types/map'
 
 type BgmScene = 'ambient' | 'battle'
 
-const DEFAULT_VOLUME = 0.45
+const DEFAULT_VOLUME = 0.0
 const AMBIENT_TO_BATTLE_FADE_OUT_MS = 100
 const AMBIENT_TO_BATTLE_FADE_IN_MS = 100
 const BATTLE_TO_AMBIENT_FADE_OUT_MS = 300

@@ -4,23 +4,9 @@ import { randRange } from '@/composables/useRng'
 import { resolveAssetUrl } from '@/utils/assetUrls'
 import { DODGE_WINDOW_MS } from '@/constants/dodge'
 import type { MechanicTag, Monster, SkillDefinition, SkillResult } from '@/types/domain'
-import skillMetadata from './skill-metadata.json'
+// Magic Skills (Manually defined for now, later can be in metadata)
+const GALE_BLADE_ID = 'gale_blade'
 
-type SkillMetadata = {
-  id: string
-  name: string
-  description: string
-}
-
-const SKILL_METADATA = new Map((skillMetadata as SkillMetadata[]).map(meta => [meta.id, meta]))
-
-function getSkillMeta(id: string): SkillMetadata {
-  const meta = SKILL_METADATA.get(id)
-  if (!meta) {
-    throw new Error(`Missing skill metadata for ${id}`)
-  }
-  return meta
-}
 
 function resolveMonsterDef(monster: Monster): number {
   return monster.stats.DEF
@@ -48,23 +34,7 @@ function resolvePerLevelCooldown(base: number, level: number, minimum: number): 
   return Math.max(minimum, base * multiplier)
 }
 
-const META_DRAGON_BREATH = getSkillMeta('dragon_breath_slash')
-const META_FALLEN_DRAGON = getSkillMeta('fallen_dragon_smash')
-const META_STAR_REALM = getSkillMeta('star_realm_dragon_blood_break')
-const META_DRAGON_SHADOW_DASH = getSkillMeta('dragon_shadow_dash')
-const META_TIGER_SHADOW_STEP = getSkillMeta('tiger_shadow_step')
-const META_QI_DODGE = getSkillMeta('qi_dodge')
-const META_RENDING_VOID_CLAW = getSkillMeta('rending_void_claw')
-const META_PHANTOM_INSTANT_KILL = getSkillMeta('phantom_instant_kill')
-const META_WHITE_TIGER_MASSACRE = getSkillMeta('white_tiger_massacre')
-const META_FIRE_FEATHER_FLASH = getSkillMeta('fire_feather_flash')
-const META_VERMILION_SEAL = getSkillMeta('vermilion_seal')
-const META_VIOLET_SHROUD = getSkillMeta('violet_shroud')
 
-const META_NIRVANA_END_OF_CALAMITY = getSkillMeta('nirvana_end_of_calamity')
-
-// Magic Skills (Manually defined for now, later can be in metadata)
-const GALE_BLADE_ID = 'gale_blade'
 
 
 const DRAGON_BREATH_BASE_MULTIPLIER = 1
@@ -171,12 +141,12 @@ function describeGaleBlade(_level: number): string {
 
 export const SKILLS: SkillDefinition[] = [
   {
-    id: META_DRAGON_SHADOW_DASH.id,
-    name: META_DRAGON_SHADOW_DASH.name,
+    id: 'dragon_shadow_dash',
+    name: '龙影闪',
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'attack',
     aftercastTime: 0.3,
-    icon: resolveSkillIcon(META_DRAGON_SHADOW_DASH.id),
+    icon: resolveSkillIcon('dragon_shadow_dash'),
     mechanics: [
       { id: 'dodge', label: '闪避', kind: 'defense' },
       { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.3s' },
@@ -189,16 +159,16 @@ export const SKILLS: SkillDefinition[] = [
     },
     getDamageMultiplier: () => 0,
     getCooldown: () => 0.7,
-    getDescription: () => META_DRAGON_SHADOW_DASH.description,
+    getDescription: () => '以龙影之姿急速侧移。成功闪避则返还4%斗气上限。',
     execute: () => ({ hit: false }),
   },
   {
-    id: META_DRAGON_BREATH.id,
-    name: META_DRAGON_BREATH.name,
+    id: 'dragon_breath_slash',
+    name: '龙息斩',
     cost: { type: 'qi', percentOfQiMax: 0.02 },
     flash: 'attack',
     aftercastTime: 0.2,
-    icon: resolveSkillIcon(META_DRAGON_BREATH.id),
+    icon: resolveSkillIcon('dragon_breath_slash'),
     maxLevel: 10,
     getCooldown: (level) => resolvePerLevelCooldown(2, level, 0.5),
     getCostMultiplier: (level) => (level >= 6 ? 0.8 : 1),
@@ -241,13 +211,13 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_FALLEN_DRAGON.id,
-    name: META_FALLEN_DRAGON.name,
+    id: 'fallen_dragon_smash',
+    name: '陨龙击',
     cost: { type: 'qi', percentOfQiMax: 0.04 },
     flash: 'attack',
     chargeTime: 0.2,
     aftercastTime: 0.2,
-    icon: resolveSkillIcon(META_FALLEN_DRAGON.id),
+    icon: resolveSkillIcon('fallen_dragon_smash'),
     maxLevel: 10,
     getCooldown: (level) => resolvePerLevelCooldown(5, level, 1),
     getDamageMultiplier: (level) =>
@@ -282,13 +252,13 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_STAR_REALM.id,
-    name: META_STAR_REALM.name,
+    id: 'star_realm_dragon_blood_break',
+    name: '星界龙血破',
     cost: { type: 'qi', percentOfQiMax: 0.1 },
     flash: 'attack',
     chargeTime: 0.5,
     aftercastTime: 0.2,
-    icon: resolveSkillIcon(META_STAR_REALM.id),
+    icon: resolveSkillIcon('star_realm_dragon_blood_break'),
     maxLevel: 10,
     mechanics: [
       { id: 'charge', label: '蓄力', kind: 'timing', value: '0.5s' },
@@ -337,12 +307,12 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_TIGER_SHADOW_STEP.id,
-    name: META_TIGER_SHADOW_STEP.name,
+    id: 'tiger_shadow_step',
+    name: '虎影步',
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
     aftercastTime: 0.2,
-    icon: resolveSkillIcon(META_TIGER_SHADOW_STEP.id),
+    icon: resolveSkillIcon('tiger_shadow_step'),
     mechanics: [
       { id: 'dodge', label: '闪避', kind: 'defense' },
       { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.2s' },
@@ -355,16 +325,16 @@ export const SKILLS: SkillDefinition[] = [
     },
     getDamageMultiplier: () => 0,
     getCooldown: () => 0.6,
-    getDescription: () => META_TIGER_SHADOW_STEP.description,
+    getDescription: () => '化作疾影的步法。成功闪避则返还4%斗气上限。',
     execute: () => ({ hit: false }),
   },
   {
-    id: META_RENDING_VOID_CLAW.id,
-    name: META_RENDING_VOID_CLAW.name,
+    id: 'rending_void_claw',
+    name: '裂空爪',
     cost: { type: 'qi', percentOfQiMax: 0.015 },
     flash: 'attack',
     aftercastTime: 0.15,
-    icon: resolveSkillIcon(META_RENDING_VOID_CLAW.id),
+    icon: resolveSkillIcon('rending_void_claw'),
     maxLevel: 10,
     getCooldown: () => 1.2,
     getDamageMultiplier: (level) =>
@@ -426,12 +396,12 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_PHANTOM_INSTANT_KILL.id,
-    name: META_PHANTOM_INSTANT_KILL.name,
+    id: 'phantom_instant_kill',
+    name: '绝影·瞬杀',
     cost: { type: 'qi', percentOfQiMax: 0.05 },
     flash: 'attack',
     aftercastTime: 0.4,
-    icon: resolveSkillIcon(META_PHANTOM_INSTANT_KILL.id),
+    icon: resolveSkillIcon('phantom_instant_kill'),
     maxLevel: 10,
     mechanics: [
       { id: 'super-armor', label: '霸体', kind: 'defense', value: '0.2s' },
@@ -475,13 +445,13 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_WHITE_TIGER_MASSACRE.id,
-    name: META_WHITE_TIGER_MASSACRE.name,
+    id: 'white_tiger_massacre',
+    name: '白虎森罗杀',
     cost: { type: 'qi', percentOfQiMax: 0.12 },
     flash: 'ult',
     chargeTime: 0.8,
     aftercastTime: 0.5,
-    icon: resolveSkillIcon(META_WHITE_TIGER_MASSACRE.id),
+    icon: resolveSkillIcon('white_tiger_massacre'),
     maxLevel: 10,
     getCooldown: (level) => resolvePerLevelCooldown(20, level, 5),
     getDamageMultiplier: (level) =>
@@ -519,12 +489,12 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_FIRE_FEATHER_FLASH.id,
-    name: META_FIRE_FEATHER_FLASH.name,
+    id: 'fire_feather_flash',
+    name: '火羽闪',
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
     aftercastTime: 0.2,
-    icon: resolveSkillIcon(META_FIRE_FEATHER_FLASH.id),
+    icon: resolveSkillIcon('fire_feather_flash'),
     mechanics: [
       { id: 'dodge', label: '闪避', kind: 'defense' },
       CALAMITY_ASH_MECHANIC,
@@ -538,21 +508,21 @@ export const SKILLS: SkillDefinition[] = [
     },
     getDamageMultiplier: () => 0,
     getCooldown: () => 0.6,
-    getDescription: () => META_FIRE_FEATHER_FLASH.description,
+    getDescription: () => '灼热的羽翎闪身，成功躲避时有50%概率为敌附加【劫灰】。',
     execute: () => ({ hit: false }),
   },
   {
-    id: META_VERMILION_SEAL.id,
-    name: META_VERMILION_SEAL.name,
+    id: 'vermilion_seal',
+    name: '朱雀印',
     cost: { type: 'qi', percentOfQiMax: 0.04 },
     flash: 'attack',
     aftercastTime: 0.3,
-    icon: resolveSkillIcon(META_VERMILION_SEAL.id),
+    icon: resolveSkillIcon('vermilion_seal'),
     maxLevel: 10,
     mechanics: [
       CALAMITY_ASH_MECHANIC,
     ],
-    getCooldown: (level) => resolvePerLevelCooldown(3.0, level, 0.7),
+    getCooldown: (level) => resolvePerLevelCooldown(2.0, level, 0.7),
     getDamageMultiplier: (level) =>
       resolveDamageMultiplier(VERMILION_SEAL_BASE_MULTIPLIER, VERMILION_SEAL_PER_LEVEL, level),
     getDescription: describeVermilionSeal,
@@ -585,12 +555,12 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_VIOLET_SHROUD.id,
-    name: META_VIOLET_SHROUD.name,
+    id: 'violet_shroud',
+    name: '神火罩',
     cost: { type: 'qi', percentOfQiMax: 0.05 },
     flash: 'skill',
     aftercastTime: 0.2,
-    icon: resolveSkillIcon(META_VIOLET_SHROUD.id),
+    icon: resolveSkillIcon('violet_shroud'),
     mechanics: [{ id: 'debuff', label: '开关', kind: 'timing', value: '' }],
     maxLevel: 10,
     getCooldown: () => 3,
@@ -605,13 +575,13 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_NIRVANA_END_OF_CALAMITY.id,
-    name: META_NIRVANA_END_OF_CALAMITY.name,
+    id: 'nirvana_end_of_calamity',
+    name: '涅槃·劫尽',
     cost: { type: 'qi', percentOfQiMax: 0.15 },
     flash: 'ult',
     chargeTime: 0.6,
     aftercastTime: 0.4,
-    icon: resolveSkillIcon(META_NIRVANA_END_OF_CALAMITY.id),
+    icon: resolveSkillIcon('nirvana_end_of_calamity'),
     mechanics: [],
     maxLevel: 10,
     getCooldown: (level) => resolvePerLevelCooldown(20, level, 5),
@@ -648,12 +618,12 @@ export const SKILLS: SkillDefinition[] = [
     },
   },
   {
-    id: META_QI_DODGE.id,
-    name: META_QI_DODGE.name,
+    id: 'qi_dodge',
+    name: '斗气闪避',
     cost: { type: 'qi', percentOfQiMax: 0.06 },
     flash: 'skill',
     aftercastTime: 0.3,
-    icon: resolveSkillIcon(META_QI_DODGE.id),
+    icon: resolveSkillIcon('qi_dodge'),
     mechanics: [
       { id: 'dodge', label: '闪避', kind: 'defense' },
       { id: 'aftercast', label: '后摇', kind: 'timing', value: '0.3s' },
@@ -666,7 +636,7 @@ export const SKILLS: SkillDefinition[] = [
     },
     getDamageMultiplier: () => 0,
     getCooldown: () => 0.7,
-    getDescription: () => META_QI_DODGE.description,
+    getDescription: () => '进入斗气闪避姿态，成功闪避则返还4%斗气上限。',
     execute: () => ({ hit: false }),
   },
   {

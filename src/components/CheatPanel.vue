@@ -43,14 +43,11 @@ function unlockAllMonsters() {
   progressStore.clearAllMonsters()
 }
 
+import { clear as clearSave } from '@/stores/persist'
+
 function deleteSave() {
-  if (typeof window === 'undefined') return
-  try {
-    window.localStorage.clear()
-  } catch (error) {
-    console.warn('[cheat] failed to clear localStorage', error)
-  }
-  window.location.reload()
+  clearSave()
+  window.location.href = window.location.origin + window.location.pathname
 }
 
 async function advanceRealmDirectly() {

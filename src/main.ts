@@ -15,11 +15,23 @@ setupPersistence(pinia)
 
 router.beforeEach((to, _from, next) => {
   const hasCharacter = playerStore.hasCharacter
-  if (!hasCharacter && to.name !== 'character-create') {
-    next({ name: 'character-create' })
+  if (!hasCharacter) {
+    if (to.name === 'story') {
+      next()
+      return
+    }
+    if (to.name === 'character-create' && to.query.fromStory) {
+      next()
+      return
+    }
+    next({ name: 'story' })
     return
   }
-  if (hasCharacter && to.name === 'character-create') {
+  if (hasCharacter && (to.name === 'character-create' || to.name === 'story')) {
+    if (to.name === 'story' && to.query.phase === 'post-creation') {
+      next()
+      return
+    }
     next({ name: 'map' })
     return
   }

@@ -28,7 +28,7 @@ export interface TrackLeadTick {
   label: number
 }
 
-const props = defineProps<{
+defineProps<{
   title?: string
   description?: string
   timelinePercent: number // 0-100
